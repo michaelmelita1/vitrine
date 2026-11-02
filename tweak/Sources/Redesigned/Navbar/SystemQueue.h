@@ -14,6 +14,12 @@
 // A track dragged to another place in its group: the whole list of tracks to come in its new order, to hand Spotify.
 // Only the tracks shown from Spotify's queue move (showState:upcoming:from:); the state's few alone do not.
 @property (nonatomic, copy) void (^onReorder)(NSArray *upcoming);
+// Shuffle and Repeat chips beside AutoMix, for when the Player page's Hide on the player takes them off the controls
+// (its owner, 2026-11-02), as the Music app's queue has them; all chips go to glyphs alone then. Their taps run these,
+// and the next state's read from Spotify's state (showState:).
+@property (nonatomic) BOOL showsShuffle, showsRepeat;
+@property (nonatomic, copy) void (^onShuffle)(void);
+@property (nonatomic, copy) void (^onRepeat)(void);
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
 // The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the

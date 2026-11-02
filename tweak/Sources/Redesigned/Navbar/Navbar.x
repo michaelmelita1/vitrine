@@ -71,6 +71,9 @@ static UIView *iconView(NSDictionary *entry) {
 
 @interface SGRTabItemView : UIControl
 @property (nonatomic, copy) NSString *uri;
+// The icon its entry names, an Encore glyph or an SF Symbol (iconIsSymbol), for Native redesign's bar (SGRTabItemIcon).
+@property (nonatomic, copy) NSString *iconGlyph;
+@property (nonatomic) BOOL iconIsSymbol;
 - (instancetype)initWithEntry:(NSDictionary *)entry;
 - (void)applyEntry:(NSDictionary *)entry;
 @end
@@ -95,6 +98,8 @@ static UIView *iconView(NSDictionary *entry) {
 - (void)applyEntry:(NSDictionary *)entry {
     self.uri = entry[SGRNavbarURI];
     _title.text = entry[SGRNavbarTitle];
+    self.iconGlyph = entry[SGRNavbarIcon] ?: @"star";
+    self.iconIsSymbol = [entry[SGRNavbarIconSet] isEqual:SGTabIconSetSymbols];
     // The set is part of the name: "star" is a glyph in one and a symbol in the other.
     NSString *name = [NSString stringWithFormat:@"%@ %@", entry[SGRNavbarIconSet] ?: @"encore", entry[SGRNavbarIcon] ?: @"star"];
     if ([name isEqualToString:_iconName]) return;
@@ -409,6 +414,14 @@ void SGRNavbarForgetTab(void) {
     if (sg_pageTab) SGRRefreshTabBar();
 }
 %end
+
+BOOL SGRTabItemIcon(UIView *item, NSString **name, BOOL *symbol) {
+    if (![item isKindOfClass:SGRTabItemView.class]) return NO;
+    SGRTabItemView *tab = (SGRTabItemView *)item;
+    if (name) *name = tab.iconGlyph;
+    if (symbol) *symbol = tab.iconIsSymbol;
+    return tab.iconGlyph.length > 0;
+}
 
 BOOL SGRTabIsApart(UIView *item) {
     return objc_getAssociatedObject(item, &kApartKey) != nil;

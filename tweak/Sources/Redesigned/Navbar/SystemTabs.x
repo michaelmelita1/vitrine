@@ -537,6 +537,10 @@ API_AVAILABLE(ios(26.0))
 // Each tab's outline and filled glyph by its name, each read off Spotify's item while it was in that state.
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UIImage *> *outlines, *filleds;
 @property (nonatomic) CFTimeInterval heldUntil;
+// The glyphs last put on the tabs, outline and filled, and the tab under a finger dragging the selection bubble (NSNotFound
+// while none is): that tab shows its filled glyph as its image while the bubble is over it (dragged:).
+@property (nonatomic, copy) NSArray<UIImage *> *shownGlyphs, *shownSelectedGlyphs;
+@property (nonatomic) NSUInteger dragIndex;
 @end
 
 @implementation SGRSystemTabs
@@ -558,6 +562,48 @@ API_AVAILABLE(ios(26.0))
 // The tab buttons have recognizers of their own: the hold runs beside them, or it never began (the phone's log).
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
     return YES;
+}
+
+// UIKit draws a tab under the sliding selection bubble with its image, tinted, and puts its selectedImage on only once the
+// finger lifts, so the filled glyph came in at the release (its owner's recording, 2026-11-02). The finger is followed
+// beside UIKit's own recognizers, and the tab under it shows its filled glyph as its image until the finger moves on or
+// lifts, so the bubble fills each tab as it passes, as the Music app's does.
+- (void)dragged:(UILongPressGestureRecognizer *)drag {
+    UITabBar *bar = self.controller.tabBar;
+    NSUInteger under = NSNotFound;
+    UIGestureRecognizerState state = drag.state;
+    // Not on the minimized bar, which has no bubble to drag. (The pale flash of a minimized circle tapped from Search is
+    // UIKit's own glass selection moving into it, there with or without this: its owner's test, 2026-11-02.)
+    if ((state == UIGestureRecognizerStateBegan || state == UIGestureRecognizerStateChanged) && !SGRSystemTabsMinimized()) {
+        NSMutableArray<UIView *> *buttons = [NSMutableArray array];
+        SGForEachView(bar, ^(UIView *v) {
+            if ([NSStringFromClass(v.class) containsString:@"TabButton"] && v.bounds.size.width > 20) [buttons addObject:v];
+        });
+        [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
+            return [@([a convertPoint:CGPointZero toView:bar].x) compare:@([b convertPoint:CGPointZero toView:bar].x)];
+        }];
+        CGFloat x = [drag locationInView:bar].x, nearest = CGFLOAT_MAX;
+        for (NSUInteger i = 0; i < buttons.count; i++) {
+            CGRect frame = [buttons[i] convertRect:buttons[i].bounds toView:bar];
+            CGFloat distance = fabs(CGRectGetMidX(frame) - x);
+            if (distance < nearest) {
+                nearest = distance;
+                under = i;
+            }
+        }
+    }
+    if (under == self.dragIndex) return;
+    self.dragIndex = under;
+    [self showDragGlyphs];
+}
+
+- (void)showDragGlyphs {
+    NSArray<UITab *> *shown = self.controller.tabs;
+    NSArray<UIImage *> *glyphs = self.shownGlyphs, *filled = self.shownSelectedGlyphs;
+    for (NSUInteger i = 0; i < shown.count && i < glyphs.count && i < filled.count; i++) {
+        UIImage *image = i == self.dragIndex ? filled[i] : glyphs[i];
+        if (shown[i].image != image) shown[i].image = image;
+    }
 }
 
 - (void)held:(UILongPressGestureRecognizer *)hold {
@@ -657,6 +703,15 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
             hold.minimumPressDuration = 0.8;
             hold.delegate = tabs;
             [controller.tabBar addGestureRecognizer:hold];
+            tabs.dragIndex = NSNotFound;
+            UILongPressGestureRecognizer *drag = [[UILongPressGestureRecognizer alloc] initWithTarget:tabs action:@selector(dragged:)];
+            drag.minimumPressDuration = 0;
+            drag.allowableMovement = CGFLOAT_MAX;
+            drag.cancelsTouchesInView = NO;
+            drag.delaysTouchesBegan = NO;
+            drag.delaysTouchesEnded = NO;
+            drag.delegate = tabs;
+            [controller.tabBar addGestureRecognizer:drag];
             host.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
             host.controller = controller;
             tabs.host = host;
@@ -717,12 +772,18 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
         if (!tabs.filleds) tabs.filleds = [NSMutableDictionary dictionary];
         NSMutableArray<UIImage *> *glyphs = [NSMutableArray arrayWithCapacity:sources.count];
         NSMutableArray<UIImage *> *selectedGlyphs = [NSMutableArray arrayWithCapacity:sources.count];
+        // Spotify's own tabs from Spotify's Encore glyphs, outline and filled, known from the first launch (TabBar.x's
+        // SGRTabSourceEncoreGlyphs), so the bubble fills each as it passes from the start (its owner, 2026-11-02). A tab of
+        // the mod's own, one picture either way, is drawn from its item as it stands.
         for (UIView *source in sources) {
             NSString *name = SGRTabSourceTitle(source) ?: @"";
-            UIImage *now = SGRTabSourceGlyph(source, NO);
-            if (now) {
-                NSMutableDictionary<NSString *, UIImage *> *store = SGRTabSourceIsActive(source) ? tabs.filleds : tabs.outlines;
-                if (store[name] != now) store[name] = now;
+            UIImage *encoreOutline = nil, *encoreFilled = nil;
+            if (SGRTabSourceEncoreGlyphs(source, &encoreOutline, &encoreFilled)) {
+                tabs.outlines[name] = encoreOutline;
+                tabs.filleds[name] = encoreFilled;
+            } else {
+                UIImage *picture = SGRTabSourceGlyph(source, NO);
+                if (picture) tabs.outlines[name] = tabs.filleds[name] = picture;
             }
             UIImage *outline = tabs.outlines[name] ?: tabs.filleds[name], *filled = tabs.filleds[name] ?: tabs.outlines[name];
             [glyphs addObject:outline ?: [UIImage new]];
@@ -759,16 +820,22 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
         // The trailing search tab, while another tab is the one shown, keeps its outline in white whatever UIKit asks of it:
         // minimized, UIKit drew it in the selected look, filled and in the accent, beside the tab really shown (its owner's
         // recording, 2026-11-01). Drawn as it is rather than tinted, and the same image for both states, until it is picked.
+        // Only while minimized: expanded, it keeps its outline and filled glyph, so the selection bubble fills and colors it
+        // as it slides over it like every other tab (its owner's recording, 2026-11-02).
         NSUInteger searchAt = sources.count > 1 ? sources.count - 1 : NSNotFound;
-        if (searchAt != NSNotFound && index != searchAt && searchAt < glyphs.count) {
+        if (searchAt != NSNotFound && index != searchAt && searchAt < glyphs.count && SGRSystemTabsMinimized()) {
             UIImage *plain = plainGlyph(glyphs[searchAt]);
             glyphs[searchAt] = selectedGlyphs[searchAt] = plain;
         }
         // The glyphs in place, only where one changed: the same image again is the same object (TabBar.x caches each icon).
+        // The tab under a dragging finger keeps its filled glyph (dragged:).
+        tabs.shownGlyphs = glyphs;
+        tabs.shownSelectedGlyphs = selectedGlyphs;
         NSArray<UITab *> *shown = controller.tabs;
         for (NSUInteger i = 0; i < shown.count && i < glyphs.count; i++) {
             UITab *tab = shown[i];
-            if (tab.image != glyphs[i]) tab.image = glyphs[i];
+            UIImage *image = i == tabs.dragIndex ? selectedGlyphs[i] : glyphs[i];
+            if (tab.image != image) tab.image = image;
             if (@available(iOS 26.1, *)) {
                 if (tab.selectedImage != selectedGlyphs[i]) tab.selectedImage = selectedGlyphs[i];
             }
@@ -859,6 +926,8 @@ void SGRSystemTabsSetMinimized(BOOL minimized) {
             SGLog(@"system tabs: the bar's visual provider refused (%@), UIKit's scroll minimize instead", e.reason);
             return;
         }
+        // The tabs' glyphs again once the accessory has moved: Search is drawn plain only while the bar is minimized.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SGRRefreshTabBar(); });
         static NSUInteger told;
         if (told++ < 12) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             SGLog(@"system tabs: %@ by the scroll, the accessory now %@", minimized ? @"minimizing" : @"expanding", SGRSystemTabsMinimized() ? @"in the row" : @"over the bar");

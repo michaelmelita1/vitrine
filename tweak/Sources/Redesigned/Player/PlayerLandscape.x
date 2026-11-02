@@ -27,6 +27,9 @@ static const NSTimeInterval kLandscapeRest = 4;
 static UIWindow *sg_window;
 // Shut from the screen: turning the phone again does not reopen it until it has stood upright.
 static BOOL sg_shut;
+// The system tab bar's player page has its lyrics up (SystemPlayer.m): it stands in for Spotify's player, which is
+// never up then, so its lyrics turn sideways as the player's do (its owner, 2026-11-01).
+static BOOL sg_pageLyrics;
 
 #pragma mark - the screen
 
@@ -431,11 +434,15 @@ void SGRPlayerShowLandscape(BOOL show) {
 static void orientationChanged(void) {
     UIDeviceOrientation orientation = UIDevice.currentDevice.orientation;
     if (UIDeviceOrientationIsLandscape(orientation)) {
-        if (!sg_shut && SGEnabled(SGRKeyLyricsLandscape) && SGRPlayerLyricsOpen()) SGRPlayerShowLandscape(YES);
+        if (!sg_shut && SGEnabled(SGRKeyLyricsLandscape) && (SGRPlayerLyricsOpen() || sg_pageLyrics)) SGRPlayerShowLandscape(YES);
     } else if (orientation == UIDeviceOrientationPortrait) {
         sg_shut = NO;
         SGRPlayerShowLandscape(NO);
     }
+}
+
+void SGRPlayerSetPageLyricsOpen(BOOL open) {
+    sg_pageLyrics = open;
 }
 
 %ctor {

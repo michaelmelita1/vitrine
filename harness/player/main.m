@@ -1591,7 +1591,7 @@ static BOOL linesSeek(SGRKaraokeView *lyrics) {
         check(@"woken", lowerShown() && !wake.enabled && linesSeek(lines()),
               [NSString stringWithFormat:@"controls %.0f, wake %d, lines seek %d", duration.alpha, wake.enabled, linesSeek(lines())]);
         // A scroll through the lines leaves them alone at once.
-        lines().browsingBegan();
+        lines().browsingBegan(YES);
         check(@"a scroll hides the controls", lowerHidden() && wake.enabled, [NSString stringWithFormat:@"controls %.0f", duration.alpha]);
     });
     after(9.5, ^{

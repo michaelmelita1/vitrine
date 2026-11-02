@@ -1,0 +1,24 @@
+// The system tab bar's player page's queue (SystemPlayer.m), in the page as the Music app has its queue (its owner's
+// recording, 2026-11-02) rather than Spotify's queue sheet: the AutoMix and Crossfade chips (Mod Settings'
+// AutoMix switch and style; its owner, 2026-11-02: no shuffle or repeat there) over the tracks to come, in the
+// order the player reports them, grouped as Spotify groups them by where each came from (the hand queue, the album or
+// playlist playing, autoplay), each with its cover, title and artist. A tap on a track plays it.
+//
+// Threading: main thread only.
+#import <UIKit/UIKit.h>
+
+@class SPTPlayerState, SPTPlayerTrack;
+
+@interface SGRSystemQueueView : UIView
+@property (nonatomic, copy) void (^onPick)(SPTPlayerTrack *track);
+// A track dragged to another place in its group: the whole list of tracks to come in its new order, to hand Spotify.
+// Only the tracks shown from Spotify's queue move (showState:upcoming:from:); the state's few alone do not.
+@property (nonatomic, copy) void (^onReorder)(NSArray *upcoming);
+// The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
+- (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
+// The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the
+// state's few.
+- (void)showState:(SPTPlayerState *)state upcoming:(NSArray *)upcoming from:(NSString *)contextTitle;
+// Back to the top of the list, for a fresh look as the queue opens.
+- (void)scrollToTop;
+@end

@@ -12,7 +12,7 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
     if (!(self = [super initWithFrame:CGRectZero])) return nil;
     _symbol = [symbol copy];
     self.preferredSymbolConfiguration = [UIImageSymbolConfiguration configurationWithPointSize:size weight:weight];
-    self.image = symbol ? [UIImage systemImageNamed:symbol] : nil;
+    self.image = symbol ? [self imageOf:symbol] : nil;
     self.tintColor = SGRPrimary();
     self.contentMode = UIViewContentModeCenter;
     self.userInteractionEnabled = NO;
@@ -26,14 +26,26 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
     return _symbol;
 }
 
+// A glyph without its baseline (Native redesign's player page) is made at its own size: an image left at the default size
+// reports that size, and the view, centering it by it while drawing it at the configured one, drew it off its middle
+// (its owner's recordings, 2026-11-02). Every other glyph is the plain symbol, as it was.
+- (UIImage *)imageOf:(NSString *)symbol {
+    if (!_withoutBaseline) return [UIImage systemImageNamed:symbol];
+    return [UIImage systemImageNamed:symbol withConfiguration:self.preferredSymbolConfiguration].imageWithoutBaseline;
+}
+
 - (void)setSymbol:(NSString *)symbol animated:(BOOL)animated {
+    [self setSymbol:symbol animated:animated speed:2];
+}
+
+- (void)setSymbol:(NSString *)symbol animated:(BOOL)animated speed:(CGFloat)speed {
     if (!symbol || [symbol isEqualToString:_symbol]) return;
     _symbol = [symbol copy];
-    UIImage *image = [UIImage systemImageNamed:symbol];
+    UIImage *image = [self imageOf:symbol];
     if (@available(iOS 17.0, *)) {
         if (animated && image && self.window && !SGRReduceMotion()) {
-            // Twice UIKit's pace: a control's glyph answers a tap, and the default replace lingers.
-            [self setSymbolImage:image withContentTransition:[NSSymbolReplaceContentTransition transition] options:[NSSymbolEffectOptions optionsWithSpeed:2]];
+            // Twice UIKit's pace by default: a control's glyph answers a tap, and the default replace lingers.
+            [self setSymbolImage:image withContentTransition:[NSSymbolReplaceContentTransition transition] options:[NSSymbolEffectOptions optionsWithSpeed:speed]];
             return;
         }
     }
@@ -41,6 +53,14 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
 }
 
 @end
+
+void SGRGlyphPress(UIView *glyph, BOOL pressed) {
+    if (!glyph) return;
+    SGRAnimate(SGRMotionPress, ^{
+        glyph.alpha = pressed ? kPressAlpha : 1;
+        glyph.transform = pressed ? CGAffineTransformMakeScale(kPressScale, kPressScale) : CGAffineTransformIdentity;
+    }, nil);
+}
 
 @implementation SGRGlyphButton {
     SGRGlyphView *_glyph;
@@ -90,7 +110,15 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    _glyph.bounds = (CGRect){CGPointZero, _glyph.intrinsicContentSize};
+    // A glyph without its baseline is exactly its image, scaled to fit it: its intrinsic size kept the baseline's room
+    // (52.7 pt tall for a 43.7 pt image), and the symbol replace, drawing the content centered in that room, grew the new
+    // symbol out of its corner, 6 pt off the middle (the phone's log, 2026-11-02).
+    if (_glyph.withoutBaseline && _glyph.image) {
+        _glyph.contentMode = UIViewContentModeScaleAspectFit;
+        _glyph.bounds = (CGRect){CGPointZero, _glyph.image.size};
+    } else {
+        _glyph.bounds = (CGRect){CGPointZero, _glyph.intrinsicContentSize};
+    }
     _glyph.center = CGPointMake(CGRectGetMidX(self.bounds), CGRectGetMidY(self.bounds));
 }
 
@@ -103,11 +131,7 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
 
 - (void)setHighlighted:(BOOL)highlighted {
     [super setHighlighted:highlighted];
-    SGRGlyphView *glyph = _glyph;
-    SGRAnimate(SGRMotionPress, ^{
-        glyph.alpha = highlighted ? kPressAlpha : 1;
-        glyph.transform = highlighted ? CGAffineTransformMakeScale(kPressScale, kPressScale) : CGAffineTransformIdentity;
-    }, nil);
+    SGRGlyphPress(_glyph, highlighted);
 }
 
 - (void)setEnabled:(BOOL)enabled {

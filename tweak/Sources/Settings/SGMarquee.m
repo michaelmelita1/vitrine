@@ -59,14 +59,22 @@ static NSString *const kScroll = @"sg.marquee";
     [self setNeedsLayout];
 }
 
+- (void)setLeadingFade:(CGFloat)leadingFade {
+    _leadingFade = MAX(0, leadingFade);
+    _scrolled = -1;
+    [self setNeedsLayout];
+}
+
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGSize size = self.bounds.size;
+    // The text's own room is what lies past the leading zone, none unless one was asked for.
+    CGFloat inset = MIN(_leadingFade, size.width / 3), room = MAX(0, size.width - inset);
     CGFloat textWidth = ceil([_label sizeThatFits:CGSizeMake(CGFLOAT_MAX, size.height)].width);
-    CGFloat overflow = textWidth - size.width;
+    CGFloat overflow = textWidth - room;
     BOOL scrolls = overflow > 0.5 && !UIAccessibilityIsReduceMotionEnabled() && self.window;
     _label.lineBreakMode = scrolls ? NSLineBreakByClipping : NSLineBreakByTruncatingTail;
-    CGRect frame = CGRectMake(0, 0, scrolls ? textWidth : size.width, size.height);
+    CGRect frame = CGRectMake(inset, 0, scrolls ? textWidth : room, size.height);
     if (!CGRectEqualToRect(_label.frame, frame)) _label.frame = frame;
 
     self.layer.mask = scrolls ? _fade : nil;
@@ -74,8 +82,15 @@ static NSString *const kScroll = @"sg.marquee";
         _fade.frame = self.bounds;
         CGFloat edge = MIN(kFade / size.width, 0.2);
         // The trailing edge fades, where the text runs on; its start stays crisp at rest.
-        _fade.colors = @[(id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.clearColor.CGColor];
-        _fade.locations = @[@0, @(1 - edge), @1];
+        id opaque = (id)UIColor.blackColor.CGColor, none = (id)UIColor.clearColor.CGColor;
+        if (inset > 0) {
+            // The leading zone lies before the text, so the text fades only as it scrolls out through it.
+            _fade.colors = @[none, opaque, opaque, none];
+            _fade.locations = @[@0, @(inset / size.width), @(1 - edge), @1];
+        } else {
+            _fade.colors = @[opaque, opaque, none];
+            _fade.locations = @[@0, @(1 - edge), @1];
+        }
     }
 
     CGFloat travel = scrolls ? overflow + kFade : 0;

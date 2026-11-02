@@ -130,6 +130,23 @@ UIImage *SGRNavbarGlyph(NSDictionary *entry, BOOL active) {
     return nil;
 }
 
+// For Native redesign's tab bar (SystemTabs.x): Spotify's items read and tapped as the glass bar reads and taps them.
+UIImage *SGRTabSourceGlyph(UIView *source, BOOL active) {
+    return glyphOf(source, active);
+}
+
+BOOL SGRTabSourceIsActive(UIView *source) {
+    return isActive(source);
+}
+
+NSString *SGRTabSourceTitle(UIView *source) {
+    return labelIn(source).text ?: @"";
+}
+
+void SGRForwardTabTap(UIView *source) {
+    forwardTap(source);
+}
+
 #pragma mark - the system bar
 
 // A name too long for its tab (one of the user's own, a split tab's circle) shrinks a little before UIKit cuts
@@ -393,6 +410,26 @@ static const CGFloat kPlatterInset = 21, kApartItemWidth = 62, kPlatterGap = 12;
 
 static void syncBar(UIView *stockBar) {
     sg_stockBar = stockBar;
+
+    // Native redesign draws the bar instead (SystemTabs.x): Spotify's own stays as the source of its tabs, unseen.
+    if (SGRSystemTabsOn()) {
+        for (UIView *sub in stockBar.subviews) {
+            if (sub.alpha > 0) sub.alpha = 0;
+            sub.userInteractionEnabled = NO;
+        }
+        // The bar and what holds it take no touches either: left on, they stood unseen at the foot of the screen over the
+        // page, under the system bar (its owner, 2026-10-31). Its taps are passed on to its items in code (forwardTap).
+        for (UIView *v = stockBar; v && ![v.nextResponder isKindOfClass:UIViewController.class]; v = v.superview) {
+            if (v.userInteractionEnabled) v.userInteractionEnabled = NO;
+        }
+        NSArray<UIView *> *sources = tabItems(stockBar);
+        if (!sources.count) return;
+        UIView *active = SGRNavbarLitTab();
+        if (![sources containsObject:active]) active = nil;
+        for (UIView *source in sources) if (!active && isActive(source)) active = source;
+        SGRSystemTabsSync(containerOf(stockBar), stockBar, sources, active);
+        return;
+    }
 
     SGRSystemTabBar *bar = objc_getAssociatedObject(stockBar, &kBarKey);
     if (!bar) {
@@ -825,7 +862,7 @@ static void itemDidLayOut(UIView *item) {
     %orig;
     dispatch_async(dispatch_get_main_queue(), ^{
         // Another tab brings the minimized bar back (HIG, Tab bars).
-        SGRSetTabBarMinimized(NO, YES);
+        if (!SGRSystemTabsOn()) SGRSetTabBarMinimized(NO, YES);
         UIView *bar = sg_stockBar;
         if (bar) syncBar(bar);
     });

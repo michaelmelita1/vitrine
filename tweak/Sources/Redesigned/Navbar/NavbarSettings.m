@@ -648,7 +648,8 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)table {
-    return SGRNavbarSectionCount;
+    // Split tabs stand on the glass bar alone; Native redesign's tab bar is iOS's own and keeps one row.
+    return SGNativeRedesignStored() ? SGRNavbarSectionSplit : SGRNavbarSectionCount;
 }
 
 - (NSInteger)tableView:(UITableView *)table numberOfRowsInSection:(NSInteger)section {

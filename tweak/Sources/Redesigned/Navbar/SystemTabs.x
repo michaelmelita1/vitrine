@@ -1,0 +1,918 @@
+// Prototype: the system tab bar. A UITabBarController of the mod's over Spotify's tab area, so UIKit itself minimizes
+// the bar on scroll and moves the mini player between its place over the bar and the bar's row, the Music app's way
+// (UITabBarController's tabBarMinimizeBehavior and bottomAccessory, iOS 26). Spotify's tab bar container is no
+// UITabBarController (TabBar.x), so this one stands over it:
+//
+// - its tabs are Spotify's own, read from Spotify's bar at each of its passes (TabBar.x hands them over), and a tap on
+//   one is passed on to Spotify's item; Spotify's bar stays, unseen, as their source;
+// - its pages are empty and let every touch through to Spotify's page under them; the host view takes only the bar's
+//   and the accessory's touches;
+// - its minimize follows the page Spotify shows: each page's content scroll view is set to the scroll view the page is
+//   scrolling (TabBarMinimize.x hands it over);
+// - its accessory is a mini player of the mod's (SGRSystemMiniPlayer), from the player's state and the cover on
+//   Spotify's own bar, which stays unseen; a tap on it brings up the mod's own player (SystemPlayer.m) with UIKit's zoom.
+#import <objc/runtime.h>
+#import <objc/message.h>
+#import "Core/SGCore.h"
+#import "Redesigned/Kit/SGRKit.h"
+#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
+#import "Shared/Player/PlayerState.h"
+#import "Navbar.h"
+#import "SystemPlayer.h"
+#import "SystemPlayerTransition.h"
+#import "Redesigned/Kit/SGRRepaint.h"
+#import "Settings/SGPage.h"
+
+
+BOOL SGRSystemTabsOn(void) {
+    static BOOL on;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        on = SGNativeRedesign();
+    });
+    return on;
+}
+
+#pragma mark - the mini player
+
+static UIViewController *systemTabsController(void);
+static void buildReadyPage(void);
+
+API_AVAILABLE(ios(26.0))
+// TODO (its owner, 2026-11-01, "aim to add at some point"): no like on it yet, so the Mini player page's Hide the like
+// button reaches only the glass bar.
+@interface SGRSystemMiniPlayer : UIView <SGPlayerStateObserver, UIGestureRecognizerDelegate>
+@property (nonatomic, readonly) UIImageView *cover;
+@end
+
+// Swiped sideways, the card pages through the tracks as the Music app's mini player does (its owner's recording,
+// 2026-10-31): the cover stays, and the two lines are one of three side by side, the track before, this one and the next,
+// moved with the finger and cut at the card's text area. Far or fast enough it settles on the neighbour and the player
+// skips to it; short of that it springs back. A track changed some other way (next, the player) pages across the same way.
+static const CGFloat kSwipeDistance = 0.28, kSwipeSpeed = 600, kPageGap = 24;
+// The text area fades out over this much at each side, so a page going off or coming in softens there rather than being
+// cut (its owner, 2026-10-31).
+static const CGFloat kTextFade = 14;
+// The cover's gap to the capsule's edge, all round.
+static const CGFloat kCoverInset = 6;
+// The least room the title keeps beside the buttons: short of it the device button goes.
+static const CGFloat kDeviceRoom = 80;
+
+// One track's two lines.
+@interface SGRMiniTrackText : UIView
+@property (nonatomic, readonly) UILabel *title, *artist;
+@property (nonatomic) BOOL titleOnly;
+@end
+
+@implementation SGRMiniTrackText
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (!(self = [super initWithFrame:frame])) return nil;
+    _title = [UILabel new];
+    _title.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryLarge);
+    _title.textColor = UIColor.labelColor;
+    _artist = [UILabel new];
+    _artist.font = SGRFont(UIFontTextStyleFootnote, UIFontWeightRegular, UIContentSizeCategoryLarge);
+    // A plain grey of the secondary label's look, not the system's secondary color: that one is drawn through the capsule's
+    // glass, so it was missing from the picture the player page's card carries down and came back a beat after the title
+    // when the card landed (its owner, 2026-11-01).
+    _artist.textColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark ? [UIColor colorWithWhite:1 alpha:0.6] : [UIColor colorWithWhite:0 alpha:0.5];
+    }];
+    [self addSubview:_title];
+    [self addSubview:_artist];
+    return self;
+}
+
+- (void)setTrack:(SPTPlayerTrack *)track {
+    _title.text = [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")] ? track.trackTitle : nil;
+    _artist.text = [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")] ? track.artistName : nil;
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGSize size = self.bounds.size;
+    CGFloat titleHeight = ceil(_title.font.lineHeight), artistHeight = ceil(_artist.font.lineHeight);
+    _artist.hidden = self.titleOnly || !_artist.text.length;
+    if (_artist.hidden) {
+        _title.frame = CGRectMake(0, round((size.height - titleHeight) / 2), size.width, titleHeight);
+    } else {
+        CGFloat top = round((size.height - titleHeight - artistHeight + 2) / 2);
+        _title.frame = CGRectMake(0, top, size.width, titleHeight);
+        _artist.frame = CGRectMake(0, top + titleHeight - 2, size.width, artistHeight);
+    }
+}
+@end
+
+@implementation SGRSystemMiniPlayer {
+    UIView *_text;      // the text area, which cuts the pages
+    UIView *_strip;     // the three pages, moved together
+    SGRMiniTrackText *_previous, *_current, *_following;
+    CAGradientLayer *_fade;
+    SGRGlyphButton *_play, *_next;
+    UIView *_device;    // the output's device: a tap the AirPlay picker, a hold Spotify's Connect sheet
+    NSString *_shownURI;
+    BOOL _skipping;     // a swipe settled on a neighbour; the track it asked for has not come yet
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    if (!(self = [super initWithFrame:frame])) return nil;
+    _cover = [UIImageView new];
+    _cover.contentMode = UIViewContentModeScaleAspectFill;
+    _cover.clipsToBounds = YES;
+    _cover.layer.cornerCurve = kCACornerCurveContinuous;
+    _cover.backgroundColor = [UIColor colorWithWhite:1 alpha:0.1];
+    _text = [UIView new];
+    _text.clipsToBounds = YES;
+    _fade = [CAGradientLayer layer];
+    UIColor *whole = UIColor.blackColor, *none = UIColor.clearColor;
+    _fade.colors = @[(id)none.CGColor, (id)whole.CGColor, (id)whole.CGColor, (id)none.CGColor];
+    _fade.startPoint = CGPointMake(0, 0.5);
+    _fade.endPoint = CGPointMake(1, 0.5);
+    _text.layer.mask = _fade;
+    _strip = [UIView new];
+    _previous = [SGRMiniTrackText new];
+    _current = [SGRMiniTrackText new];
+    _following = [SGRMiniTrackText new];
+    for (UIView *page in @[_previous, _current, _following]) [_strip addSubview:page];
+    [_text addSubview:_strip];
+    __weak typeof(self) weakSelf = self;
+    _play = [SGRGlyphButton buttonWithSymbol:@"play.fill" pointSize:20 title:@"Play"];
+    _play.onTap = ^{ [weakSelf togglePlay]; };
+    _next = [SGRGlyphButton buttonWithSymbol:@"forward.fill" pointSize:20 title:@"Next"];
+    _next.onTap = ^{ [(id)SGPlayer() skipToNextTrackWithOptions:nil]; };
+    // The Mini player page's Device button (its owner, 2026-11-01): the player page's AirPlay button, its glyph the
+    // output's device, beside play.
+    _device = SGRSystemMakeRouteButton(18, @"the mini player");
+    for (UIView *view in @[_cover, _text, _device, _play, _next]) [self addSubview:view];
+    UITapGestureRecognizer *open = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(opened)];
+    open.delegate = self;
+    [self addGestureRecognizer:open];
+    // Each close's end: the next page built a moment later, once the open a tap waited on has had its turn. The first page
+    // is built a little after launch the same way, and the next one once each open is over (opened).
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        [NSNotificationCenter.defaultCenter addObserverForName:SGRSystemPlayerPageDidCloseNotification object:nil queue:NSOperationQueue.mainQueue
+                                                    usingBlock:^(NSNotification *note) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ buildReadyPage(); });
+        }];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ buildReadyPage(); });
+    });
+    UIPanGestureRecognizer *swipe = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(swiped:)];
+    swipe.delegate = self;
+    [self addGestureRecognizer:swipe];
+    self.isAccessibilityElement = NO;
+    SGAddPlayerStateObserver(self);
+    [self registerForTraitChanges:@[UITraitTabAccessoryEnvironment.class] withAction:@selector(environmentChanged)];
+    [self show:SGPlayerState()];
+    return self;
+}
+
+- (void)environmentChanged {
+    UITabAccessoryEnvironment environment = self.traitCollection.tabAccessoryEnvironment;
+    SGLog(@"system tabs: the mini player is %@ (environment %ld)", environment == UITabAccessoryEnvironmentInline ? @"in the bar's row"
+          : environment == UITabAccessoryEnvironmentRegular ? @"over the bar" : @"neither", (long)environment);
+    [self setNeedsLayout];
+}
+
+- (BOOL)inline_ {
+    return self.traitCollection.tabAccessoryEnvironment == UITabAccessoryEnvironmentInline;
+}
+
+- (CGFloat)pageStep {
+    return _text.bounds.size.width + kPageGap;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGSize size = self.bounds.size;
+    BOOL inlined = [self inline_];
+    // The Music app's: cover, two lines, play and next over the bar; cover, title and play alone in the row. The cover is
+    // concentric with the capsule's rounded end, kCoverInset in from it all round: placed by this view's own bounds, which
+    // are not the capsule's, it filled the capsule's height against its edge (its owner's screenshot, 2026-10-31).
+    UIView *capsule = self.superview;
+    CGRect shape = capsule ? [self convertRect:capsule.bounds fromView:capsule] : self.bounds;
+    if (shape.size.height < 20 || shape.size.height > size.height + 40) shape = self.bounds;
+    CGFloat side = MAX(20, shape.size.height - 2 * kCoverInset);
+    CGPoint middle = CGPointMake(CGRectGetMinX(shape) + shape.size.height / 2, CGRectGetMidY(shape));
+    _cover.frame = CGRectMake(round(middle.x - side / 2), round(middle.y - side / 2), side, side);
+    static NSUInteger told;
+    if (told++ < 4) SGLog(@"system tabs: the mini player %@ in a capsule %@ (%@), cover %@", NSStringFromCGRect(self.bounds), NSStringFromCGRect(shape),
+                          capsule ? NSStringFromClass(capsule.class) : @"none", NSStringFromCGRect(_cover.frame));
+    // Round over the bar too, as in the row (its owner, 2026-10-31).
+    _cover.layer.cornerRadius = side / 2;
+    CGFloat button = 36, right = size.width - 6;
+    // In the bar's row, play alone as the Music app has it; over the bar, next beside it unless the Mini player page's Skip
+    // button is off (its owner, 2026-11-01), the title taking its room.
+    BOOL next = !inlined && SGEnabled(SGRKeyMiniPlayerNext);
+    _next.hidden = !next;
+    if (next) {
+        _next.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
+        right -= button;
+    }
+    _play.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
+    right -= button;
+    // The device button before play when the Mini player page has it on: over the bar always, in the bar's row only as
+    // the glass bar keeps it there (its row key, which the switch sets with it) and while the title keeps room.
+    CGFloat textX = CGRectGetMaxX(_cover.frame) + 10;
+    BOOL device = !SGHidden(SGRHideBarConnect) && (!inlined || SGFlag(SGRKeyBarInlineConnect, NO)) && right - button - 4 - textX >= kDeviceRoom;
+    _device.hidden = !device;
+    if (device) {
+        _device.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
+        right -= button;
+    }
+    right -= 4;
+    CGFloat width = MAX(0, right - textX);
+    // The text area starts the fade's width before the text, so the fade lies over nothing at rest: laid over the text,
+    // it faded the title's first letter (its owner's screenshot, 2026-10-31).
+    _text.frame = CGRectMake(textX - kTextFade, 0, width + kTextFade, size.height);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    _fade.frame = _text.bounds;
+    CGFloat edge = width > 0 ? MIN(0.25, kTextFade / (width + kTextFade)) : 0;
+    _fade.locations = @[@0, @(edge), @(1 - edge), @1];
+    [CATransaction commit];
+    CGFloat step = width + kPageGap;
+    _strip.bounds = CGRectMake(0, 0, width, size.height);
+    _strip.center = CGPointMake(kTextFade + width / 2, size.height / 2);
+    NSArray<SGRMiniTrackText *> *pages = @[_previous, _current, _following];
+    for (NSUInteger i = 0; i < pages.count; i++) {
+        // Both lines in the row too, as over the bar (its owner, 2026-10-31).
+        pages[i].titleOnly = NO;
+        pages[i].frame = CGRectMake(((CGFloat)i - 1) * step, 0, width, size.height);
+    }
+}
+
+- (void)show:(SPTPlayerState *)state {
+    NSString *uri = SGURIString(state.track.URI);
+    BOOL changed = uri && _shownURI && ![uri isEqualToString:_shownURI];
+    // Which way the track moved, when it moved: to the one that was next, or back to the one before.
+    NSInteger moved = 0;
+    if (changed) {
+        // On unless the track left is now among those to come: a jump to a track in neither (a new context) reads as on.
+        moved = SGRTrackMoved(state, _shownURI) < 0 ? -1 : 1;
+    }
+    _shownURI = uri;
+    _current.track = state.track;
+    _previous.track = SGRPreviousTrack(state);
+    _following.track = state.future.firstObject;
+    if (changed) {
+        CGFloat step = [self pageStep];
+        if (_skipping) {
+            // The strip settled on this track already: it is now the middle page.
+            _skipping = NO;
+            [UIView performWithoutAnimation:^{ self->_strip.transform = CGAffineTransformIdentity; }];
+        } else if (step > 0) {
+            // Changed elsewhere: the strip starts on the track it left and pages across to this one.
+            [UIView performWithoutAnimation:^{ self->_strip.transform = CGAffineTransformMakeTranslation(moved * step, 0); }];
+            [UIView animateWithDuration:0.38 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:0 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+                self->_strip.transform = CGAffineTransformIdentity;
+            } completion:nil];
+        }
+    }
+    BOOL paused = !state || state.isPaused;
+    [_play.glyph setSymbol:paused ? @"play.fill" : @"pause.fill" animated:YES];
+    _play.accessibilityLabel = paused ? @"Play" : @"Pause";
+    [self refreshCover];
+    // Spotify's bar takes the new track's cover a moment after the state says so.
+    for (NSNumber *delay in @[@0.4, @1.2]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf refreshCover];
+        });
+    }
+    [self setNeedsLayout];
+}
+
+- (void)refreshCover {
+    UIImage *cover = SGRNowPlayingCover();
+    if (cover && cover != _cover.image) _cover.image = cover;
+}
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
+    if (![recognizer isKindOfClass:UIPanGestureRecognizer.class]) return YES;
+    // Swipe to skip on the Mini player page (Navbar.h), read at each swipe.
+    if (!SGEnabled(SGRKeyMiniPlayerSwipe)) return NO;
+    CGPoint velocity = [(UIPanGestureRecognizer *)recognizer velocityInView:self];
+    return fabs(velocity.x) > fabs(velocity.y);
+}
+
+- (void)swiped:(UIPanGestureRecognizer *)swipe {
+    CGFloat step = [self pageStep], x = [swipe translationInView:self].x;
+    // No neighbour on a side, the strip only gives a little that way.
+    BOOL hasNext = _following.title.text.length > 0, hasPrevious = _previous.title.text.length > 0;
+    switch (swipe.state) {
+        case UIGestureRecognizerStateChanged: {
+            CGFloat moved = ((x < 0 && !hasNext) || (x > 0 && !hasPrevious)) ? x / 4 : x;
+            _strip.transform = CGAffineTransformMakeTranslation(moved, 0);
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled: {
+            CGFloat speed = [swipe velocityInView:self].x;
+            // The way the finger went, or for a short flick the way it was moving; flicked back against the drag, none.
+            NSInteger way = fabs(x) > 12 ? (x < 0 ? -1 : 1) : (speed < 0 ? -1 : 1);
+            BOOL against = (way < 0 && speed > kSwipeSpeed / 2) || (way > 0 && speed < -kSwipeSpeed / 2);
+            BOOL possible = way < 0 ? hasNext : hasPrevious;
+            BOOL skip = swipe.state == UIGestureRecognizerStateEnded && step > kPageGap && !against && possible
+                && (fabs(x) > step * kSwipeDistance || fabs(speed) > kSwipeSpeed);
+            if (!skip) {
+                [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.85 initialSpringVelocity:0 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+                    self->_strip.transform = CGAffineTransformIdentity;
+                } completion:nil];
+                break;
+            }
+            _skipping = YES;
+            [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.95 initialSpringVelocity:0 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+                self->_strip.transform = CGAffineTransformMakeTranslation(way * step, 0);
+            } completion:nil];
+            id player = SGPlayer();
+            if (way < 0) [player skipToNextTrackWithOptions:nil];
+            else [player skipToPreviousTrackWithOptions:nil];
+            SGLog(@"system tabs: the mini player swiped to the %@ track", way < 0 ? @"next" : @"previous");
+            // A skip that changes nothing (back from a track already under way only restarts it) brings the strip back.
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                typeof(self) me = weakSelf;
+                if (!me || !me->_skipping) return;
+                me->_skipping = NO;
+                [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.85 initialSpringVelocity:0 options:0 animations:^{
+                    me->_strip.transform = CGAffineTransformIdentity;
+                } completion:nil];
+            });
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+// The card's tap opens the player, but not over its buttons: it took their touches, so play and next did nothing (its
+// owner, 2026-10-31).
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
+    for (UIView *v = touch.view; v && v != self; v = v.superview) if ([v isKindOfClass:UIControl.class]) return NO;
+    return YES;
+}
+
+- (void)playerStateDidChange:(SPTPlayerState *)state {
+    [self show:state];
+}
+
+- (void)togglePlay {
+    id player = SGPlayer();
+    SPTPlayerState *state = SGPlayerState();
+    if (!player) return;
+    if (state.isPaused) [player resume:nil];
+    else [player pause:nil];
+}
+
+// The player, a page of the mod's (SystemPlayer.m), presented by UIKit's zoom, the Music app's way: its open, its swipe
+// down and its close are the mod's own (SystemPlayerTransition.m), out of the capsule and back into it. Spotify's own
+// player is not asked for: held in
+// the page, it brought its own pulls and closes, and UIKit's swipe close lost to them, where a page of the mod's alone
+// closed every time (its owner, 2026-11-01).
+// The next page, built while the shown one is up and after each close, so the next tap has only to present it (a page
+// took 15 to 60 ms to build, 115 the first time; the phone's log, 2026-11-01). A tap during a close waits for the close's
+// end whatever is done: UIKit refuses to present until then, and the phone's log (2026-11-01) showed nothing of the mod's
+// could end it sooner. Its container's layer time sped up changed nothing; its animator already reports itself done
+// (1.00) when such a tap comes; and taking the container's animations off ended nothing sooner and took the glass with
+// it. So the page is at least ready before it. Kept kReadyFor at most: the page reads some settings
+// as it is built.
+static const CFTimeInterval kReadyFor = 20;
+static SGRSystemPlayerPage *sg_readyPage;
+static CFTimeInterval sg_readyAt;
+
+static void buildReadyPage(void) {
+    UIViewController *presenter = systemTabsController();
+    if (sg_readyPage || !presenter.view.window) return;
+    SGRSystemPlayerPage *page = [SGRSystemPlayerPage new];
+    [page loadViewIfNeeded];
+    sg_readyPage = page;
+    sg_readyAt = CACurrentMediaTime();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kReadyFor * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (sg_readyPage == page) sg_readyPage = nil;
+    });
+}
+
+static SGRSystemPlayerPage *takePage(void) {
+    SGRSystemPlayerPage *page = sg_readyPage && !sg_readyPage.outOfDate && CACurrentMediaTime() - sg_readyAt < kReadyFor ? sg_readyPage : nil;
+    sg_readyPage = nil;
+    return page ?: [SGRSystemPlayerPage new];
+}
+
+- (void)opened {
+    // A safety: an open within a moment of the last is let go (two taps during a close both opened, 16 ms
+    // apart, before only one was let wait; the phone's log, 2026-11-01).
+    static CFTimeInterval lastOpen;
+    CFTimeInterval now = CACurrentMediaTime();
+    if (now - lastOpen < 0.3) return;
+    UIViewController *presenter = systemTabsController();
+    // A tap while the page is still closing: UIKit refuses a presentation until the close is over, so it opens then
+    // instead of being dropped (its owner, 2026-11-01: a second before it could be opened again).
+    UIViewController *presented = presenter.presentedViewController;
+    // One open at most waits: a second tap during the same close keeps the one waiting (the phone's log, 2026-11-01: two
+    // taps during a close each waited and both opened, 16 ms apart).
+    static BOOL queued;
+    if ([presented isKindOfClass:SGRSystemPlayerPage.class] && presented.isBeingDismissed) {
+        // The mod's own close turns back, the page opening again from where it is.
+        SGRSystemPlayerTransition *running = (SGRSystemPlayerTransition *)presented.transitioningDelegate;
+        if ([running isKindOfClass:SGRSystemPlayerTransition.class] && [running turnBackClose]) return;
+        if (queued) return;
+        queued = YES;
+        __weak typeof(self) weakSelf = self;
+        __block id observer = [NSNotificationCenter.defaultCenter addObserverForName:SGRSystemPlayerPageDidCloseNotification object:nil queue:nil
+                                                                         usingBlock:^(NSNotification *note) {
+            [NSNotificationCenter.defaultCenter removeObserver:observer];
+            observer = nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                queued = NO;
+                [weakSelf opened];
+            });
+        }];
+        return;
+    }
+    if (!presenter.view.window || presented) return;
+    lastOpen = now;
+    SGRSystemPlayerPage *page = takePage();
+    __weak UIView *capsule = self.superview ?: self;
+    // Opened and closed by the mod's own move (SystemPlayerTransition.m), out of the capsule and back into it.
+    SGRSystemPlayerTransition *transition = [SGRSystemPlayerTransition attachTo:page];
+    transition.source = ^UIView *{ return capsule; };
+    __weak typeof(self) weakMini = self;
+    // Drawn rather than snapshotted: the capsule over it is hidden while the page is open, and a hidden view's snapshot
+    // comes out blank.
+    transition.row = ^UIView *{
+        typeof(self) mini = weakMini;
+        if (!mini || mini.bounds.size.width < 1) return nil;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithBounds:mini.bounds];
+        UIImage *picture = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+            [mini drawViewHierarchyInRect:mini.bounds afterScreenUpdates:YES];
+        }];
+        return [[UIImageView alloc] initWithImage:picture];
+    };
+    [presenter presentViewController:page animated:YES completion:^{ buildReadyPage(); }];
+}
+@end
+
+#pragma mark - the controller
+
+// An empty page: Spotify's page under it shows through and takes the touches.
+@interface SGRSystemTabsPage : UIViewController
+@end
+
+@implementation SGRSystemTabsPage
+- (void)loadView {
+    UIView *view = [UIView new];
+    view.backgroundColor = UIColor.clearColor;
+    view.userInteractionEnabled = NO;
+    self.view = view;
+}
+@end
+
+// Over the whole of Spotify's container, taking only the bar's and the accessory's touches.
+@interface SGRSystemTabsHost : UIView
+@property (nonatomic, weak) UITabBarController *controller;
+@property (nonatomic, weak) UIView *accessoryContent;
+@end
+
+@implementation SGRSystemTabsHost
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    UIView *taken = [self taken:hit];
+    static NSUInteger told;
+    // Every touch on the lower part of the screen, where the bar and the card are, with what holds it.
+    if (event.type == UIEventTypeTouches && point.y > self.bounds.size.height - 260 && told++ < 120) {
+        NSMutableString *chain = [NSMutableString string];
+        NSUInteger levels = 0;
+        for (UIView *v = hit.superview; v && v != self && levels < 5; v = v.superview, levels++) [chain appendFormat:@" < %@", NSStringFromClass(v.class)];
+        // Where a touch passed on lands among Spotify's views under the host.
+        NSString *under = @"-";
+        if (!taken) {
+            NSArray<UIView *> *siblings = self.superview.subviews;
+            NSUInteger me = [siblings indexOfObject:self];
+            for (NSInteger i = (NSInteger)me - 1; i >= 0; i--) {
+                UIView *sibling = siblings[i];
+                UIView *found = [sibling hitTest:[self convertPoint:point toView:sibling] withEvent:event];
+                if (!found) continue;
+                NSMutableString *path = [NSMutableString stringWithString:NSStringFromClass(found.class)];
+                NSUInteger levels = 0;
+                for (UIView *v = found.superview; v && v != self.superview && levels < 4; v = v.superview, levels++) [path appendFormat:@" < %@", NSStringFromClass(v.class)];
+                under = path;
+                break;
+            }
+        }
+        UIView *content = self.accessoryContent;
+        SGLog(@"system tabs: touch at %@ hits %@%@, %@ (under it: %@); the card's content at %@ in a window %d, alpha %.2f, hidden %d", NSStringFromCGPoint(point),
+              hit ? NSStringFromClass(hit.class) : @"nothing", chain, taken ? @"kept" : @"passed to Spotify", under,
+              NSStringFromCGRect([content convertRect:content.bounds toView:self]), content.window != nil, content.alpha, content.hidden);
+    }
+    return taken;
+}
+
+- (UIView *)taken:(UIView *)hit {
+    UITabBarController *controller = self.controller;
+    if (!hit || !controller) return nil;
+    if ([hit isDescendantOfView:controller.tabBar]) return hit;
+    // The accessory's own card: the content and the views round it up to its glass, card sized. Not the container above
+    // them, which covers the screen: kept, it took every touch where the card had stood over the bar once it moved into
+    // the row (its owner, 2026-10-31).
+    UIView *card = nil;
+    for (UIView *v = self.accessoryContent; v && v != controller.viewIfLoaded; v = v.superview) {
+        if (v.bounds.size.height > 140) break;
+        card = v;
+    }
+    return card && !card.hidden && card.alpha > 0.01 && [hit isDescendantOfView:card] ? hit : nil;
+}
+@end
+
+static void clearBackdrops(UITabBarController *controller);
+
+API_AVAILABLE(ios(26.0))
+@interface SGRSystemTabs : NSObject <UITabBarControllerDelegate, UIGestureRecognizerDelegate>
+@property (nonatomic, strong) UITabBarController *controller;
+@property (nonatomic, strong) SGRSystemTabsHost *host;
+@property (nonatomic, strong) SGRSystemMiniPlayer *mini;
+@property (nonatomic, copy) NSArray<UIView *> *sources;
+@property (nonatomic, copy) NSString *titles;
+// Each tab's outline and filled glyph by its name, each read off Spotify's item while it was in that state.
+@property (nonatomic, strong) NSMutableDictionary<NSString *, UIImage *> *outlines, *filleds;
+@property (nonatomic) CFTimeInterval heldUntil;
+@end
+
+@implementation SGRSystemTabs
+- (BOOL)tabBarController:(UITabBarController *)controller shouldSelectTab:(UITab *)tab {
+    // The tap a hold ends in is no tab change: passed on to Spotify, it switched tabs and shut Mod Settings the moment the
+    // hold had opened it (its owner's recording, 2026-10-31).
+    if (CACurrentMediaTime() < self.heldUntil) return NO;
+    NSUInteger index = [controller.tabs indexOfObject:tab];
+    if (index < self.sources.count) SGRForwardTabTap(self.sources[index]);
+    return YES;
+}
+
+- (void)tabBarController:(UITabBarController *)controller didSelectTab:(UITab *)tab previousTab:(UITab *)previous {
+    clearBackdrops(controller);
+}
+
+// Holding the first tab opens Mod Settings, as on the glass bar (TabBar.x): a little longer than iOS's own press for a
+// menu, with a firm tap when it opens.
+// The tab buttons have recognizers of their own: the hold runs beside them, or it never began (the phone's log).
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
+}
+
+- (void)held:(UILongPressGestureRecognizer *)hold {
+    if (hold.state != UIGestureRecognizerStateBegan || !self.sources.count) return;
+    UITabBar *bar = self.controller.tabBar;
+    NSMutableArray<UIView *> *buttons = [NSMutableArray array];
+    SGForEachView(bar, ^(UIView *v) {
+        if ([NSStringFromClass(v.class) containsString:@"TabButton"] && v.bounds.size.width > 20) [buttons addObject:v];
+    });
+    [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
+        return [@([a convertPoint:CGPointZero toView:bar].x) compare:@([b convertPoint:CGPointZero toView:bar].x)];
+    }];
+    UIView *first = buttons.firstObject;
+    CGPoint point = [hold locationInView:bar];
+    BOOL onFirst = first ? CGRectContainsPoint([first convertRect:first.bounds toView:bar], point) : point.x < bar.bounds.size.width / 4;
+    SGLog(@"system tabs: held at %@ over %@ (%lu buttons)", NSStringFromCGPoint(point), onFirst ? @"the first tab" : @"another tab", (unsigned long)buttons.count);
+    if (!onFirst) return;
+    self.heldUntil = CACurrentMediaTime() + 2;
+    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
+    SGOpenModSettings(self.sources.firstObject);
+}
+@end
+
+static SGRSystemTabs *sg_tabs API_AVAILABLE(ios(26.0));
+
+static UIViewController *systemTabsController(void) {
+    if (@available(iOS 26.0, *)) return sg_tabs.controller;
+    return nil;
+}
+
+// UIKit paints the controller's own view, and the views between it and the pages, in the system background: the first
+// try covered all of Spotify in white (its owner's recording, 2026-10-31). Everything but the bar and the accessory is
+// made clear, so Spotify's page shows through.
+static void clearBackdrops(UITabBarController *controller) {
+    UIView *root = controller.viewIfLoaded;
+    if (!root) return;
+    if (root.backgroundColor != UIColor.clearColor) root.backgroundColor = UIColor.clearColor;
+    UIView *bar = controller.tabBar;
+    for (UIView *sub in root.subviews) {
+        if (sub == bar || [bar isDescendantOfView:sub]) continue;
+        if ([NSStringFromClass(sub.class) containsString:@"Transition"] || [NSStringFromClass(sub.class) containsString:@"Wrapper"]) {
+            sub.backgroundColor = UIColor.clearColor;
+            // The pages' layer takes no touches: it stood in front of the accessory over the bar and took every touch on
+            // it (the phone's log, 2026-10-31: taps on the card hit UIViewControllerWrapperView), so they went to Spotify.
+            if (sub.userInteractionEnabled) sub.userInteractionEnabled = NO;
+            for (UIView *inner in sub.subviews) if (inner.backgroundColor) inner.backgroundColor = UIColor.clearColor;
+        }
+    }
+    static BOOL told;
+    if (!told) {
+        told = YES;
+        NSMutableString *tree = [NSMutableString string];
+        for (UIView *sub in root.subviews) [tree appendFormat:@" [%@ %@ bg %@]", NSStringFromClass(sub.class), NSStringFromCGRect(sub.frame), sub.backgroundColor];
+        SGLog(@"system tabs: the controller's views:%@", tree);
+    }
+}
+
+// The direct child of `view` that holds `inner`, or nil.
+static UIView *childHolding(UIView *view, UIView *inner) {
+    for (UIView *v = inner; v; v = v.superview) if (v.superview == view) return v;
+    return nil;
+}
+
+static UIScrollView *pageScrollView(UIViewController *container, UIView *host);
+
+// A tab glyph drawn in white as it is, not tinted, kept on the glyph so each pass hands back the same image.
+static UIImage *plainGlyph(UIImage *glyph) {
+    static char kPlainKey;
+    if (!glyph.size.width) return glyph;
+    UIImage *plain = objc_getAssociatedObject(glyph, &kPlainKey);
+    if (!plain) {
+        plain = [glyph imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+        objc_setAssociatedObject(glyph, &kPlainKey, plain, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return plain;
+}
+
+void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UIView *> *sources, UIView *active) {
+    if (@available(iOS 26.0, *)) {
+        UIView *view = container.viewIfLoaded;
+        if (!view || !sources.count) return;
+        SGRSystemTabs *tabs = sg_tabs;
+        if (!tabs) {
+            tabs = sg_tabs = [SGRSystemTabs new];
+            UITabBarController *controller = [UITabBarController new];
+            controller.delegate = tabs;
+            controller.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            controller.tabBarMinimizeBehavior = UITabBarMinimizeBehaviorOnScrollDown;
+            tabs.controller = controller;
+            SGRSystemTabsHost *host = [[SGRSystemTabsHost alloc] initWithFrame:view.bounds];
+            // Dark on every view it draws: set on the controller alone, the bar's glass and the accessory came out light
+            // (its owner, 2026-10-31), taking the appearance of Spotify's container they sit in.
+            host.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            controller.view.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            controller.tabBar.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:tabs action:@selector(held:)];
+            hold.minimumPressDuration = 0.8;
+            hold.delegate = tabs;
+            [controller.tabBar addGestureRecognizer:hold];
+            host.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            host.controller = controller;
+            tabs.host = host;
+            SGRSystemMiniPlayer *mini = [SGRSystemMiniPlayer new];
+            mini.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+            tabs.mini = mini;
+            controller.bottomAccessory = [[UITabAccessory alloc] initWithContentView:mini];
+            host.accessoryContent = mini;
+            SGLog(@"system tabs: a tab bar controller over %@", NSStringFromClass(container.class));
+        }
+        UITabBarController *controller = tabs.controller;
+        SGRSystemTabsHost *host = tabs.host;
+        if (controller.parentViewController != container) {
+            [container addChildViewController:controller];
+            controller.view.frame = host.bounds;
+            controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            [host addSubview:controller.view];
+            [controller didMoveToParentViewController:container];
+        }
+        // Just above Spotify's bar and its mini player, not over everything: Spotify puts its player in this same
+        // container, and the host brought to the front each pass stood over the player as it opened (the phone's log,
+        // 2026-10-31: the player opened, out of sight).
+        UIView *below = nil;
+        for (UIView *inner in @[stockBar ?: UIView.new, sgr_nowPlayingRoot ?: UIView.new]) {
+            UIView *child = childHolding(view, inner);
+            if (child && child != host && (!below || [view.subviews indexOfObject:child] > [view.subviews indexOfObject:below])) below = child;
+        }
+        if (host.superview != view) host.frame = view.bounds;
+        NSUInteger hostIndex = host.superview == view ? [view.subviews indexOfObject:host] : NSNotFound;
+        NSUInteger belowIndex = below ? [view.subviews indexOfObject:below] : NSNotFound;
+        if (below && hostIndex != belowIndex + 1) [view insertSubview:host aboveSubview:below];
+        else if (!below && host.superview != view) [view addSubview:host];
+        clearBackdrops(controller);
+        // Apple Music style off (the Mini player page) holds the bar at full size: the mod's own minimize reads the switch
+        // as each scroll goes (TabBarMinimize.x), and UIKit's, where it stands in, is told never (its owner, 2026-11-01).
+        UITabBarMinimizeBehavior minimize = SGEnabled(SGRKeyNavbarMinimize) ? UITabBarMinimizeBehaviorOnScrollDown : UITabBarMinimizeBehaviorNever;
+        if (controller.tabBarMinimizeBehavior != minimize) controller.tabBarMinimizeBehavior = minimize;
+        // The redesign's accent on the selected tab, as on the glass bar (its owner, 2026-10-31).
+        UIColor *accent = SGRAccent();
+        if (![controller.tabBar.tintColor isEqual:accent]) controller.tabBar.tintColor = accent;
+        if (![controller.view.tintColor isEqual:accent]) controller.view.tintColor = accent;
+
+        // The tabs again only when Spotify's items or their names changed; their glyphs follow in place at every pass.
+        // Icons only on the Tab bar page (SGRKeyNavbarHideLabels, as the glass bar reads it in TabBar.x): each tab without
+        // a name, which UIKit draws as its glyph alone (its owner, 2026-11-01: the system tab bar kept its names). Part of
+        // what is compared, so switching it builds the tabs again at the next pass, which the page's SGRRefreshTabBar asks for.
+        BOOL namesHidden = SGHidden(SGRKeyNavbarHideLabels);
+        NSMutableString *titles = [NSMutableString stringWithString:namesHidden ? @"icons only\n" : @"names\n"];
+        for (UIView *source in sources) [titles appendFormat:@"%@\n", SGRTabSourceTitle(source)];
+        // Each tab's outline and filled glyph, as the glass bar draws Spotify's item (TabBar.x): Spotify swaps the item's icon
+        // itself between the two as the item becomes active, so the glyph read at a pass is filed as the filled one when the
+        // item is active then, else as the outline, and kept by the tab's name. UIKit draws the outline unselected and the
+        // filled one selected and under its selection bubble as it slides (its owner, 2026-11-01: the same icon for both left
+        // the bubble nothing to fill; a pair built once from the tab active then kept that tab filled unselected and the
+        // others never filled). A tab seen in one state only uses that glyph for both until it is seen in the other, and a
+        // glyph read again replaces its state's, so they follow the tab editor.
+        if (!tabs.outlines) tabs.outlines = [NSMutableDictionary dictionary];
+        if (!tabs.filleds) tabs.filleds = [NSMutableDictionary dictionary];
+        NSMutableArray<UIImage *> *glyphs = [NSMutableArray arrayWithCapacity:sources.count];
+        NSMutableArray<UIImage *> *selectedGlyphs = [NSMutableArray arrayWithCapacity:sources.count];
+        for (UIView *source in sources) {
+            NSString *name = SGRTabSourceTitle(source) ?: @"";
+            UIImage *now = SGRTabSourceGlyph(source, NO);
+            if (now) {
+                NSMutableDictionary<NSString *, UIImage *> *store = SGRTabSourceIsActive(source) ? tabs.filleds : tabs.outlines;
+                if (store[name] != now) store[name] = now;
+            }
+            UIImage *outline = tabs.outlines[name] ?: tabs.filleds[name], *filled = tabs.filleds[name] ?: tabs.outlines[name];
+            [glyphs addObject:outline ?: [UIImage new]];
+            [selectedGlyphs addObject:filled ?: outline ?: [UIImage new]];
+        }
+        if (![sources isEqualToArray:tabs.sources] || ![titles isEqualToString:tabs.titles]) {
+            // The last tab, whichever the editor put there, stands on its own at the trailing end as the Music app's Search
+            // does (its owner, 2026-10-31, as the glass bar's trailing circle was): UIKit gives that place to a search tab,
+            // so the last tab is one, with its own name and glyph in place of the magnifier.
+            NSUInteger searchIndex = sources.count > 1 ? sources.count - 1 : NSNotFound;
+            NSMutableArray<UITab *> *items = [NSMutableArray array];
+            UIViewController *(^page)(UITab *) = ^UIViewController *(UITab *tab) { return [SGRSystemTabsPage new]; };
+            [sources enumerateObjectsUsingBlock:^(UIView *source, NSUInteger i, BOOL *stop) {
+                NSString *name = SGRTabSourceTitle(source) ?: @"", *title = namesHidden ? @"" : name;
+                NSString *identifier = [NSString stringWithFormat:@"spotifyglass.systemTab.%lu", (unsigned long)i];
+                UITab *tab;
+                if (i == searchIndex) {
+                    tab = [[UISearchTab alloc] initWithViewControllerProvider:page];
+                    tab.title = title;
+                    tab.image = glyphs[i];
+                } else {
+                    tab = [[UITab alloc] initWithTitle:title image:glyphs[i] identifier:identifier viewControllerProvider:page];
+                }
+                if (@available(iOS 26.1, *)) tab.selectedImage = selectedGlyphs[i];
+                [items addObject:tab];
+            }];
+            controller.tabs = items;
+            tabs.sources = sources;
+            tabs.titles = titles;
+            SGLog(@"system tabs: %lu tabs, search at %@, %@", (unsigned long)items.count, searchIndex == NSNotFound ? @"none" : @(searchIndex),
+                  namesHidden ? @"icons only" : @"with names");
+        }
+        NSUInteger index = active ? [sources indexOfObject:active] : NSNotFound;
+        // The trailing search tab, while another tab is the one shown, keeps its outline in white whatever UIKit asks of it:
+        // minimized, UIKit drew it in the selected look, filled and in the accent, beside the tab really shown (its owner's
+        // recording, 2026-11-01). Drawn as it is rather than tinted, and the same image for both states, until it is picked.
+        NSUInteger searchAt = sources.count > 1 ? sources.count - 1 : NSNotFound;
+        if (searchAt != NSNotFound && index != searchAt && searchAt < glyphs.count) {
+            UIImage *plain = plainGlyph(glyphs[searchAt]);
+            glyphs[searchAt] = selectedGlyphs[searchAt] = plain;
+        }
+        // The glyphs in place, only where one changed: the same image again is the same object (TabBar.x caches each icon).
+        NSArray<UITab *> *shown = controller.tabs;
+        for (NSUInteger i = 0; i < shown.count && i < glyphs.count; i++) {
+            UITab *tab = shown[i];
+            if (tab.image != glyphs[i]) tab.image = glyphs[i];
+            if (@available(iOS 26.1, *)) {
+                if (tab.selectedImage != selectedGlyphs[i]) tab.selectedImage = selectedGlyphs[i];
+            }
+        }
+        if (index != NSNotFound && index < controller.tabs.count && controller.selectedTab != controller.tabs[index]) controller.selectedTab = controller.tabs[index];
+        // UIKit watches the selected page's scroll view from when it is handed over: handed over only once a scroll had
+        // begun, a page just switched to took a few scrolls before the bar minimized (its owner, 2026-10-31). So the shown
+        // page's scroll view is handed over at each pass, before any scroll.
+        // Not when the mod's rule minimizes the bar (SGRSystemTabsCanMinimize): UIKit's own would answer the same scroll.
+        UIScrollView *scroll = SGRSystemTabsCanMinimize() ? nil : pageScrollView(container, host);
+        if (scroll) SGRSystemTabsFollowScroll(scroll);
+    }
+}
+
+// The scroll view of the page Spotify shows: the tallest one that scrolls up and down, outside the host.
+static UIScrollView *pageScrollView(UIViewController *container, UIView *host) {
+    UIViewController *page = nil;
+    @try { page = [container valueForKey:@"selectedViewController"]; } @catch (NSException *e) {}
+    UIView *root = page.viewIfLoaded ?: container.viewIfLoaded;
+    __block UIScrollView *best = nil;
+    SGForEachView(root, ^(UIView *v) {
+        if (![v isKindOfClass:UIScrollView.class] || [v isDescendantOfView:host] || !v.window || v.hidden || v.alpha < 0.01) return;
+        UIScrollView *scroll = (UIScrollView *)v;
+        if (scroll.contentSize.height <= scroll.bounds.size.height + 1 || scroll.bounds.size.height < 300) return;
+        if (!best || scroll.bounds.size.height * scroll.bounds.size.width > best.bounds.size.height * best.bounds.size.width) best = scroll;
+    });
+    return best;
+}
+
+void SGRSystemTabsFollowScroll(UIScrollView *scrollView) {
+    if (@available(iOS 26.0, *)) {
+        UIViewController *page = sg_tabs.controller.selectedViewController;
+        if (!page || [page contentScrollViewForEdge:NSDirectionalRectEdgeBottom] == scrollView) return;
+        [page setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeBottom];
+        [page setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeTop];
+        SGLog(@"system tabs: minimize follows %@ %p (content %.0f tall in %.0f) on page %lu", NSStringFromClass(scrollView.class), scrollView,
+              scrollView.contentSize.height, scrollView.bounds.size.height, (unsigned long)sg_tabs.controller.selectedIndex);
+    }
+}
+
+#pragma mark - minimizing by the mod's rule
+
+// UIKit's minimize on scroll took several tab switches to start following a page, and brought the bar back only at the
+// top of the list (its owner, 2026-10-31). The page's scroll is judged by the glass bar's rule instead (MinimizeStep.h,
+// TabBarMinimize.x: down 24 pt minimizes, back up as much expands, anywhere), and the bar is told. UIKit keeps
+// -[UITabBar _setMinimized:] and -_isMinimized to apps it approves ("This can only be called by an approved app", which
+// crashed Spotify: its owner, 2026-10-31), so the bar's visual provider, which draws it, is told instead
+// (-[_UITabBarVisualProvider setMinimized:], found in UIKit on iOS 27.2), and the state is read from where the accessory
+// sits. A provider that is missing or throws is given up for UIKit's own minimize on scroll.
+static BOOL sg_providerRefused;
+
+static id visualProvider(UITabBar *bar) {
+    if (!bar) return nil;
+    Ivar ivar = class_getInstanceVariable(UITabBar.class, "_visualProvider");
+    id provider = ivar ? object_getIvar(bar, ivar) : nil;
+    return [provider respondsToSelector:NSSelectorFromString(@"setMinimized:")] ? provider : nil;
+}
+
+BOOL SGRSystemTabsCanMinimize(void) {
+    if (@available(iOS 26.0, *)) {
+        UITabBar *bar = sg_tabs.controller.tabBar;
+        if (!bar || sg_providerRefused) return NO;
+        static BOOL told;
+        id provider = visualProvider(bar);
+        if (!told) {
+            told = YES;
+            SGLog(@"system tabs: the bar's visual provider %@", provider ? NSStringFromClass([provider class]) : @"missing, UIKit's scroll minimize instead");
+        }
+        return provider != nil;
+    }
+    return NO;
+}
+
+// Minimized when the accessory sits in the bar's row.
+BOOL SGRSystemTabsMinimized(void) {
+    if (@available(iOS 26.0, *)) return [sg_tabs.mini inline_];
+    return NO;
+}
+
+void SGRSystemTabsSetMinimized(BOOL minimized) {
+    if (@available(iOS 26.0, *)) {
+        UITabBar *bar = sg_tabs.controller.tabBar;
+        if (!SGRSystemTabsCanMinimize() || SGRSystemTabsMinimized() == minimized) return;
+        @try {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(visualProvider(bar), NSSelectorFromString(@"setMinimized:"), minimized);
+        } @catch (NSException *e) {
+            sg_providerRefused = YES;
+            SGLog(@"system tabs: the bar's visual provider refused (%@), UIKit's scroll minimize instead", e.reason);
+            return;
+        }
+        static NSUInteger told;
+        if (told++ < 12) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            SGLog(@"system tabs: %@ by the scroll, the accessory now %@", minimized ? @"minimizing" : @"expanding", SGRSystemTabsMinimized() ? @"in the row" : @"over the bar");
+        });
+    }
+}
+
+#pragma mark - Spotify's sheets over the player page
+
+// Spotify presents its queue and its Connect sheet from controllers of its own, which stand under the player page: from
+// there UIKit refuses them (that controller, or the one presenting the page, already presents) and nothing opens, as the
+// owner's recording showed for Connect (2026-11-01). So while the page is up, a presentation started from under it goes up
+// from the top of what stands over the page instead, and the page stays where it is. The page's own presentation, one
+// from the page or from anything over it, and one from another window (the context menu's hidden host, ContextMenu.x)
+// are left alone, and so is one asked for while the page is still zooming in or out, which UIKit would refuse anyway.
+static UIViewController *playerPageUp(void) {
+    UIViewController *page = systemTabsController().presentedViewController;
+    if (![page isKindOfClass:SGRSystemPlayerPage.class] || page.isBeingPresented || page.isBeingDismissed || !page.viewIfLoaded.window) return nil;
+    return page;
+}
+
+static UIViewController *presenterOverPage(UIViewController *from, UIViewController *presented) {
+    if ([presented isKindOfClass:SGRSystemPlayerPage.class]) return nil;
+    UIViewController *page = playerPageUp();
+    if (!page) return nil;
+    for (UIViewController *over = from; over; over = over.presentingViewController) {
+        if (over == page) return nil;
+    }
+    UIWindow *window = from.viewIfLoaded.window;
+    if (window && window != page.view.window) return nil;
+    UIViewController *top = page;
+    while (top.presentedViewController && !top.presentedViewController.isBeingDismissed) top = top.presentedViewController;
+    if (top.isBeingPresented || top == presented) return nil;
+    return top;
+}
+
+%hook UIViewController
+- (void)presentViewController:(UIViewController *)presented animated:(BOOL)animated completion:(void (^)(void))completion {
+    UIViewController *top = presented ? presenterOverPage((UIViewController *)self, presented) : nil;
+    if (!top) {
+        %orig;
+        return;
+    }
+    SGLog(@"system player: %@ presented from %@ under the page goes up from %@ over it", NSStringFromClass(presented.class), NSStringFromClass([self class]), NSStringFromClass(top.class));
+    [top presentViewController:presented animated:animated completion:completion];
+}
+%end
+
+%ctor {
+    if (!SGRedesignedUI()) return;
+    if (!SGRSystemTabsOn()) return;
+    %init;
+}
+
+void SGRRefreshMiniPlayer(void) {
+    if (@available(iOS 26.0, *)) [sg_tabs.mini setNeedsLayout];
+}

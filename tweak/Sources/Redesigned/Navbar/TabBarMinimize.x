@@ -24,6 +24,14 @@ static BOOL inContainer(UIView *view) {
 
 static void scrolled(UIScrollView *scrollView) {
     if ((!scrollView.isTracking && !scrollView.isDecelerating) || scrollView == sg_other) return;
+    // The system tab bar: by the rule below through the controller's setter when there is one, else UIKit's own minimize
+    // on scroll, from the page's scroll view handed to it.
+    BOOL systemTabs = SGRSystemTabsOn();
+    if (systemTabs && !SGRSystemTabsCanMinimize()) {
+        if (inContainer(scrollView)) SGRSystemTabsFollowScroll(scrollView);
+        else sg_other = scrollView;
+        return;
+    }
     CGFloat offset = scrollView.contentOffset.y;
     if (scrollView != sg_page) {
         if (!inContainer(scrollView)) {
@@ -31,20 +39,22 @@ static void scrolled(UIScrollView *scrollView) {
             return;
         }
         sg_page = scrollView;
-        sg_track = (SGRMinimizeTrack){offset, SGRTabBarMinimized()};
+        sg_track = (SGRMinimizeTrack){offset, systemTabs ? SGRSystemTabsMinimized() : SGRTabBarMinimized()};
     }
+    BOOL now = systemTabs ? SGRSystemTabsMinimized() : SGRTabBarMinimized();
     // The bar changed some other way (a tab, the player): the scroll counts from here.
-    if (sg_track.minimized != SGRTabBarMinimized()) {
-        sg_track = (SGRMinimizeTrack){offset, SGRTabBarMinimized()};
+    if (sg_track.minimized != now) {
+        sg_track = (SGRMinimizeTrack){offset, now};
         sg_waitForTouch = YES;
     }
     if (scrollView.isTracking) sg_waitForTouch = NO;
     UIEdgeInsets inset = scrollView.adjustedContentInset;
     CGFloat top = -inset.top, bottom = scrollView.contentSize.height + inset.bottom - scrollView.bounds.size.height;
     BOOL minimized = SGRMinimizeStep(&sg_track, offset, top, bottom);
-    if (minimized == SGRTabBarMinimized() || (minimized && !SGEnabled(SGRKeyNavbarMinimize))) return;
+    if (minimized == now || (minimized && !SGEnabled(SGRKeyNavbarMinimize))) return;
     if (minimized && sg_waitForTouch) return;
-    SGRSetTabBarMinimized(minimized, YES);
+    if (systemTabs) SGRSystemTabsSetMinimized(minimized);
+    else SGRSetTabBarMinimized(minimized, YES);
 }
 
 %hook UIScrollView

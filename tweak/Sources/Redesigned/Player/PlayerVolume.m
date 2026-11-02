@@ -17,6 +17,7 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Player.h"
+#import "Redesigned/Navbar/SystemPlayer.h"
 
 // The row's height (the touch area) and the glyphs' point size and gap to the track.
 static const CGFloat kRowHeight = 32, kGlyphSize = 13, kGlyphGap = 10;
@@ -401,6 +402,7 @@ BOOL SGRPlayerPlaceVolume(UIView *stack, UIView *controls, UIView *row, CGFloat 
 // MPVolumeSlider takes an outside change (AirPlay, Connect) through super's setValue:animated:, which sends no KVO, and
 // sends ValueChanged only when the change shows the system's HUD, which Spotify's own Connect HUD turns off.
 void SGRPlayerVolumeSliderSet(UISlider *slider) {
+    SGRSystemVolumeSliderSet(slider);   // Native redesign's player page has a row of its own (Redesigned/Navbar/SystemVolume.m)
     UIView *row = slider.superview.superview;
     if (![slider.superview isKindOfClass:SGRVolumeView.class] || ![row isKindOfClass:SGRVolumeRow.class]) return;
     if (slider != ((SGRVolumeRow *)row).systemSlider) return;

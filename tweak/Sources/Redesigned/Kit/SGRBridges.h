@@ -38,6 +38,15 @@ void SGRSetNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuali
 // animated:]: the same identity is the same picture) are filled when asked for. Until the playing
 // track's own picture is in, this is the last one.
 UIImage *SGRNowPlayingArtwork(NSString **trackURI, NSString **identity);
+// Whether that artwork is the picture the playing track names now (fetched, or read off a screen and believed). The
+// track URI it was published with does not say so: a track of the same album as the last one shares its picture and is
+// published nothing new, so that URI stays the last track's (the system tab bar's player page took that for a stale
+// picture and stretched the bar's 40pt cover instead, its owner, 2026-11-01).
+BOOL SGRNowPlayingArtworkCurrent(void);
+
+// A track's cover, small, for a list (the system tab bar's player page's queue): from the track's own metadata, as the
+// now playing artwork is, cached by its picture, handed to `done` on the main queue (nil for none). Main thread.
+void SGRTrackPicture(SPTPlayerTrack *track, void (^done)(UIImage *image));
 
 #pragma mark - the player's open and close
 

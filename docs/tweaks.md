@@ -549,14 +549,28 @@ Redesigned:
                   output glyph (SystemOutput.x: the device by model, its name under it, tap for AirPlay, hold for Connect)
                   and the Animated clip drawn like the lock screen (SystemMotion.m, which PlayerMotion.x's
                   SGRPlayerMotionPreview hands the clip to under Native redesign). Its queue (SystemQueue.m) takes the lyrics' place, from
-                  SPTEsperantoPlayer's fetchQueue:on:, and a track dragged in it goes back to Spotify by setQueue:. While
+                  SPTEsperantoPlayer's fetchQueue:on:. It is edited the Music app's way and every change goes back to
+                  Spotify by setQueue:: a row moves up or down its group by its grip (a reorder of the mod's own, as
+                  UIKit's editing mode takes swipes away), the page's controls moving off meanwhile; a swipe left removes
+                  a track; a Clear chip empties Playing Next. Its chip row has one AutoMix chip stepping off, AutoMix and
+                  Crossfade, and Shuffle and Repeat when they are off the controls. Shuffle and Repeat, on the page and
+                  the chips, follow the player state's restrictions (SGRSystemOptionAllowed) as Spotify's Connect menu
+                  does. The page's ⋯ menu is the mod's: Share, the sound and lyrics items, an Artwork submenu
+                  (PlayerMenu.m's SGRPlayerMenuArtwork), the sleep timer, a Controls Spacing slider, and the album,
+                  artist and concerts links; Spotify's own song menu needs its player and is not offered. With nothing
+                  playing (no track for 0.6 s) the page and the mini player say Not Playing over a note
+                  (SGRSystemNotPlayingArt). On a skip the last cover and clip stay up until the next ones are in (at most
+                  0.6 s and 1.2 s), the Kit fetches the next track's cover ahead (SGRBridges.x, under Native redesign
+                  only), and a track found to have no clip shows Fluid at once (SGRPlayerMotionNoneFor). While
                   the page is up, a global hook on -[UIViewController presentViewController:animated:completion:]
                   (installed only under Native redesign) sends a sheet presented from under the page to the controller on
                   top of it, so Spotify's own sheets (Connect, the queue, the ⋯ menu) come up over the page. Its settings
                   take the place of the ones the glass bar, the now playing bar and Spotify's player had: the Player
                   page's Mini player page (Apple Music style, Swipe to skip, Skip button, AirPlay button) in place of its
-                  Mini player section, and no Gestures, Full screen cover, Follow the cover or Split tabs rows, whose
-                  stored values are kept for when it is off.
+                  Mini player section, one Controls section (Volume, and Shuffle, Repeat and Switch to video as switches
+                  that show them, on Hide on the player's keys, with Match the lyrics button) in place of Hide on the
+                  player, and no Gestures, Full screen cover, Follow the cover or Split tabs rows, whose stored values are
+                  kept for when it is off.
     NowPlayingBar/ the glass now playing bar (NowPlayingBar.x), with Spotify's device button on it hidden on request
                   (BarConnect.x, its own key and its own row on the Player page, apart from the native look's). The card's text is the Music
                   app's, the title over the artists with no device line, drawn inside Spotify's own text on each swipe page

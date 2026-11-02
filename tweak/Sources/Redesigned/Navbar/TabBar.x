@@ -242,6 +242,76 @@ UIImage *SGRTabSourceGlyph(UIView *source, BOOL active) {
     return glyphOf(source, active);
 }
 
+// For Native redesign's tab bar: one of Spotify's tabs drawn from Spotify's own Encore glyphs, as the Tab bar page's
+// Spotify Encore list draws them (Shared/Navigation/TabIcons.m), outline and filled (the glyph's -active variant), so both
+// are there from the first launch. Spotify 9.1.90's icon view keeps its icon as a Swift value the mod cannot read (the
+// phone's log, 2026-11-02), so the tab is told by its name, or failing that by its place in Spotify's own order. NO for a
+// tab not known here (one of the mod's own, or one Spotify adds), which the bar draws as it stands.
+static NSArray<NSString *> *encoreCandidates(UIView *source) {
+    NSString *label = labelIn(source).text.lowercaseString ?: @"";
+    static NSArray<NSArray<NSString *> *> *byPlace;
+    if (!byPlace) byPlace = @[@[@"home"], @[@"search"], @[@"library", @"yourLibrary", @"collection"], @[@"plus", @"create"]];
+    if ([label containsString:@"home"]) return byPlace[0];
+    if ([label containsString:@"search"]) return byPlace[1];
+    if ([label containsString:@"librar"]) return byPlace[2];
+    if ([label containsString:@"create"]) return byPlace[3];
+    NSUInteger place = [SGRNavbarStock() indexOfObject:labelIn(source).text ?: @""];
+    return place < byPlace.count ? byPlace[place] : nil;
+}
+
+// An SF Symbol as the tab editor draws one (19 pt semibold), a template for the bar to tint.
+static UIImage *tabSymbol(NSString *name) {
+    UIImage *image = name.length ? [UIImage systemImageNamed:name withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:19 weight:UIImageSymbolWeightSemibold]] : nil;
+    return [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+BOOL SGRTabSourceEncoreGlyphs(UIView *source, UIImage **outline, UIImage **filled) {
+    UIView *live = iconIn(source);
+    if (!live) return NO;
+    // A tab of the mod's own: the icon its entry names. A symbol's outline is the name without ".fill" and its filled one
+    // the name with it, where this iOS has both; an Encore glyph's filled one is its -active variant.
+    NSString *entryName = nil;
+    BOOL entrySymbol = NO;
+    NSArray<NSString *> *candidates = encoreCandidates(source);
+    if (SGRTabItemIcon(source, &entryName, &entrySymbol)) {
+        if (entrySymbol) {
+            NSString *base = [entryName hasSuffix:@".fill"] ? [entryName substringToIndex:entryName.length - 5] : entryName;
+            UIImage *line = tabSymbol(base) ?: tabSymbol(entryName), *solid = tabSymbol([base stringByAppendingString:@".fill"]) ?: line;
+            if (!line) return NO;
+            if (outline) *outline = line;
+            if (filled) *filled = solid;
+            return YES;
+        }
+        candidates = @[entryName];
+    }
+    NSArray<NSString *> *names = SGEncoreGlyphNames();
+    Class iconClass = NSClassFromString(@"SPTEncoreIcon");
+    id icon = nil;
+    NSString *picked = nil;
+    for (NSString *name in candidates) {
+        if (![names containsObject:name]) continue;
+        @try { icon = ((id (*)(id, SEL))objc_msgSend)(iconClass, NSSelectorFromString(name)); } @catch (NSException *e) { icon = nil; }
+        if (icon) {
+            picked = name;
+            break;
+        }
+    }
+    if (!icon) return NO;
+    id variant = activeVariantOf(icon);
+    UIImage *drawnOutline = drawGlyph(live, icon, NO), *drawnFilled = drawGlyph(live, variant ?: icon, YES);
+    if (!drawnOutline || !drawnFilled) return NO;
+    static NSMutableSet<NSString *> *told;
+    if (!told) told = [NSMutableSet set];
+    NSString *line = [NSString stringWithFormat:@"%@ -> %@, filled %@", labelIn(source).text, picked, iconName(variant) ?: @"(none, the same glyph)"];
+    if (![told containsObject:line]) {
+        [told addObject:line];
+        SGLog(@"system tabs: %@", line);
+    }
+    if (outline) *outline = drawnOutline;
+    if (filled) *filled = drawnFilled;
+    return YES;
+}
+
 BOOL SGRTabSourceIsActive(UIView *source) {
     return isActive(source);
 }

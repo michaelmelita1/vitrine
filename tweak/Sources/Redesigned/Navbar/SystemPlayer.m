@@ -1281,6 +1281,11 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView = [SGRSystemQueueView new];
     _queueView.alpha = 0;
     _queueView.onReorder = ^(NSArray *upcoming) { [weakSelf handQueueBack:upcoming]; };
+    // Shuffle and Repeat hidden from the controls on the Player page show in the queue's row instead (its owner, 2026-11-02).
+    _queueView.showsShuffle = _shuffleOff;
+    _queueView.showsRepeat = _repeatOff;
+    _queueView.onShuffle = ^{ [weakSelf toggleShuffle]; };
+    _queueView.onRepeat = ^{ [weakSelf cycleRepeat]; };
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];

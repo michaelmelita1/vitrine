@@ -75,7 +75,10 @@ static BOOL isTrack(id track) {
 @end
 
 @implementation SGRSystemQueueView {
-    UIButton *_automix, *_crossfade;
+    UIButton *_automix;   // one chip, three states as repeat has: off, AutoMix (beat-matched), Crossfade
+    UIButton *_shuffle, *_repeat;   // shown while the controls have them hidden (showsShuffle, showsRepeat)
+    BOOL _shuffling;
+    NSInteger _repeatMode;          // 0 off, 1 the playlist or album, 2 the track
     UITableView *_list;
     CAGradientLayer *_listFade;
     NSArray<SGRQueueGroup *> *_groups;
@@ -90,13 +93,8 @@ static BOOL isTrack(id track) {
     _automix = [self chipWithImage:automixGlyph() title:@"AutoMix"];
     [_automix setTitle:@" AutoMix" forState:UIControlStateNormal];
     _automix.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
-    _crossfade = [self chipWithImage:crossfadeGlyph() title:@"Crossfade"];
-    [_crossfade setTitle:@" Crossfade" forState:UIControlStateNormal];
-    _crossfade.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
     __weak typeof(self) weakSelf = self;
-    [_crossfade addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf toggleCrossfade]; }]
-         forControlEvents:UIControlEventTouchUpInside];
-    [_automix addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf toggleAutomix]; }]
+    [_automix addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf stepAutoMix]; }]
          forControlEvents:UIControlEventTouchUpInside];
     // Grouped, so the group headings scroll with their tracks rather than stand over them.
     _list = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
@@ -120,7 +118,14 @@ static BOOL isTrack(id track) {
     _listFade = [CAGradientLayer layer];
     _listFade.colors = @[(id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor];
     _list.layer.mask = _listFade;
-    for (UIView *view in @[_list, _automix, _crossfade]) [self addSubview:view];
+    _shuffle = [self chipWithImage:chipSymbol(@"shuffle") title:@"Shuffle"];
+    _repeat = [self chipWithImage:chipSymbol(@"repeat") title:@"Repeat"];
+    _shuffle.hidden = _repeat.hidden = YES;
+    [_shuffle addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf stepShuffle]; }]
+       forControlEvents:UIControlEventTouchUpInside];
+    [_repeat addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf stepRepeat]; }]
+      forControlEvents:UIControlEventTouchUpInside];
+    for (UIView *view in @[_list, _automix, _shuffle, _repeat]) [self addSubview:view];
     [self syncCrossfade];
     return self;
 }
@@ -172,6 +177,12 @@ static UIImage *automixGlyph(void) {
     return glyph;
 }
 
+// An SF Symbol at the chips' size, a template.
+static UIImage *chipSymbol(NSString *name) {
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
+    return [[UIImage systemImageNamed:name withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
 // A chip as the Music app's queue has them: a capsule with its glyph, lit (filled light, the glyph dark) while on.
 - (UIButton *)chipWithImage:(UIImage *)image title:(NSString *)title {
     UIButton *chip = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -184,63 +195,145 @@ static UIImage *automixGlyph(void) {
 }
 
 - (void)paintChip:(UIButton *)chip on:(BOOL)on {
-    chip.backgroundColor = on ? [UIColor colorWithWhite:1 alpha:0.85] : [UIColor colorWithWhite:1 alpha:0.14];
+    chip.backgroundColor = [self fillFor:on];
     UIColor *ink = on ? [UIColor colorWithWhite:0.08 alpha:0.9] : SGRPrimary();
     chip.tintColor = ink;
     [chip setTitleColor:ink forState:UIControlStateNormal];
     chip.accessibilityValue = on ? @"On" : @"Off";
 }
 
-// Mod Settings' AutoMix, the same setting (its owner, 2026-11-02): its switch and its style, Beat-matched for the
-// AutoMix chip and Crossfade for the Crossfade chip, so at most one is lit. A tap on the lit chip turns AutoMix off; on
-// the other, on in that chip's style, as the page's switch and style menu do (Shared/AutoMix/AutoMixSettings.m). Dimmed
-// until Spotify has read its settings, a few seconds into a launch.
+// Mod Settings' AutoMix, the same setting (its owner, 2026-11-02): one chip that steps through it as repeat steps
+// through its modes, off, then AutoMix (the Beat-matched style), then Crossfade, then off again, as the page's switch
+// and style menu set them (Shared/AutoMix/AutoMixSettings.m). Off it reads AutoMix, unlit; on, it is lit and names the
+// style. Dimmed until Spotify has read its settings, a few seconds into a launch.
 - (void)syncCrossfade {
-    SGTransitionSettings settings;
-    BOOL read = SGTransitionSettingsRead(&settings);
-    for (UIButton *chip in @[_automix, _crossfade]) {
-        chip.enabled = read;
-        chip.alpha = read ? 1 : 0.5;
-    }
-    BOOL on = read && SGFlag(SGKeyAutoMix, NO);
-    SGAutoMixStyle style = SGAutoMixCurrentStyle();
-    [self paintChip:_automix on:on && style == SGAutoMixBeatMatched];
-    [self paintChip:_crossfade on:on && style == SGAutoMixCrossfade];
+    [self syncAutoMixAnimated:NO];
 }
 
-- (void)pickStyle:(SGAutoMixStyle)style {
+// A step of the chip's, animated: the fill and ink cross over, the glyph and name dissolve into the new ones, and the chip
+// gives a little as it changes, settling on the press spring (its owner, 2026-11-02). Reduce Motion keeps the fade alone.
+- (void)syncAutoMixAnimated:(BOOL)animated {
+    SGTransitionSettings settings;
+    BOOL read = SGTransitionSettingsRead(&settings);
+    _automix.enabled = read;
+    _automix.alpha = read ? 1 : 0.5;
+    BOOL on = read && SGFlag(SGKeyAutoMix, NO);
+    BOOL crossfade = on && SGAutoMixCurrentStyle() == SGAutoMixCrossfade;
+    [self setChip:_automix on:on image:crossfade ? crossfadeGlyph() : automixGlyph() title:crossfade ? @"Crossfade" : @"AutoMix" animated:animated];
+    _automix.accessibilityLabel = @"AutoMix";
+    _automix.accessibilityValue = !on ? @"Off" : crossfade ? @"Crossfade" : @"Beat-matched";
+}
+
+// The glyphs alone while Shuffle or Repeat stand beside AutoMix, the Music app's row of four; AutoMix alone keeps its name.
+- (BOOL)glyphsOnly {
+    return _showsShuffle || _showsRepeat;
+}
+
+// Any chip's change: the glyph and name dissolve into the new ones, the fill and ink cross over, and the chip gives a
+// little, settling on the press spring. Unchanged, nothing moves; Reduce Motion keeps the fade alone.
+- (void)setChip:(UIButton *)chip on:(BOOL)on image:(UIImage *)image title:(NSString *)name animated:(BOOL)animated {
+    NSString *title = self.glyphsOnly ? nil : [@" " stringByAppendingString:name];
+    BOOL swaps = [chip imageForState:UIControlStateNormal] != image
+              || !([chip titleForState:UIControlStateNormal] == title || [[chip titleForState:UIControlStateNormal] isEqualToString:title]);
+    BOOL lights = !CGColorEqualToColor(chip.backgroundColor.CGColor, [self fillFor:on].CGColor);
+    BOOL moves = animated && chip.window && (swaps || lights);
+    if (swaps) {
+        void (^swap)(void) = ^{
+            [chip setImage:image forState:UIControlStateNormal];
+            [chip setTitle:title forState:UIControlStateNormal];
+        };
+        if (moves) [UIView transitionWithView:chip duration:SGRCrossfade options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction
+                                   animations:swap completion:nil];
+        else [UIView performWithoutAnimation:swap];
+    }
+    if (moves) {
+        SGRAnimate(SGRMotionFade, ^{ [self paintChip:chip on:on]; }, nil);
+        if (!SGRReduceMotion()) {
+            chip.transform = CGAffineTransformMakeScale(0.94, 0.94);
+            SGRAnimate(SGRMotionPress, ^{ chip.transform = CGAffineTransformIdentity; }, nil);
+        }
+    } else {
+        [self paintChip:chip on:on];
+    }
+}
+
+- (UIColor *)fillFor:(BOOL)on {
+    return on ? [UIColor colorWithWhite:1 alpha:0.85] : [UIColor colorWithWhite:1 alpha:0.14];
+}
+
+- (void)syncShuffleRepeatAnimated:(BOOL)animated {
+    [self setChip:_shuffle on:_shuffling image:chipSymbol(@"shuffle") title:@"Shuffle" animated:animated];
+    _shuffle.accessibilityValue = _shuffling ? @"On" : @"Off";
+    [self setChip:_repeat on:_repeatMode > 0 image:chipSymbol(_repeatMode == 2 ? @"repeat.1" : @"repeat") title:@"Repeat" animated:animated];
+    _repeat.accessibilityValue = _repeatMode == 2 ? @"This song" : _repeatMode == 1 ? @"All" : @"Off";
+}
+
+- (void)setShowsShuffle:(BOOL)shows {
+    if (shows == _showsShuffle) return;
+    _showsShuffle = shows;
+    _shuffle.hidden = !shows;
+    [self chipsChanged];
+}
+
+- (void)setShowsRepeat:(BOOL)shows {
+    if (shows == _showsRepeat) return;
+    _showsRepeat = shows;
+    _repeat.hidden = !shows;
+    [self chipsChanged];
+}
+
+- (void)chipsChanged {
+    [self syncAutoMixAnimated:NO];
+    [self syncShuffleRepeatAnimated:NO];
+    [self setNeedsLayout];
+}
+
+// The tap shows the next state at once, as Spotify's own buttons do; Spotify's state confirms it (showState:).
+- (void)stepShuffle {
+    _shuffling = !_shuffling;
+    [self syncShuffleRepeatAnimated:YES];
+    if (self.onShuffle) self.onShuffle();
+}
+
+- (void)stepRepeat {
+    _repeatMode = (_repeatMode + 1) % 3;
+    [self syncShuffleRepeatAnimated:YES];
+    if (self.onRepeat) self.onRepeat();
+}
+
+- (void)stepAutoMix {
     SGTransitionSettings settings;
     if (!SGTransitionSettingsRead(&settings)) return;
     BOOL on = SGFlag(SGKeyAutoMix, NO);
-    if (on && SGAutoMixCurrentStyle() == style) {
+    if (!on) {
+        SGAutoMixSetStyle(SGAutoMixBeatMatched);
+        SGSetEnabled(SGKeyAutoMix, YES);
+        SGAutoMixApply(YES);
+        SGLog(@"system player: queue turned AutoMix on, beat-matched");
+    } else if (SGAutoMixCurrentStyle() == SGAutoMixBeatMatched) {
+        SGAutoMixSetStyle(SGAutoMixCrossfade);
+        SGLog(@"system player: queue turned AutoMix to crossfade");
+    } else {
         SGSetEnabled(SGKeyAutoMix, NO);
         SGAutoMixApply(NO);
         SGLog(@"system player: queue turned AutoMix off");
-    } else {
-        SGAutoMixSetStyle(style);
-        if (!on) {
-            SGSetEnabled(SGKeyAutoMix, YES);
-            SGAutoMixApply(YES);
-        }
-        SGLog(@"system player: queue turned AutoMix on, %@", style == SGAutoMixBeatMatched ? @"beat-matched" : @"crossfade");
     }
-    [self syncCrossfade];
-}
-
-- (void)toggleAutomix {
-    [self pickStyle:SGAutoMixBeatMatched];
-}
-
-- (void)toggleCrossfade {
-    [self pickStyle:SGAutoMixCrossfade];
+    [self syncAutoMixAnimated:YES];
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGSize size = self.bounds.size;
-    CGFloat chipWidth = MAX(0, (size.width - 2 * kSideMargin - kChipGap) / 2);
-    _automix.frame = CGRectMake(kSideMargin, 0, chipWidth, kChipHeight);
-    _crossfade.frame = CGRectMake(kSideMargin + chipWidth + kChipGap, 0, chipWidth, kChipHeight);
+    // The chips shown share the row equally, kChipGap apart: Shuffle, Repeat, then AutoMix, the Music app's order.
+    NSMutableArray<UIView *> *chips = [NSMutableArray array];
+    if (_showsShuffle) [chips addObject:_shuffle];
+    if (_showsRepeat) [chips addObject:_repeat];
+    [chips addObject:_automix];
+    CGFloat chipWidth = MAX(0, (size.width - 2 * kSideMargin - kChipGap * (chips.count - 1)) / chips.count);
+    [chips enumerateObjectsUsingBlock:^(UIView *chip, NSUInteger i, BOOL *stop) {
+        chip.bounds = CGRectMake(0, 0, chipWidth, kChipHeight);
+        chip.center = CGPointMake(kSideMargin + i * (chipWidth + kChipGap) + chipWidth / 2, kChipHeight / 2);
+    }];
     CGFloat listTop = kChipHeight + kChipsBelow - kListTopFade / 2;
     _list.frame = CGRectMake(0, listTop, size.width, MAX(0, size.height - listTop));
     [CATransaction begin];
@@ -286,6 +379,13 @@ static UIImage *automixGlyph(void) {
     SPTPlayerOptions *options = [state respondsToSelector:@selector(options)] ? state.options : nil;
     _repeatContext = options.repeatingContext;
     [self syncCrossfade];
+    // Spotify's own state for Shuffle and Repeat, animated when it changed while shown.
+    BOOL shuffling = options.shufflingContext;
+    NSInteger repeatMode = options.repeatingTrack ? 2 : options.repeatingContext ? 1 : 0;
+    BOOL changed = shuffling != _shuffling || repeatMode != _repeatMode;
+    _shuffling = shuffling;
+    _repeatMode = repeatMode;
+    if (changed || !_shuffle.backgroundColor) [self syncShuffleRepeatAnimated:changed];
 
     // The tracks to come, nearest first, in groups by where they came from, the groups in the order they meet.
     // The whole queue when Spotify has handed it over (upcoming), else the state's few tracks to come.

@@ -91,6 +91,11 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
 void SGRSystemTabsFollowScroll(UIScrollView *scrollView);
 // TabBar.x's tab items, for SystemTabs.x: an item's glyph (filled when active), its name, and a tap passed on to it.
 UIImage *SGRTabSourceGlyph(UIView *source, BOOL active);
+// One of Spotify's tabs drawn from Spotify's Encore glyphs, its outline and its filled (-active) glyph, from the first
+// launch; NO for a tab not known (one of the mod's own), which the bar draws from its item as it stands.
+BOOL SGRTabSourceEncoreGlyphs(UIView *source, UIImage **outline, UIImage **filled);
+// A tab of the mod's own's icon as its entry names it, an Encore glyph or an SF Symbol (Navbar.x); NO for Spotify's.
+BOOL SGRTabItemIcon(UIView *item, NSString **name, BOOL *symbol);
 NSString *SGRTabSourceTitle(UIView *source);
 // Whether Spotify's item is the active tab now, read off its own label as the glass bar reads it: Spotify swaps the item's
 // icon to the filled one while it is, so the glyph read then is the filled one.

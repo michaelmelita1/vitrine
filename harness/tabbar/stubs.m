@@ -44,3 +44,5 @@ BOOL SGRSystemTabsCanMinimize(void) { return NO; }
 BOOL SGRSystemTabsMinimized(void) { return NO; }
 void SGRSystemTabsSetMinimized(BOOL minimized) {}
 void SGRRefreshTabBar(void) {}
+// A tab of the mod's own's icon (Navbar.x), which this harness does not build: none known.
+BOOL SGRTabItemIcon(UIView *item, NSString **name, BOOL *symbol) { return NO; }

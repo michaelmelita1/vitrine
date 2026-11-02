@@ -24,15 +24,15 @@ NSArray<SGModRow *> *SGRNowPlayingBarRows(void) {
 }
 
 // Native redesign's mini player (Redesigned/Navbar/SystemTabs.x): Apple Music style (UIKit's tab bar minimizes as a page
-// scrolls), the swipe and the Skip button, and the AirPlay button beside play, stored as the glass bar's device button's
-// hide key (shown until switched off). The glass bar's rows are left out: that bar is not up then.
+// scrolls), the swipe and the Skip button, and the AirPlay button beside play, each on a key of its own. The glass bar's
+// rows are left out: that bar is not up then.
 UIViewController *SGRMiniPlayerSettingsPage(void) {
     SGModRow *minimize = SGSwitchRow(@"Apple Music style", @"The tab bar shrinks as a page scrolls down", SGRKeyNavbarMinimize);
     SGModRow *swipe = SGSwitchRow(@"Swipe to skip", @"Sideways on the mini player", SGRKeyMiniPlayerSwipe);
     // The mini player lays out again at the next pass of the tab bar, which these ask for.
     SGModRow *skip = SGSwitchRow(@"Skip button", @"Next to play on the mini player", SGRKeyMiniPlayerNext);
     skip.changed = ^(BOOL on) { SGRRefreshMiniPlayer(); };
-    SGModRow *airPlay = SGShownRow(@"AirPlay button", @"On the mini player", SGRHideBarConnect);
+    SGModRow *airPlay = SGSwitchRow(@"AirPlay button", @"Next to play on the mini player", SGRKeyMiniPlayerAirPlay);
     airPlay.changed = ^(BOOL on) { SGRRefreshMiniPlayer(); };
     return [[SGModPage alloc] initWithTitle:@"Mini player" intro:nil sections:@[
         SGNotedSection(nil, @[minimize, swipe, skip, airPlay],

@@ -30,7 +30,6 @@
 // id=QueueButtonNowPlaying 47x32 (an 18x18 SPTEncoreIconView id=Encore.IconView glyph, out/rep/ptree.txt:1228-1279).
 #import <substrate.h>
 #import "Core/SGCore.h"
-#import "Redesigned/Navbar/Navbar.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Headers/SPTEncoreIconView.h"
 #import "Player.h"
@@ -538,8 +537,6 @@ static char kGlyphSeenKey;
 %ctor {
     if (!SGRedesignedUI()) return;
     %init;
-    // Native redesign's player page always has a volume row of its own (Redesigned/Navbar/SystemVolume.m), which needs this hook to see
-    // outside changes, whether or not the player's row is on.
-    if (SGRPlayerVolumeOn() || SGRSystemTabsOn()) %init(VolumeSlider);
+    if (SGRPlayerVolumeOn()) %init(VolumeSlider);
     SGRequireClasses(@[@"_TtC20NowPlaying_ModesImpl18FooterElementsUnit", @"SPTEncoreIconView"]);
 }

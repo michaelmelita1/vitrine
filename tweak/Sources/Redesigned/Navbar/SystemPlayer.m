@@ -50,6 +50,8 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import "Core/SGCore.h"
+#import "Redesigned/Kit/SGRRepaint.h"
+#import "Shared/Player/SleepTimer.h"
 #import "Settings/SGMarquee.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Redesigned/Kit/SGRKit.h"
@@ -78,6 +80,12 @@ static const NSTimeInterval kCoverToClipOut = 0.12, kCoverToThumbIn = 0.18, kCov
 // How far into the open the progress bar and the volume take touches (_appeared): the zoom has the page in place by
 // then, though UIKit's own end comes 1 to 1.4 s after the tap (the phone's log, 2026-11-01).
 static const CFTimeInterval kTouchesAfter = 0.45;
+// How long a skip keeps the last track's clip up while the new track's is looked up (syncClipAnimated:).
+static const CFTimeInterval kClipHold = 1.2;
+// How long a new track's small stand-in cover is kept off the page while its full one is fetched (refreshCover).
+static const CFTimeInterval kCoverWait = 0.6;
+// How long a state without a track is waited out before the page and the mini player say Not Playing.
+static const CFTimeInterval kEmptyWait = 0.6;
 // The cover rests at the redesigned player's paused size (PlayerArtwork.x's kPausedScale).
 static const CGFloat kPausedScale = 0.84;
 // The progress bar after f728743/Sim-Radio-SwiftUI's ElasticSlider.swift and its .playbackProgress config (MIT,
@@ -99,11 +107,9 @@ static const CGFloat kThumbSide = 60, kThumbGap = 14;
 // The lyrics glyph, the redesigned player's footer's (PlayerFooter.x).
 static NSString *const kLyricsSymbol = @"quote.bubble", *const kLyricsSymbolOpen = @"quote.bubble.fill";
 
-// A light disc with `symbol` cut out of it, at the glyph buttons' 20 pt regular, hidden until shown.
-static UIImageView *cutDisc(NSString *symbol) {
-    CGFloat side = kQueueBubble;
-    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular];
-    UIImage *glyph = [UIImage systemImageNamed:symbol withConfiguration:config];
+// A light disc `side` across with `symbol` in `config` cut out of it.
+static UIImage *cutDiscImage(NSString *symbol, UIImageSymbolConfiguration *config, CGFloat side) {
+    UIImage *glyph = symbol ? [UIImage systemImageNamed:symbol withConfiguration:config] : nil;
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side)];
     UIImage *disc = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
         [[UIColor colorWithWhite:1 alpha:kQueueBubbleWhite] setFill];
@@ -113,7 +119,13 @@ static UIImageView *cutDisc(NSString *symbol) {
         [glyph drawInRect:CGRectMake(round((side - size.width) / 2), round((side - size.height) / 2), size.width, size.height)
                 blendMode:kCGBlendModeDestinationOut alpha:1];
     }];
-    UIImageView *view = [[UIImageView alloc] initWithImage:disc];
+    return disc;
+}
+
+// A light disc with `symbol` cut out of it, at the glyph buttons' 20 pt regular, hidden until shown.
+static UIImageView *cutDisc(NSString *symbol) {
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightRegular];
+    UIImageView *view = [[UIImageView alloc] initWithImage:cutDiscImage(symbol, config, kQueueBubble)];
     view.userInteractionEnabled = NO;
     view.alpha = 0;
     return view;
@@ -128,7 +140,8 @@ static const CGFloat kAddGlyph = 28, kAddSide = 44;
 // screen (2026-11-01): the volume's middle above the row's, the controls' above the volume's, the times' above the
 // controls', the progress bar's above the times'; the header's circles in from the sides and down from the safe area;
 // previous and next out from the middle as a share of the width between the margins; the bottom row's glyphs at a
-// fifth, half and four fifths of the width, as PlayerFooter.x places them (kLeading, kMiddle, kTrailing).
+// fifth, half and four fifths of the width, as PlayerFooter.x places them (kLeading, kMiddle, kTrailing). The first three
+// gaps are times controlsSpacing() (below).
 static const CGFloat kVolumeAboveRow = 38, kControlsAboveVolume = 58, kTimesAboveControls = 46, kScrubberAboveTimes = 17;
 static const CGFloat kHeaderSide = 16, kHeaderDrop = 2, kSkipShare = 0.25, kSkipGlyph = 32, kPlayGlyph = 44;
 // An episode's skips go back and forward this far, as Spotify's episode player's 15 s buttons do.
@@ -159,6 +172,23 @@ static char kCloseGlassKey, kMoreGlassKey, kConnectKey;
 
 static BOOL isTrack(id track) {
     return [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
+}
+
+UIImage *SGRSystemNotPlayingArt(void) {
+    static UIImage *art;
+    if (art) return art;
+    CGFloat side = 600;
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:side * 0.36 weight:UIImageSymbolWeightRegular];
+    UIImage *note = [[UIImage systemImageNamed:@"music.note" withConfiguration:config] imageWithTintColor:[UIColor colorWithWhite:0.39 alpha:1]
+                                                                                             renderingMode:UIImageRenderingModeAlwaysOriginal];
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side)];
+    art = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [[UIColor colorWithWhite:0.29 alpha:1] setFill];
+        UIRectFill(CGRectMake(0, 0, side, side));
+        CGSize size = note.size;
+        [note drawInRect:CGRectMake((side - size.width) / 2, (side - size.height) / 2, size.width, size.height)];
+    }];
+    return art;
 }
 
 // A paused state's position would run on from when it was made; positionAsOfTimestamp holds still (HeadGestures.x).
@@ -414,44 +444,126 @@ static const NSTimeInterval kTransportCircleHold = 0.25, kTransportCircleIn = 0.
 // SwiftUI's default animation (iOS 17: a smooth spring of about half a second, no bounce).
 static const NSTimeInterval kTransportSpring = 0.5;
 
-// The skip's step, the Music app's, measured frame by frame from its owner's 60 fps recording of it (2026-11-01), from the
-// finger's lift. Animated over 0.9 of kForwardDuration, and no more often than once a
-// length, the latest tap kept.
-// Its length, its ease (the power its slowing takes), how soon the front glyph is away (a multiple of the step) and how
-// far it drifts (a share of the arrow) are its owner's, tuned on the phone (2026-11-01).
-static const NSTimeInterval kForwardDuration = 0.34;
+// The skip's step, the Music app's, measured frame by frame from its owner's 60 fps recording of it (2026-11-02), from the
+// finger's lift: the arrows move over the first kForwardMoveShare of kForwardDuration and the new back one brightens over
+// the rest. No more often than once a length, the latest tap kept.
+// Its length, its ease (the power the slide's slowing takes), how soon the front glyph is away (a multiple of the move)
+// and how far it drifts (a share of the double arrow): its owner's, tuned on the phone from the Music app's (2026-11-02).
+static const NSTimeInterval kForwardDuration = 0.42;
+static const CGFloat kForwardEase = 2.2, kForwardAway = 6, kForwardDrift = 0.23;
+static const CGFloat kForwardMoveShare = 0.52, kForwardBackStart = 0.15, kForwardBackGray = 0.5;
+// The gaps from the bottom row up to the times, times the redesigned player's (kVolumeAboveRow and the rest): its
+// owner's, tuned on the phone (2026-11-02), and adjustable from the ⋯ menu's Controls Spacing, kept under the key.
+static const CGFloat kControlsSpacingDefault = 1.35, kControlsSpacingLeast = 0.8, kControlsSpacingMost = 1.6;
+static NSString *const kControlsSpacingKey = @"spotifyglass.redesign.navbar.player.controlsGap";
+
+// Read once, then set by the slider as it moves, so a layout reads no defaults.
+static CGFloat sg_controlsSpacing = -1;
+
+static CGFloat controlsSpacing(void) {
+    if (sg_controlsSpacing < 0) {
+        id stored = [NSUserDefaults.standardUserDefaults objectForKey:kControlsSpacingKey];
+        sg_controlsSpacing = [stored isKindOfClass:NSNumber.class] ? MIN(kControlsSpacingMost, MAX(kControlsSpacingLeast, [stored doubleValue])) : kControlsSpacingDefault;
+    }
+    return sg_controlsSpacing;
+}
 
 #pragma mark - the skip's arrow
 
-// The Music app's skip, as its frames show it: the double arrow's front glyph greys and shrinks away in place, drifting a
-// little on; the back one slides at full size into the front's place; and a new back glyph grows out of a dot in the back
-// place, greying in. At the end it is the double arrow again. Laid out by hand: three play.fill glyphs, each half the
-// double arrow's width and `size` high, scaled about their own middles, in a box wider than the arrow so the front glyph
-// can drift. Mirrored for previous. (It was f728743/AppleMusicStylePlayer's ForwardLabel, which squeezes the glyphs'
-// widths instead; it read as another motion, too quick or too slow at any length.)
-static const CGFloat kForwardBoxShare = 1.5, kForwardDrift = 0, kForwardEase = 1, kForwardAway = 3;
+// The Music app's skip, as its frames show it (2026-11-02): the double arrow's front glyph greys and shrinks away, drifting
+// on by about half its width; the back one slides at full size into the front's place, slowing to it; and a new back glyph
+// grows out of a dot at the back place's flat side, gray, then brightens to white once the arrows have stopped. At the end
+// it is the double arrow again. Laid out by hand: three copies of one whole triangle taken from the button's own double
+// arrow picture, scaled about their own middles, in a box wider than the arrow so the front one can drift. Mirrored for
+// previous. Taken from the button's own picture, so the label at rest is the glyph and the swap back at the end does not
+// jump. (It was f728743/AppleMusicStylePlayer's ForwardLabel, which squeezes the glyphs' widths instead; it read as another
+// motion, too quick or too slow at any length.)
+static const CGFloat kForwardBoxShare = 1.5;
 
 @interface SGRForwardLabel : UIView
 @property (nonatomic) CGFloat size;
 @property (nonatomic) CGFloat progress;
-- (instancetype)initWithSize:(CGFloat)size tint:(UIColor *)tint;
+// `arrow` is the double arrow's picture, drawn `size` across (the glyph's bounds).
+- (instancetype)initWithArrow:(UIImage *)arrow size:(CGSize)size tint:(UIColor *)tint;
 @end
 
 @implementation SGRForwardLabel {
     UIImageView *_back, *_middle, *_front;
+    CGFloat _step, _triangle;   // how far the front triangle sits from the back one, and one triangle's width
+    CGFloat _arrowLeft;         // the back triangle's flat side in the arrow's picture
 }
 
-- (instancetype)initWithSize:(CGFloat)size tint:(UIColor *)tint {
-    if (!(self = [super initWithFrame:CGRectMake(0, 0, size * kForwardBoxShare, size)])) return nil;
+// Where each triangle starts in the double arrow drawn `width` points across in `drawn`, read off its pixels on a row near
+// the top, where the two triangles are apart: the back one's flat side is the first coverage (the picture has empty
+// room before it, which put the back triangle a few points left of the glyph's: its owner's recording, 2026-11-02), and
+// the front one's the first coverage after a gap (forward.fill's triangles overlap at the middle, so a cut down the
+// middle took the back one's tip off and gave the front one a nub). The picture's edge and half the width if not found.
+static CGFloat frontTriangleStart(UIImage *arrow, CGRect drawn, CGFloat width, CGFloat *backStart) {
+    *backStart = CGRectGetMinX(drawn);
+    CGFloat scale = 4;
+    size_t pixelsWide = (size_t)ceil(width * scale), pixelsHigh = (size_t)ceil(CGRectGetMaxY(drawn) * scale);
+    if (!pixelsWide || !pixelsHigh) return width / 2;
+    NSMutableData *data = [NSMutableData dataWithLength:pixelsWide * pixelsHigh];
+    CGContextRef context = CGBitmapContextCreate(data.mutableBytes, pixelsWide, pixelsHigh, 8, pixelsWide, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
+    if (!context) return width / 2;
+    UIGraphicsPushContext(context);
+    CGContextTranslateCTM(context, 0, pixelsHigh);
+    CGContextScaleCTM(context, scale, -scale);
+    [arrow drawInRect:drawn];
+    UIGraphicsPopContext();
+    CGContextRelease(context);
+    const uint8_t *alpha = data.bytes;
+    size_t row = (size_t)((CGRectGetMinY(drawn) + drawn.size.height * 0.2) * scale);
+    BOOL seenCover = NO, seenGap = NO;
+    CGFloat first = CGRectGetMinX(drawn);
+    for (size_t x = 0; x < pixelsWide; x++) {
+        BOOL covered = alpha[row * pixelsWide + x] > 127;
+        if (covered && seenGap) {
+            *backStart = first;
+            return x / scale;
+        }
+        if (covered && !seenCover) first = x / scale;
+        if (covered) seenCover = YES;
+        else if (seenCover) seenGap = YES;
+    }
+    return width / 2;
+}
+
+- (instancetype)initWithArrow:(UIImage *)arrow size:(CGSize)arrowSize tint:(UIColor *)tint {
+    CGFloat size = arrowSize.width, height = arrowSize.height;
+    if (!(self = [super initWithFrame:CGRectMake(0, 0, size * kForwardBoxShare, height)])) return nil;
     _size = size;
     self.userInteractionEnabled = NO;
-    UIImage *glyph = [[UIImage systemImageNamed:@"play.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:size]]
-                      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    // The arrow drawn as the glyph draws it (fitted, in the middle). Its front triangle, whole, is every triangle of the
+    // step: the back one lies inside it where they overlap, so the front's picture is a clean single triangle, and two of
+    // them `_step` apart are the glyph again.
+    // Measured and cut once per picture and size, the next skips reusing it.
+    static NSMapTable<UIImage *, NSArray *> *cut;
+    if (!cut) cut = [NSMapTable weakToStrongObjectsMapTable];
+    NSArray *known = [cut objectForKey:arrow];
+    if (!known || !CGSizeEqualToSize([known[0] CGSizeValue], arrowSize)) {
+        CGSize image = arrow.size;
+        CGFloat fit = image.width > 0 && image.height > 0 ? MIN(size / image.width, height / image.height) : 1;
+        CGRect drawn = CGRectMake((size - image.width * fit) / 2, (height - image.height * fit) / 2, image.width * fit, image.height * fit);
+        CGFloat backStart;
+        CGFloat start = frontTriangleStart(arrow, drawn, size, &backStart);
+        CGFloat width = CGRectGetMaxX(drawn) - start;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(width, height)
+                                                                                   format:[UIGraphicsImageRendererFormat preferredFormat]];
+        UIImage *picture = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+            [arrow drawInRect:CGRectOffset(drawn, -start, 0)];
+        }] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        known = @[[NSValue valueWithCGSize:arrowSize], picture, @(start - backStart), @(width), @(backStart)];
+        [cut setObject:known forKey:arrow];
+    }
+    UIImage *triangle = known[1];
+    _step = [known[2] doubleValue];
+    _triangle = [known[3] doubleValue];
+    _arrowLeft = [known[4] doubleValue];
     for (int i = 0; i < 3; i++) {
-        UIImageView *view = [[UIImageView alloc] initWithImage:glyph];
-        view.contentMode = UIViewContentModeScaleAspectFit;
+        UIImageView *view = [[UIImageView alloc] initWithImage:triangle];
         view.tintColor = tint;
-        view.bounds = CGRectMake(0, 0, size / 2, size);
+        view.bounds = CGRectMake(0, 0, _triangle, height);
         [self addSubview:view];
         if (i == 0) _back = view;
         else if (i == 1) _middle = view;
@@ -463,22 +575,28 @@ static const CGFloat kForwardBoxShare = 1.5, kForwardDrift = 0, kForwardEase = 1
 
 - (void)setProgress:(CGFloat)progress {
     _progress = MIN(1, MAX(0, progress));
-    // Eased out, as the frames slow to the end.
-    CGFloat p = _progress, e = 1 - pow(1 - p, kForwardEase), size = _size;
-    CGFloat left = (self.bounds.size.width - size) / 2, mid = self.bounds.size.height / 2;
-    CGFloat backX = left + size / 4, frontX = left + size * 3 / 4;
-    // The front glyph: away within the first two thirds, drifting on.
-    CGFloat away = MIN(1, e * kForwardAway);
-    _front.center = CGPointMake(frontX + kForwardDrift * size * e, mid);
+    CGFloat p = _progress, size = _size, triangle = _triangle;
+    // The move, then the brightening.
+    CGFloat move = MIN(1, p / kForwardMoveShare), brighten = MAX(0, (p - kForwardMoveShare) / (1 - kForwardMoveShare));
+    CGFloat slide = 1 - pow(1 - move, kForwardEase);
+    CGFloat left = (self.bounds.size.width - size) / 2 + _arrowLeft, mid = self.bounds.size.height / 2;
+    CGFloat backX = left + triangle / 2, frontX = backX + _step;
+    // The front glyph: away early in the move, drifting on as it goes.
+    CGFloat away = MIN(1, move * kForwardAway), awayEased = 1 - pow(1 - away, 2);
+    _front.center = CGPointMake(frontX + kForwardDrift * size * awayEased, mid);
     _front.transform = CGAffineTransformMakeScale(MAX(0.001, 1 - away), MAX(0.001, 1 - away));
-    _front.alpha = 1 - away;
-    // The back glyph to the front's place, whole.
-    _middle.center = CGPointMake(backX + (frontX - backX) * e, mid);
+    _front.alpha = (1 - away) * (1 - 0.4 * away);
+    // The back glyph to the front's place, whole and white.
+    _middle.center = CGPointMake(backX + (frontX - backX) * slide, mid);
     _middle.transform = CGAffineTransformIdentity;
-    // The new back glyph out of a dot.
-    _back.center = CGPointMake(backX, mid);
-    _back.transform = CGAffineTransformMakeScale(MAX(0.001, e), MAX(0.001, e));
-    _back.alpha = e;
+    // The new back glyph out of a dot at its flat side, gray while it grows, white after; drawn under the middle one,
+    // which covers where they overlap, as the glyph's front triangle does.
+    CGFloat grow = MIN(1, MAX(0, (move - kForwardBackStart) / (1 - kForwardBackStart)));
+    CGFloat scale = 1 - pow(1 - grow, 1.5);
+    _back.center = CGPointMake(backX - triangle / 2 * (1 - scale), mid);
+    _back.transform = CGAffineTransformMakeScale(MAX(0.001, scale), MAX(0.001, scale));
+    CGFloat lit = brighten * brighten * (3 - 2 * brighten);
+    _back.alpha = kForwardBackGray * MIN(1, grow * 3) + (1 - kForwardBackGray) * lit;
 }
 @end
 
@@ -496,10 +614,10 @@ static const CGFloat kForwardBoxShare = 1.5, kForwardDrift = 0, kForwardEase = 1
 // 2026-11-02). The glyph itself waits out the swap unseen, at rest. The same symbol again is a no-op.
 - (void)turnToSymbol:(NSString *)symbol animated:(BOOL)animated;
 
-// On, the Music app's way for shuffle and repeat (its owner, 2026-11-01: the same color on and off was hard to tell
-// apart): the glyph knocked out of a filled rounded square in `color`; off, the plain glyph in `plain`. The fill comes and
-// goes with a fade and a small scale (the fade alone under Reduce Motion).
-- (void)setLit:(BOOL)lit color:(UIColor *)color plain:(UIColor *)plain animated:(BOOL)animated;
+// On, the lyrics' and the queue's look (its owner, 2026-11-02): the glyph cut out of a light disc, the page showing
+// through; off, the plain glyph in `plain`. The disc comes and goes with a fade and a small scale (the fade alone under
+// Reduce Motion). A new symbol on the glyph (repeat's one) is cut again by the next call.
+- (void)setLit:(BOOL)lit plain:(UIColor *)plain animated:(BOOL)animated;
 @end
 
 // The play and pause turn (turnToSymbol:): the scale the symbols leave to and come from, the old one's way out, the new
@@ -508,7 +626,7 @@ static const CGFloat kTurnScale = 0.2, kTurnBounce = 0.15;
 static const NSTimeInterval kTurnOut = 0.14, kTurnIn = 0.32, kTurnDelay = 0.07;
 
 // The fill's padding round the glyph, its corners, and the knocked out glyph's ink (dark enough on a pale cover color).
-static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, kLitEnterScale = 0.8;
+static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 
 @implementation SGRSystemControlButton {
     UIView *_halo, *_fill;
@@ -517,6 +635,8 @@ static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, k
     NSUInteger _turnSerial;
     UIImageView *_turnOld, *_turnNew;
     BOOL _lit, _litSet;
+    NSString *_cutSymbol;      // the symbol cut out of the lit disc
+    UIImage *_flippedFrom, *_flipped;   // previous's picture and its mirror, for the step
     // The arrow's step: the label while it runs, its clock, when the last began and whether a tap waits for the window.
     SGRForwardLabel *_forward;
     CADisplayLink *_forwardLink;
@@ -542,19 +662,23 @@ static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, k
     _fill = [UIView new];
     _fill.userInteractionEnabled = NO;
     _fill.alpha = 0;
+    _fill.layer.contentsGravity = kCAGravityCenter;
+    _fill.layer.contentsScale = UIScreen.mainScreen.scale;
     [self insertSubview:_fill aboveSubview:_halo];
     return self;
 }
 
-- (void)setLit:(BOOL)lit color:(UIColor *)color plain:(UIColor *)plain animated:(BOOL)animated {
-    if (![_fill.backgroundColor isEqual:color]) _fill.backgroundColor = color;
-    static UIColor *litInk;
-    if (!litInk) litInk = [UIColor colorWithWhite:kLitInkWhite alpha:kLitInkAlpha];
-    UIColor *ink = lit ? litInk : plain;
+- (void)setLit:(BOOL)lit plain:(UIColor *)plain animated:(BOOL)animated {
+    SGRGlyphView *glyph = self.glyph;
+    NSString *symbol = glyph.symbol;
+    if (lit && ![symbol isEqualToString:_cutSymbol]) {
+        _cutSymbol = symbol;
+        _fill.layer.contents = (__bridge id)cutDiscImage(symbol, glyph.preferredSymbolConfiguration, kQueueBubble).CGImage;
+    }
+    UIColor *ink = lit ? UIColor.clearColor : plain;
     BOOL changed = !_litSet || lit != _lit;
     _lit = lit;
     _litSet = YES;
-    SGRGlyphView *glyph = self.glyph;
     if (!changed) {
         if (![glyph.tintColor isEqual:ink]) glyph.tintColor = ink;
         return;
@@ -665,7 +789,7 @@ static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, k
 }
 
 // ForwardLabel.swift's AnimatedForwardLabel: the label stands in for the glyph while its progress runs from 0 to 1 over
-// 0.9 of kForwardDuration, linearly (the curves are the label's own), and the glyph comes back at the end, where the label
+// kForwardDuration, linearly (the curves are the label's own), and the glyph comes back at the end, where the label
 // looks as it did at 0. Taps closer together than kForwardDuration are thrown to the end of it, the latest kept, as the
 // project throttles them.
 // A plain picture of `symbol` at the glyph's size, in its ink, about the button's middle.
@@ -764,10 +888,17 @@ static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, k
 - (void)beginForward {
     if (_forwardLink || !self.window) return;
     SGRGlyphView *glyph = self.glyph;
-    // The label's size is the glyph's width: at rest its two glyphs, half that each, are the double arrow.
-    CGFloat size = glyph.bounds.size.width;
-    if (size <= 0) return;
-    _forward = [[SGRForwardLabel alloc] initWithSize:size tint:glyph.tintColor ?: SGRPrimary()];
+    // The label is the glyph's picture at the glyph's size: at rest its two halves are the double arrow.
+    CGSize size = glyph.bounds.size;
+    if (size.width <= 0 || size.height <= 0) return;
+    // Drawn pointing forward and flipped for previous: previous's picture is mirrored first.
+    // The mirrored picture kept, so its cut is reused (SGRForwardLabel).
+    if (_forwardDirection < 0 && _flippedFrom != glyph.image) {
+        _flippedFrom = glyph.image;
+        _flipped = glyph.image.imageWithHorizontallyFlippedOrientation;
+    }
+    UIImage *arrow = _forwardDirection < 0 ? _flipped : glyph.image;
+    _forward = [[SGRForwardLabel alloc] initWithArrow:arrow size:size tint:glyph.tintColor ?: SGRPrimary()];
     _forward.center = glyph.center;
     _forward.transform = CGAffineTransformScale(glyph.transform, _forwardDirection < 0 ? -1 : 1, 1);
     [self addSubview:_forward];
@@ -782,7 +913,7 @@ static const CGFloat kLitPadding = 7, kLitInkWhite = 0.08, kLitInkAlpha = 0.9, k
 }
 
 - (void)forwardTicked:(CADisplayLink *)link {
-    CGFloat progress = (CACurrentMediaTime() - _forwardStart) / (kForwardDuration * 0.9);
+    CGFloat progress = (CACurrentMediaTime() - _forwardStart) / kForwardDuration;
     _forward.transform = CGAffineTransformScale(self.glyph.transform, _forwardDirection < 0 ? -1 : 1, 1);
     _forward.progress = progress;
     if (progress < 1 && self.window) return;
@@ -1028,6 +1159,11 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     SGRPlayerBackgroundKind _background;
     BOOL _backgroundSet;
     NSString *_motionTrack;       // the track _motion is the clip of
+    NSString *_clipHoldTrack;     // the new track the last clip waits on (syncClipAnimated:), and until when
+    CFTimeInterval _clipHoldUntil;
+    NSString *_smallCoverTrack;   // the track whose small stand-in cover is waited out (refreshCover), and until when
+    CFTimeInterval _smallCoverUntil;
+    BOOL _hadTrack, _emptyPending;  // a track shown, and a look again pending before Not Playing (show:)
     SGRGlyphButton *_close;
     UIButton *_more;
     UILabel *_context;
@@ -1061,6 +1197,9 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     NSString *_lyricsTrack;
     BOOL _lyricsOpen;
     BOOL _queueOpen;              // the queue in the page in the lyrics' place (SystemQueue.m), the Music app's way
+    BOOL _queueDragging;          // a track of the queue lifted: the controls away and the queue down to the foot
+    NSMapTable<UIView *, NSArray *> *_dragAlphas;
+    NSUInteger _dragReturn;       // the latest let go's, so an older one's delayed return is dropped   // each control's alpha and touches before, put back as it is let go
     id _spotifyQueue;             // Spotify's queue as last fetched (SPTPlayerQueue), handed back with a track moved
     SGRSystemQueueView *_queueView;   // out of the page while closed
     UIImageView *_queueBubble;        // the queue button's light disc while the queue is open, the Music app's
@@ -1223,6 +1362,12 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _next = [SGRSystemControlButton buttonWithSymbol:@"forward.fill" pointSize:kSkipGlyph title:@"Next"];
     _next.transport = YES;
     _next.onTap = ^{ [weakSelf skip:1]; };
+    // Without the symbols' baseline, as play's: the glyph is then its picture fitted to it, as the step draws it, so the
+    // step hands back to it in place (its owner's recordings, 2026-11-02: the glyph sat lower than the step, and jumped).
+    for (SGRSystemControlButton *skip in @[_previous, _next]) {
+        skip.glyph.withoutBaseline = YES;
+        skip.glyph.image = [UIImage systemImageNamed:skip.glyph.symbol withConfiguration:skip.glyph.preferredSymbolConfiguration].imageWithoutBaseline;
+    }
     _repeat = [SGRSystemControlButton buttonWithSymbol:@"repeat" pointSize:19 title:@"Repeat"];
     _repeat.onTap = ^{ [weakSelf cycleRepeat]; };
 
@@ -1266,8 +1411,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _routeLine.userInteractionEnabled = NO;
     _routeLine.isAccessibilityElement = NO;   // read as the picker's value
     _queue = [SGRGlyphButton buttonWithSymbol:@"list.bullet" pointSize:20 title:@"Queue"];
-    // A tap turns the page to its queue, as the Music app's does (its owner, 2026-11-02); a hold still opens Spotify's
-    // queue sheet, for what the page's queue does not do (moving and removing tracks).
+    // A tap turns the page to its queue, as the Music app's does (its owner, 2026-11-02). No hold: Spotify's own queue sheet
+    // is not opened from the page any more (its owner, 2026-11-02).
     _queue.onTap = ^{ [weakSelf toggleQueue]; };
     // Dim while the queue is closed; open, the Music app's way (its owner's screenshot, 2026-11-02): a light disc behind
     // it and the glyph dark on it.
@@ -1276,8 +1421,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     [_queue insertSubview:_queueBubble atIndex:0];
     _lyricsBubble = cutDisc(kLyricsSymbolOpen);
     [_lyrics insertSubview:_lyricsBubble atIndex:0];
-    UILongPressGestureRecognizer *queueHold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(queueHeld:)];
-    [_queue addGestureRecognizer:queueHold];
     _queueView = [SGRSystemQueueView new];
     _queueView.alpha = 0;
     _queueView.onReorder = ^(NSArray *upcoming) { [weakSelf handQueueBack:upcoming]; };
@@ -1286,6 +1429,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView.showsRepeat = _repeatOff;
     _queueView.onShuffle = ^{ [weakSelf toggleShuffle]; };
     _queueView.onRepeat = ^{ [weakSelf cycleRepeat]; };
+    _queueView.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
@@ -1387,6 +1531,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 // display link would pin the zoom's frames to its rate.
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self paintAccent];
     [_timer invalidate];
     __weak typeof(self) weakSelf = self;
     _timer = [NSTimer timerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer) { [weakSelf tick]; }];
@@ -1488,9 +1633,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueBubble.center = _lyricsBubble.center = CGPointMake(22, 22);
     CGFloat lineHeight = ceil(_routeLine.font.lineHeight);
     _routeLine.frame = CGRectMake(24, round(rowMid + kRouteLineDrop - lineHeight / 2), MAX(0, width - 48), lineHeight);
-    CGFloat volumeMid = rowMid - kVolumeAboveRow;
+    CGFloat spacing = controlsSpacing();
+    CGFloat volumeMid = rowMid - round(kVolumeAboveRow * spacing);
     _volume.frame = CGRectMake(kMargin, volumeMid - 16, inner, 32);
-    CGFloat controlsMid = _volumeOff ? rowMid - kControlsAboveRowAlone : volumeMid - kControlsAboveVolume;
+    CGFloat controlsMid = _volumeOff ? rowMid - round(kControlsAboveRowAlone * spacing) : volumeMid - round(kControlsAboveVolume * spacing);
     _play.bounds = CGRectMake(0, 0, 64, 64);
     _previous.bounds = _next.bounds = CGRectMake(0, 0, 56, 56);
     _shuffle.bounds = _repeat.bounds = CGRectMake(0, 0, 44, 44);
@@ -1499,7 +1645,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _play.center = CGPointMake(width / 2, controlsMid);
     _next.center = CGPointMake(round(width / 2 + inner * kSkipShare), controlsMid);
     _repeat.center = CGPointMake(width - kMargin - 12, controlsMid);
-    CGFloat timesHeight = ceil(_elapsed.font.lineHeight), timesMid = controlsMid - kTimesAboveControls, timesY = round(timesMid - timesHeight / 2);
+    CGFloat timesHeight = ceil(_elapsed.font.lineHeight), timesMid = controlsMid - round(kTimesAboveControls * spacing), timesY = round(timesMid - timesHeight / 2);
     _elapsed.frame = CGRectMake(kMargin, timesY, inner / 2, timesHeight);
     _remaining.frame = CGRectMake(kMargin + inner / 2, timesY, inner / 2, timesHeight);
     CGFloat scrubberY = round(timesMid - kScrubberAboveTimes - kScrubberHeight / 2);
@@ -1528,7 +1674,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _stage.frame = _alone ? [self aloneStageFrom:stage] : stage;
     _lyricsNote.frame = CGRectInset(_stage.bounds, kMargin, 0);
     _lyricsSpinner.frame = _stage.bounds;
-    _queueView.frame = stage;
+    // While a track is moved the queue runs down to the foot of the screen, the controls away (setQueueDragging:).
+    _queueView.frame = _queueDragging ? CGRectMake(0, stageTop, width, MAX(0, height - safe.bottom - stageTop)) : stage;
     // The add button at the trailing margin, its glyph's edge on it, centered on the title and artist; they end before it.
     CGFloat addInset = (kAddSide - kAddGlyph) / 2, textRight = width - kMargin - (_add.hidden ? 0 : kAddSide - addInset + 8);
     BOOL topRow = _lyricsOpen || _queueOpen;
@@ -1608,56 +1755,155 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     return [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:children];
 }
 
-// What the ⋯ can do without Spotify's player (the header comment says why its sheet is out of reach): Liked Songs and
-// share, the album and the artist, then the player's own items.
+// The ⋯, laid out as the redesigned player's (Redesigned/ContextMenu): Share at the top, the player's own items (Speed, Pitch & Reverb, Lyrics Source, the Artwork submenu), then More (its
+// owner's screenshots and picks, 2026-11-02). Spotify's player is not behind the page, so its sheet's rows are not
+// read here. Add to Playlist, Add to Queue, Start a Jam, SongDNA and Song credits come from that sheet alone: its links
+// are refused and its mini player has no menu to read (the phone's log, 2026-11-02), so they are left out for now.
 - (NSArray<UIMenuElement *> *)menuItems {
     SPTPlayerTrack *track = isTrack(SGPlayerState().track) ? SGPlayerState().track : nil;
     NSString *uri = SGURIString(track.URI);
     NSArray<NSString *> *parts = [uri componentsSeparatedByString:@":"];
     NSString *kind = parts.count == 3 ? parts[1] : nil;
-    NSMutableArray<UIMenuElement *> *first = [NSMutableArray array], *places = [NSMutableArray array];
+    BOOL song = [kind isEqualToString:@"track"];
     __weak typeof(self) weakSelf = self;
-    if ([kind isEqualToString:@"track"]) {
-        BOOL saved = _savedShown;
-        UIAction *like = [UIAction actionWithTitle:saved ? @"Remove from Liked Songs" : @"Add to Liked Songs"
-                                             image:[UIImage systemImageNamed:saved ? @"checkmark.circle.fill" : @"plus.circle"] identifier:nil
-                                           handler:^(UIAction *action) { [weakSelf toggleSaved]; }];
-        [first addObject:like];
-    }
-    // A share link for what has one on open.spotify.com: a track or an episode, by its id.
-    if (([kind isEqualToString:@"track"] || [kind isEqualToString:@"episode"]) && parts[2].length) {
+    NSMutableArray<UIMenuElement *> *menu = [NSMutableArray array];
+
+    // The row of three.
+    NSMutableArray<UIMenuElement *> *row = [NSMutableArray array];
+    if ((song || [kind isEqualToString:@"episode"]) && parts[2].length) {
         NSURL *link = [NSURL URLWithString:[NSString stringWithFormat:@"https://open.spotify.com/%@/%@", kind, parts[2]]];
-        [first addObject:[UIAction actionWithTitle:@"Share" image:[UIImage systemImageNamed:@"square.and.arrow.up"] identifier:nil
-                                           handler:^(UIAction *action) { [weakSelf share:link]; }]];
+        [row addObject:[UIAction actionWithTitle:@"Share" image:[UIImage systemImageNamed:@"square.and.arrow.up"] identifier:nil
+                                         handler:^(UIAction *action) { [weakSelf share:link]; }]];
     }
+    if (row.count) {
+        UIMenu *top = [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:row];
+        top.preferredElementSize = UIMenuElementSizeMedium;
+        [menu addObject:top];
+    }
+
+    // The player's own.
+    NSMutableArray<UIMenuElement *> *own = [SGRPlayerMenuPageItems(_more, ^{ [weakSelf reloadBackgroundAnimated:YES]; }) mutableCopy];
+    UIMenu *artwork = SGRPlayerMenuArtwork(^{ [weakSelf reloadBackgroundAnimated:YES]; });
+    if (artwork) [own addObject:artwork];
+    // The sleep timer on the top level, with the player's own (its owner, 2026-11-02).
+    [own addObject:[self sleepTimerMenu]];
+    [own addObject:[UIAction actionWithTitle:@"Controls Spacing" image:[UIImage systemImageNamed:@"arrow.up.and.down"] identifier:nil
+                                     handler:^(UIAction *action) { [weakSelf showSpacing]; }]];
+    [menu addObject:inlineGroup(own)];
+
+    // More: the album, the artist and the artist's concerts.
+    NSMutableArray<UIMenuElement *> *more = [NSMutableArray array];
     // The album from the track's metadata (album_uri, beside the album_title the header reads; a key of the player's
     // metadata in the 9.1.90 binary) and the artist from the track itself (Headers/SPTPlayer.h's artistURI).
     id album = track.metadata[@"album_uri"];
     NSString *albumURI = [album isKindOfClass:NSString.class] && [album hasPrefix:@"spotify:album:"] ? album : nil;
     if (albumURI) {
-        [places addObject:[UIAction actionWithTitle:@"Go to Album" image:[UIImage systemImageNamed:@"square.stack"] identifier:nil
-                                            handler:^(UIAction *action) { [weakSelf closeAndOpen:albumURI]; }]];
+        [more addObject:[UIAction actionWithTitle:@"Go to Album" image:[UIImage systemImageNamed:@"square.stack"] identifier:nil
+                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:albumURI]; }]];
     }
     NSString *artistURI = SGURIString(track.artistURI);
     if ([artistURI hasPrefix:@"spotify:artist:"]) {
-        [places addObject:[UIAction actionWithTitle:@"Go to Artist" image:[UIImage systemImageNamed:@"music.microphone"] identifier:nil
-                                            handler:^(UIAction *action) { [weakSelf closeAndOpen:artistURI]; }]];
+        [more addObject:[UIAction actionWithTitle:@"Go to Artist" image:[UIImage systemImageNamed:@"music.microphone"] identifier:nil
+                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:artistURI]; }]];
+        // Spotify's concerts page of an artist ("spotify:artist:%s%cconcerts" in the 9.1.90 binary).
+        NSString *concerts = [artistURI stringByAppendingString:@":concerts"];
+        [more addObject:[UIAction actionWithTitle:@"Go to Artist Concerts" image:[UIImage systemImageNamed:@"ticket"] identifier:nil
+                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:concerts]; }]];
     }
-    NSMutableArray<UIMenuElement *> *menu = [NSMutableArray array];
-    if (first.count) [menu addObject:inlineGroup(first)];
-    if (places.count) [menu addObject:inlineGroup(places)];
-    NSArray<UIMenuElement *> *own = SGRPlayerMenuPageItems(_more, ^{ [weakSelf reloadBackgroundAnimated:YES]; });
-    if (own.count) [menu addObject:inlineGroup(own)];
-    static int logged;
-    if (logged++ < 3) SGLog(@"system player: the ⋯ menu for %@: %lu of the mod's items (album %@, artist %@); Spotify's own rows need its player",
-                            uri, (unsigned long)(first.count + places.count + own.count), albumURI ? @"known" : @"unknown", artistURI.length ? @"known" : @"unknown");
+    [menu addObject:[UIMenu menuWithTitle:@"More" image:[UIImage systemImageNamed:@"ellipsis.circle"] identifier:nil options:0 children:more]];
+    return menu;
+}
+
+// Controls Spacing: one slider in a sheet over the page, the page laid out again as it moves, with Reset.
+- (void)showSpacing {
+    UIViewController *panel = [UIViewController new];
+    panel.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1];
+    panel.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    UIStackView *stack = [UIStackView new];
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = 14;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    [panel.view addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:panel.view.leadingAnchor constant:24],
+        [stack.trailingAnchor constraintEqualToAnchor:panel.view.trailingAnchor constant:-24],
+        [stack.topAnchor constraintEqualToAnchor:panel.view.topAnchor constant:28],
+    ]];
+    UILabel *heading = [UILabel new];
+    heading.text = @"Controls Spacing";
+    heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    heading.textColor = UIColor.whiteColor;
+    UILabel *label = [UILabel new];
+    label.textColor = [UIColor colorWithWhite:1 alpha:0.8];
+    label.font = [UIFont monospacedDigitSystemFontOfSize:15 weight:UIFontWeightMedium];
+    UISlider *slider = [UISlider new];
+    slider.minimumValue = kControlsSpacingLeast;
+    slider.maximumValue = kControlsSpacingMost;
+    slider.value = controlsSpacing();
+    slider.accessibilityLabel = @"Controls spacing";
+    void (^show)(void) = ^{ label.text = [NSString stringWithFormat:@"%.2f×", slider.value]; };
+    show();
+    __weak typeof(self) weakSelf = self;
+    [slider addAction:[UIAction actionWithHandler:^(UIAction *action) {
+        [NSUserDefaults.standardUserDefaults setDouble:slider.value forKey:kControlsSpacingKey];
+        sg_controlsSpacing = slider.value;
+        show();
+        [weakSelf.view setNeedsLayout];
+    }] forControlEvents:UIControlEventValueChanged];
+    UIButton *reset = [UIButton buttonWithType:UIButtonTypeSystem];
+    [reset setTitle:@"Reset" forState:UIControlStateNormal];
+    [reset addAction:[UIAction actionWithHandler:^(UIAction *action) {
+        [NSUserDefaults.standardUserDefaults removeObjectForKey:kControlsSpacingKey];
+        sg_controlsSpacing = kControlsSpacingDefault;
+        slider.value = kControlsSpacingDefault;
+        show();
+        [weakSelf.view setNeedsLayout];
+    }] forControlEvents:UIControlEventTouchUpInside];
+    for (UIView *view in @[heading, label, slider, reset]) [stack addArrangedSubview:view];
+    if (panel.sheetPresentationController) {
+        panel.sheetPresentationController.detents = @[[UISheetPresentationControllerDetent customDetentWithIdentifier:nil resolver:^CGFloat(id context) { return 220; }]];
+        panel.sheetPresentationController.prefersGrabberVisible = YES;
+    }
+    [self presentViewController:panel animated:YES completion:nil];
+}
+
+// The mod's sleep timer (Shared/Player/SleepTimer.h), what it is set to under its name.
+- (UIMenu *)sleepTimerMenu {
+    SGSleepTimerMode mode = SGSleepTimerCurrentMode();
+    NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+    for (NSNumber *minutes in @[@5, @10, @15, @30, @45, @60]) {
+        NSString *title = minutes.integerValue == 60 ? @"1 Hour" : [NSString stringWithFormat:@"%@ Minutes", minutes];
+        [items addObject:[UIAction actionWithTitle:title image:nil identifier:nil handler:^(UIAction *action) {
+            SGSetSleepTimer(SGSleepTimerAtTime, minutes.doubleValue * 60);
+        }]];
+    }
+    UIAction *track = [UIAction actionWithTitle:@"End of Song" image:nil identifier:nil handler:^(UIAction *action) { SGSetSleepTimer(SGSleepTimerEndOfTrack, 0); }];
+    if (mode == SGSleepTimerEndOfTrack) track.state = UIMenuElementStateOn;
+    UIAction *album = [UIAction actionWithTitle:@"End of Album or Playlist" image:nil identifier:nil handler:^(UIAction *action) { SGSetSleepTimer(SGSleepTimerEndOfAlbum, 0); }];
+    if (mode == SGSleepTimerEndOfAlbum) album.state = UIMenuElementStateOn;
+    [items addObjectsFromArray:@[track, album]];
+    if (mode != SGSleepTimerOff) {
+        [items addObject:[UIAction actionWithTitle:@"Turn Off Timer" image:[UIImage systemImageNamed:@"xmark"] identifier:nil
+                                           handler:^(UIAction *action) { SGSetSleepTimer(SGSleepTimerOff, 0); }]];
+    }
+    UIMenu *menu = [UIMenu menuWithTitle:@"Sleep Timer" image:[UIImage systemImageNamed:@"moon.zzz"] identifier:nil options:0 children:items];
+    NSDate *end = SGSleepTimerEnd();
+    if (mode == SGSleepTimerAtTime && end) {
+        NSInteger left = MAX(0, (NSInteger)ceil(end.timeIntervalSinceNow / 60));
+        menu.subtitle = [NSString stringWithFormat:@"%ld min left", (long)left];
+    } else if (mode == SGSleepTimerEndOfTrack) menu.subtitle = @"End of song";
+    else if (mode == SGSleepTimerEndOfAlbum) menu.subtitle = @"End of album or playlist";
     return menu;
 }
 
 - (void)share:(NSURL *)link {
     UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[link] applicationActivities:nil];
-    share.popoverPresentationController.sourceView = _more;
-    share.popoverPresentationController.sourceRect = _more.bounds;
+    // A sheet from the foot of the screen, as the Music app's Share is (its owner's screenshot, 2026-11-02), not a
+    // popover off the ⋯: no anchor on a phone, the screen's middle elsewhere, where a popover needs one.
+    if (self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        share.popoverPresentationController.sourceView = self.view;
+        share.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), 1, 1);
+    }
     SGPresentDark(share);
     [self presentViewController:share animated:YES completion:nil];
 }
@@ -1777,6 +2023,23 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         clip = SGRPlayerMotionPreview(arrived);
     }
     if (!clip && !_motion) return;
+    // On a skip the last track's clip stays up for a moment while the new one's is looked up, and the new one crosses in
+    // over it, rather than the cover and Fluid showing between them (its owner's recording, 2026-11-02: the next clip
+    // came a tenth of a second to a second later). A track with none, or one too slow, has Fluid after kClipHold.
+    if (!clip && wanted && _motion && ![track isEqualToString:_motionTrack] && !SGRPlayerMotionNoneFor(track)) {
+        CFTimeInterval now = CACurrentMediaTime();
+        if (![track isEqualToString:_clipHoldTrack]) {
+            _clipHoldTrack = [track copy];
+            _clipHoldUntil = now + kClipHold;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kClipHold * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf syncClipAnimated:YES];
+            });
+        }
+        if (now < _clipHoldUntil) return;
+    }
+    // Waited out or answered: a later skip back to this track waits afresh.
+    _clipHoldTrack = nil;
     // The last track's clip, or a clip no longer wanted, goes; Fluid is under it.
     [self fadeOut:_motion animated:animated];
     _motion = clip;
@@ -1862,14 +2125,39 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)show:(SPTPlayerState *)state {
     SPTPlayerTrack *track = isTrack(state.track) ? state.track : nil;
-    _title.text = track.trackTitle;
+    // A moment with no track between two (a new playlist loading) is not Not Playing: the page waits kEmptyWait and
+    // looks again before it says so.
+    if (track) {
+        _hadTrack = YES;
+    } else if (_hadTrack) {
+        if (!_emptyPending) {
+            _emptyPending = YES;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kEmptyWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                typeof(self) me = weakSelf;
+                if (!me) return;
+                me->_emptyPending = NO;
+                if (isTrack(SGPlayerState().track)) return;
+                me->_hadTrack = NO;
+                [me show:SGPlayerState()];
+            });
+        }
+        return;
+    }
+    // Nothing playing, the Music app's way (its owner's screenshot, 2026-11-02): "Not Playing", no artist or context,
+    // the note for a cover, empty times, and previous and next dimmed.
+    _title.text = track ? track.trackTitle : @"Not Playing";
     _artist.text = artistLine(track);
     _context.text = contextTitle(state, track);
+    for (SGRSystemControlButton *skip in @[_previous, _next]) {
+        skip.glyph.alpha = track ? 1 : 0.35;
+        skip.userInteractionEnabled = track != nil;
+    }
     if (_queueOpen) [self refreshQueue];
     [self syncEpisode:track];
     // The swipe settled on this track already: the labels, which now show it, go back to the middle.
     if (_titleSkipping && ![SGURIString(track.URI) isEqualToString:_titleSkipFrom]) [self endTitleSkip];
-    BOOL paused = !state || state.isPaused;
+    BOOL paused = !state || state.isPaused || !track;
     [_play turnToSymbol:paused ? @"play.fill" : @"pause.fill" animated:_shownOnce];
     _play.accessibilityLabel = paused ? @"Play" : @"Pause";
     [self showPaused:paused animated:_shownOnce];
@@ -1910,16 +2198,33 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
                      animations:^{ self->_coverHolder.transform = transform; } completion:nil];
 }
 
+// The title, play and pause, and previous and next in the open lyrics' and queue's see-through white, or white (Match the
+// lyrics button on the Player page, SGRKeyPlayerSoftControls, its owner, 2026-11-02).
+- (void)paintAccent {
+    UIColor *ink = SGHidden(SGRKeyPlayerSoftControls) ? [UIColor colorWithWhite:1 alpha:kQueueBubbleWhite] : SGRPrimary();
+    _title.textColor = _besideTitle.textColor = ink;
+    for (SGRSystemControlButton *button in @[_previous, _play, _next]) button.glyph.tintColor = ink;
+}
+
 - (void)showOptions:(SPTPlayerState *)state {
     SPTPlayerOptions *options = [state respondsToSelector:@selector(options)] ? state.options : nil;
-    BOOL shuffling = options.shufflingContext, track = options.repeatingTrack, context = options.repeatingContext;
-    // Lit as the redesigned player lights its controls (SGRPlayerLitColor); off, the color of every other control on the
-    // page (its owner, 2026-11-01).
-    UIColor *lit = SGRPlayerLitColor(), *plain = SGRPrimary();
+    // Spotify's own say on whether they can change now, as its Connect menu follows it (its owner, 2026-11-02: autoplay
+    // left them lit and stuck): not allowed, unlit, dimmed and untouchable.
+    BOOL shuffleAllowed = SGRSystemOptionAllowed(state, NO), repeatAllowed = SGRSystemOptionAllowed(state, YES);
+    BOOL shuffling = shuffleAllowed && options.shufflingContext;
+    BOOL track = repeatAllowed && options.repeatingTrack, context = repeatAllowed && options.repeatingContext;
+    // Lit as the lyrics and the queue are, a light disc with the glyph cut out (its owner, 2026-11-02); off, the color of
+    // every other control on the page (its owner, 2026-11-01). The symbol first, so repeat's disc cuts the one shown.
     BOOL animated = _shownOnce && self.view.window;
-    [_shuffle setLit:shuffling color:lit plain:plain animated:animated];
-    [_repeat setLit:track || context color:lit plain:plain animated:animated];
     [_repeat.glyph setSymbol:track ? @"repeat.1" : @"repeat" animated:_shownOnce];
+    [_shuffle setLit:shuffling plain:shuffleAllowed ? SGRPrimary() : SGRTertiary() animated:animated];
+    [_repeat setLit:track || context plain:repeatAllowed ? SGRPrimary() : SGRTertiary() animated:animated];
+    // Not by enabled: the Kit's button sets its alpha with it, which brought them back mid-drag and showed a Shuffle hidden
+    // by its setting (its owner's recording, 2026-11-02). Their taps ask SGRSystemOptionAllowed instead.
+    for (UIView *button in @[_shuffle, _repeat]) {
+        BOOL allowed = button == _shuffle ? shuffleAllowed : repeatAllowed;
+        button.accessibilityTraits = allowed ? UIAccessibilityTraitButton : UIAccessibilityTraitButton | UIAccessibilityTraitNotEnabled;
+    }
     _shuffle.accessibilityValue = shuffling ? @"On" : @"Off";
     _repeat.accessibilityValue = track ? @"Track" : context ? @"On" : @"Off";
 }
@@ -1929,6 +2234,13 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (_episode) [self syncEpisode:(isTrack(SGPlayerState().track) ? SGPlayerState().track : nil)];
     if (_scrubber.held) return;
     SPTPlayerState *state = SGPlayerState();
+    if (!isTrack(state.track)) {
+        if (_hadTrack) return;
+        _scrubber.value = 0;
+        _elapsed.text = _remaining.text = @"--:--";
+        _shownTotal = -1;
+        return;
+    }
     double duration = state.duration, position = positionOf(state);
     if (CACurrentMediaTime() < _seekUntil) {
         if (fabs(position - _seekTarget) > 1.5) position = _seekTarget;
@@ -2013,11 +2325,71 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 #pragma mark - the queue
 
-- (void)queueHeld:(UILongPressGestureRecognizer *)hold {
-    if (hold.state != UIGestureRecognizerStateBegan) return;
-    BOOL sent = SGOpenSpotifyURI([NSURL URLWithString:@"spotify:now-playing:queue"]);
-    SGLog(@"system player: Spotify's queue %@", sent ? @"asked for" : @"not asked for (no link dispatcher)");
-    if (sent) [self noteSheetFor:@"the queue"];
+
+// A track lifted in the queue: the progress, the controls, the volume and the row under them fade and drop away and the
+// list takes their room, back as it is let go (the Music app's, its owner's recording, 2026-11-02).
+- (void)setQueueDragging:(BOOL)dragging {
+    if (dragging == _queueDragging) return;
+    // Back a moment after the let go, not at once (its owner, 2026-11-02); a new lift meanwhile keeps them away.
+    if (!dragging) {
+        NSUInteger token = ++_dragReturn;
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            typeof(self) me = weakSelf;
+            if (me && token == me->_dragReturn) [me showControlsAfterDrag];
+        });
+        return;
+    }
+    ++_dragReturn;
+    [self moveControlsForDrag:YES];
+}
+
+- (void)showControlsAfterDrag {
+    if (!_queueDragging) return;
+    [self moveControlsForDrag:NO];
+}
+
+- (void)moveControlsForDrag:(BOOL)dragging {
+    if (dragging == _queueDragging) return;
+    _queueDragging = dragging;
+    NSArray<UIView *> *controls = @[_scrubber, _elapsed, _remaining, _shuffle, _previous, _play, _next, _repeat, _volume, _lyrics, _route, _routeLine, _queue];
+    // What each was before, a control hidden by its setting (Shuffle off, an episode's) staying hidden after.
+    if (dragging) {
+        _dragAlphas = [NSMapTable weakToStrongObjectsMapTable];
+        for (UIView *view in controls) [_dragAlphas setObject:@[@(view.alpha), @(view.userInteractionEnabled)] forKey:view];
+    }
+    NSMapTable<UIView *, NSArray *> *before = (NSMapTable *)_dragAlphas;
+    // The Music app's (its owner's recording, 2026-11-02): the controls go as one block, falling well down as they fade
+    // quickly, and come back up from below on a spring, fading in as they rise.
+    void (^fade)(void) = ^{
+        for (UIView *view in controls) {
+            NSArray *was = [before objectForKey:view];
+            view.alpha = dragging ? 0 : (was ? [was[0] doubleValue] : 1);
+        }
+    };
+    void (^move)(void) = ^{
+        CGAffineTransform away = dragging ? CGAffineTransformMakeTranslation(0, 160) : CGAffineTransformIdentity;
+        for (UIView *view in controls) view.transform = away;
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    };
+    UIViewAnimationOptions options = UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction;
+    if (SGRReduceMotion()) {
+        move();
+        [UIView animateWithDuration:0.25 delay:0 options:options animations:fade completion:nil];
+    } else if (dragging) {
+        [UIView animateWithDuration:0.3 delay:0 options:options | UIViewAnimationOptionCurveEaseIn animations:move completion:nil];
+        [UIView animateWithDuration:0.18 delay:0 options:options | UIViewAnimationOptionCurveLinear animations:fade completion:nil];
+    } else {
+        [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.9 initialSpringVelocity:0 options:options animations:move completion:nil];
+        [UIView animateWithDuration:0.35 delay:0.05 options:options | UIViewAnimationOptionCurveEaseOut animations:fade completion:nil];
+    }
+    for (UIView *view in controls) {
+        NSArray *was = [before objectForKey:view];
+        view.userInteractionEnabled = dragging ? NO : (was ? [was[1] boolValue] : YES);
+    }
+    // Previous and next as the track has them now, not as at the lift: it may have ended meanwhile (Not Playing).
+    if (!dragging) for (UIView *skip in @[_previous, _next]) skip.userInteractionEnabled = isTrack(SGPlayerState().track);
 }
 
 - (void)toggleQueue {
@@ -2417,6 +2789,15 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 // changes (its picture is the same, so nothing new is published): the page took it for stale and stretched the bar's
 // 40pt cover, blurred, for the whole track (its owner, 2026-11-01).
 - (void)refreshCover {
+    if (!isTrack(SGPlayerState().track)) {
+        if (_hadTrack) return;
+        UIImage *art = SGRSystemNotPlayingArt();
+        if (_cover.image != art) {
+            _cover.image = art;
+            _backdrop.image = [self washOf:art];
+        }
+        return;
+    }
     NSString *identity = nil;
     UIImage *art = SGRNowPlayingArtwork(NULL, &identity);
     BOOL current = art && SGRNowPlayingArtworkCurrent();
@@ -2429,6 +2810,22 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     // The field reads the Kit's picture by its identity, the same picture once.
     if (current) [_field setArtwork:art identity:identity animated:self.view.window != nil];
     if (!image || image == _cover.image) return;
+    // The bar's small picture stands in for the full one until its fetch lands, a few hundredths to a few tenths of a
+    // second later (the phone's log, 2026-11-02): drawn large it showed low resolution for that moment. The page keeps
+    // the cover it has until the full one comes, kCoverWait at most, and crosses straight to it.
+    if (image.size.width < 200 && _cover.image && _cover.image.size.width >= 200) {
+        CFTimeInterval now = CACurrentMediaTime();
+        if (![playing isEqualToString:_smallCoverTrack]) {
+            _smallCoverTrack = [playing copy];
+            _smallCoverUntil = now + kCoverWait;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kCoverWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakSelf refreshCover];
+            });
+        }
+        if (now < _smallCoverUntil) return;
+    }
+    _smallCoverTrack = nil;
     UIImage *wash = [self washOf:image];
     BOOL fade = _cover.image != nil && self.view.window;
     if (!fade) {
@@ -2550,7 +2947,7 @@ static NSString *speedLabel(double speed) {
 - (void)toggleShuffle {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerState *state = SGPlayerState();
-    if (!player || !state) return;
+    if (!player || !state || !SGRSystemOptionAllowed(state, NO)) return;
     [player setShufflingContext:!state.options.shufflingContext];
 }
 
@@ -2558,7 +2955,7 @@ static NSString *speedLabel(double speed) {
 - (void)cycleRepeat {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerOptions *options = SGPlayerState().options;
-    if (!player || !options) return;
+    if (!player || !options || !SGRSystemOptionAllowed(SGPlayerState(), YES)) return;
     if (options.repeatingTrack) {
         [player setRepeatingTrack:NO];
         [player setRepeatingContext:NO];

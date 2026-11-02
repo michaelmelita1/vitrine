@@ -211,9 +211,31 @@ static BOOL publishLocalCover(void) {
     return YES;
 }
 
+// The next track's full picture fetched into the session's store once while this one plays, so a skip finds it there
+// in a few milliseconds rather than tenths of a second, and no screen's small picture stands in meanwhile (its owner,
+// 2026-11-02: a skip felt slow while the page waited for the cover). Native redesign's alone, and not in Low Power Mode.
+// After the playing track's own fetch has started, and looked at once per next track.
+static NSString *sg_aheadKey, *sg_aheadURI;
+
+static void fetchAhead(void) {
+    if (!SGNativeRedesign() || NSProcessInfo.processInfo.lowPowerModeEnabled) return;
+    SPTPlayerState *state = SGPlayerState();
+    id future = [state respondsToSelector:@selector(future)] ? state.future : nil;
+    id next = [future isKindOfClass:NSArray.class] ? [(NSArray *)future firstObject] : nil;
+    if (![next isKindOfClass:NSClassFromString(@"SPTPlayerTrack")]) return;
+    NSString *nextURI = SGURIString(((SPTPlayerTrack *)next).URI);
+    if (!nextURI || [nextURI isEqualToString:sg_aheadURI]) return;
+    sg_aheadURI = nextURI;
+    NSURL *url = nil;
+    NSString *key = pictureOf(next, &url);
+    if (!key || !url || url.isFileURL || [key isEqualToString:sg_aheadKey] || [key isEqualToString:sg_wantedKey]) return;
+    sg_aheadKey = key;
+    [[artworkSession() dataTaskWithURL:url] resume];
+}
+
 // Brings the playing track's picture up to date with the player's state, and fetches a picture newly
 // wanted. Called on every state report and before any view read is believed, whichever comes first.
-static void followPlayer(void) {
+static void followPlaying(void) {
     SPTPlayerTrack *track = SGPlayerState().track;
     NSString *uri = SGURIString(track.URI);
     if (!uri) return;
@@ -230,6 +252,11 @@ static void followPlayer(void) {
     if ([key isEqualToString:sg_artworkKey] && sg_artworkQuality == SGRArtworkQualityExact) return;
     if (url) fetchPicture(key, url, 0);
     else publishLocalCover();
+}
+
+static void followPlayer(void) {
+    followPlaying();
+    fetchAhead();
 }
 
 void SGRSetNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality) {

@@ -9,6 +9,11 @@
 
 @class SPTPlayerState, SPTPlayerTrack;
 
+// Whether Spotify lets shuffle (repeat NO) or repeat (YES) be changed now: none of the state's restrictions' reasons
+// against it, as Spotify's own Connect menu reads them (autoplay and radio give some; with Spoof Premium,
+// Shared/AdBlock/RadioModes.m lifts those). Allowed when the state has no restrictions to read.
+BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
+
 @interface SGRSystemQueueView : UIView
 @property (nonatomic, copy) void (^onPick)(SPTPlayerTrack *track);
 // A track dragged to another place in its group: the whole list of tracks to come in its new order, to hand Spotify.
@@ -20,6 +25,8 @@
 @property (nonatomic) BOOL showsShuffle, showsRepeat;
 @property (nonatomic, copy) void (^onShuffle)(void);
 @property (nonatomic, copy) void (^onRepeat)(void);
+// A track lifted to be moved (YES) and let go (NO): the page puts its controls away meanwhile, as the Music app does.
+@property (nonatomic, copy) void (^onDragging)(BOOL dragging);
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
 // The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the

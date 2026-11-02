@@ -136,6 +136,9 @@ void SGRPlayerSetCoverAccent(UIColor *cover);
 void SGRPlayerPaintCover(UIView *stack);
 // The color Native redesign's player page (SystemPlayer.m), which draws its own controls, lights them in: white.
 UIColor *SGRPlayerLitColor(void);
+// Native redesign's player page: the title, play and pause, and previous and next in the open lyrics button's see-through
+// white instead of white (its owner, 2026-11-02). Off until switched on, read each time the page shows.
+#define SGRKeyPlayerSoftControls @"spotifyglass.redesign.navbar.player.softControls"
 
 // Shuffle and repeat left out of the controls (PlayerControls.x), each on its own switch under Hide on the player, the
 // way the Music app keeps them off its main controls. Off until switched on, read at launch. The buttons go by alpha
@@ -176,9 +179,12 @@ BOOL SGRPlayerMotionShowing(void);
 // for the Player page's showcase. It plays only in a window, like the player's. While the player has no clip
 // it is the playing track's, which the page looks up itself, by the player's sources and Low Data Mode, into
 // the store the player reads too: nil until it is in, and with `arrived` given the lookup starts, and
-// `arrived` runs once on the main queue when a call would return it (never when nothing is found, or the
+// `arrived` runs once on the main queue when a call would return it, or when nothing was found (never when the
 // track changed). Without `arrived` it only answers with a clip already in.
 UIView *SGRPlayerMotionPreview(void (^arrived)(void));
+// YES when the page's lookup found no clip for `track` a moment ago: `arrived` runs then too, and the page shows Fluid at
+// once instead of keeping the last track's clip up while it waits (SystemPlayer.m's syncClipAnimated:).
+BOOL SGRPlayerMotionNoneFor(NSString *track);
 // Posted on the main queue as the player's own clip comes in or goes (a new track's clip found, none for it, given up,
 // switched off): a page showing SGRPlayerMotionPreview asks it again (the system tab bar's player page, SystemPlayer.m).
 extern NSNotificationName const SGRPlayerMotionDidChangeNotification;
@@ -252,3 +258,6 @@ void SGRPlayerMenuWatch(UIView *button);
 // The ⋯'s background buttons (Show Fluid Artwork, Show Animated Artwork, Show Visualizer, while the background is one of
 // the three) are among them, and `changed` runs after one switches the background, so the page follows at once.
 NSArray<UIMenuElement *> *SGRPlayerMenuPageItems(UIView *anchor, void (^changed)(void));
+// The backgrounds the ⋯ switches between at once (Fluid, Animated, Visualizer) as one submenu, the one shown checked and
+// named under it; nil while the background is not one of them. `changed` runs after a switch.
+UIMenu *SGRPlayerMenuArtwork(void (^changed)(void));

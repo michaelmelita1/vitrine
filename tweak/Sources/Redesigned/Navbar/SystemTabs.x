@@ -113,6 +113,7 @@ static const CGFloat kDeviceRoom = 80;
     UIView *_device;    // the output's device: a tap the AirPlay picker, a hold Spotify's Connect sheet
     NSString *_shownURI;
     BOOL _skipping;     // a swipe settled on a neighbour; the track it asked for has not come yet
+    BOOL _hadTrack, _emptyPending;  // a track shown, and a look again pending before Not Playing
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -244,6 +245,26 @@ static const CGFloat kDeviceRoom = 80;
 }
 
 - (void)show:(SPTPlayerState *)state {
+    // A moment with no track between two (a new playlist loading) is not Not Playing: looked at again after a moment
+    // before the card says so, as the page does (SystemPlayer.m).
+    BOOL hasTrack = [state.track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
+    if (hasTrack) {
+        _hadTrack = YES;
+    } else if (_hadTrack) {
+        if (!_emptyPending) {
+            _emptyPending = YES;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                typeof(self) me = weakSelf;
+                if (!me) return;
+                me->_emptyPending = NO;
+                if ([SGPlayerState().track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")]) return;
+                me->_hadTrack = NO;
+                [me show:SGPlayerState()];
+            });
+        }
+        return;
+    }
     NSString *uri = SGURIString(state.track.URI);
     BOOL changed = uri && _shownURI && ![uri isEqualToString:_shownURI];
     // Which way the track moved, when it moved: to the one that was next, or back to the one before.
@@ -254,6 +275,11 @@ static const CGFloat kDeviceRoom = 80;
     }
     _shownURI = uri;
     _current.track = state.track;
+    // Nothing playing, the Music app's way (its owner's screenshot, 2026-11-02): "Not Playing" by the note, next dimmed.
+    BOOL empty = !hasTrack;
+    if (empty) _current.title.text = @"Not Playing";
+    _next.glyph.alpha = empty ? 0.35 : 1;
+    _next.userInteractionEnabled = !empty;
     _previous.track = SGRPreviousTrack(state);
     _following.track = state.future.firstObject;
     if (changed) {
@@ -270,7 +296,7 @@ static const CGFloat kDeviceRoom = 80;
             } completion:nil];
         }
     }
-    BOOL paused = !state || state.isPaused;
+    BOOL paused = !state || state.isPaused || empty;
     [_play.glyph setSymbol:paused ? @"play.fill" : @"pause.fill" animated:YES];
     _play.accessibilityLabel = paused ? @"Play" : @"Pause";
     [self refreshCover];
@@ -285,7 +311,9 @@ static const CGFloat kDeviceRoom = 80;
 }
 
 - (void)refreshCover {
-    UIImage *cover = SGRNowPlayingCover();
+    BOOL playing = [SGPlayerState().track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
+    if (!playing && _hadTrack) return;
+    UIImage *cover = playing ? SGRNowPlayingCover() : SGRSystemNotPlayingArt();
     if (cover && cover != _cover.image) _cover.image = cover;
 }
 

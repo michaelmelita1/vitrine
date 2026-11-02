@@ -15,6 +15,9 @@
 // glyph at `pointSize`, followed as the output changes; a tap opens the system's AirPlay picker, a hold Spotify's Connect
 // sheet, with the footer's press feel. `place` names it in the log.
 UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place);
+// The cover while nothing plays, the Music app's (its owner's screenshots, 2026-11-02): a gray square with a lighter gray
+// note in it. The page and the mini player both show it, under "Not Playing".
+UIImage *SGRSystemNotPlayingArt(void);
 
 // Posted on the main queue when the page's close is over, gone or let go back by a swipe: a tap on the mini player during
 // the close, which UIKit would refuse while the page is still presented, opens it then if it has gone (SystemTabs.x).

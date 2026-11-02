@@ -186,7 +186,9 @@ UIViewController *SGPlayerSettingsPage(void) {
     NSArray<SGModRow *> *hidden = native ? @[video, tilt]
         : nativeRedesign ? @[SGHideRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle), SGHideRow(@"Repeat", nil, SGRKeyPlayerHideRepeat), video]
         : @[SGHideRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle), SGHideRow(@"Repeat", nil, SGRKeyPlayerHideRepeat), video, tilt];
-    [sections addObject:SGSection(native ? nil : @"Hide on the player", hidden)];
+    // Native redesign puts these in the player page's Controls section, as switches that show them (Redesigned/Player/
+    // PlayerSettings.m), so the section is not repeated here.
+    if (!nativeRedesign) [sections addObject:SGSection(native ? nil : @"Hide on the player", hidden)];
 
     [sections addObject:SGNotedSection(@"Lossless", @[
         SGOptionRow(@"Lossless files", @"Your own FLACs in place of Spotify's stream", SGKeyLossless),

@@ -1,4 +1,5 @@
 #import "SystemQueue.h"
+#import <objc/message.h>
 #import "Core/SGCore.h"
 #import "Headers/SPTPlayer.h"
 #import "Redesigned/Kit/SGRKit.h"
@@ -7,7 +8,7 @@
 // The chips' height and gap, the rows' height, cover side and corners, and the most tracks shown (the player reports
 // far more ahead on a long playlist; the Music app's list is a look ahead too).
 static const CGFloat kChipHeight = 34, kChipGap = 10, kChipsBelow = 14, kRowHeight = 56, kRowCover = 44, kRowCoverRadius = 6;
-static const CGFloat kSideMargin = 28, kListTopFade = 18;
+static const CGFloat kSideMargin = 28, kListTopFade = 18, kListFootFade = 36;
 static const NSUInteger kMostTracks = 60;
 
 static BOOL isTrack(id track) {
@@ -30,7 +31,30 @@ static BOOL isTrack(id track) {
 @property (nonatomic, readonly) UIImageView *cover;
 @property (nonatomic, readonly) UILabel *title, *artist;
 @property (nonatomic, copy) NSString *coverFor;   // the track its cover was asked for, so a late answer for another is dropped
+@property (nonatomic, readonly) UIImageView *grip;  // drawn by the row: the list is not in UIKit's editing, so a swipe works
 @end
+
+// The Music app's reorder grip, measured off its owner's screenshot (2026-11-02): three long thin lines, 25 pt wide,
+// 1.4 pt thick, 6 pt apart, round-ended. Drawn once, a template.
+static UIImage *gripGlyph(void) {
+    static UIImage *glyph;
+    if (glyph) return glyph;
+    CGFloat width = 25, line = 1.4, gap = 6;
+    CGSize size = CGSizeMake(width, 2 * gap + line);
+    glyph = [[[[UIGraphicsImageRenderer alloc] initWithSize:size] imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [UIColor.blackColor setStroke];
+        for (int i = 0; i < 3; i++) {
+            CGFloat y = line / 2 + i * gap;
+            UIBezierPath *path = [UIBezierPath bezierPath];
+            [path moveToPoint:CGPointMake(line / 2, y)];
+            [path addLineToPoint:CGPointMake(width - line / 2, y)];
+            path.lineWidth = line;
+            path.lineCapStyle = kCGLineCapRound;
+            [path stroke];
+        }
+    }] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    return glyph;
+}
 
 @implementation SGRQueueRow
 
@@ -52,7 +76,10 @@ static BOOL isTrack(id track) {
     _artist = [UILabel new];
     _artist.font = SGRFont(UIFontTextStyleFootnote, UIFontWeightRegular, UIContentSizeCategoryExtraExtraLarge);
     _artist.textColor = SGRSecondary();
-    for (UIView *view in @[_cover, _title, _artist]) [self.contentView addSubview:view];
+    _grip = [[UIImageView alloc] initWithImage:gripGlyph()];
+    _grip.tintColor = [UIColor colorWithWhite:1 alpha:0.4];
+    _grip.contentMode = UIViewContentModeCenter;
+    for (UIView *view in @[_cover, _title, _artist, _grip]) [self.contentView addSubview:view];
     return self;
 }
 
@@ -60,7 +87,9 @@ static BOOL isTrack(id track) {
     [super layoutSubviews];
     CGSize size = self.contentView.bounds.size;
     _cover.frame = CGRectMake(kSideMargin, round((size.height - kRowCover) / 2), kRowCover, kRowCover);
-    CGFloat textX = CGRectGetMaxX(_cover.frame) + 12, textWidth = MAX(0, size.width - kSideMargin - textX);
+    CGFloat gripWidth = _grip.hidden ? 0 : 44;
+    _grip.frame = CGRectMake(size.width - kSideMargin + 12 - gripWidth, 0, gripWidth, size.height);
+    CGFloat textX = CGRectGetMaxX(_cover.frame) + 12, textWidth = MAX(0, size.width - kSideMargin - textX - (gripWidth ? gripWidth - 12 : 0));
     CGFloat titleHeight = ceil(_title.font.lineHeight), artistHeight = ceil(_artist.font.lineHeight);
     CGFloat top = round((size.height - titleHeight - artistHeight) / 2);
     _title.frame = CGRectMake(textX, top, textWidth, titleHeight);
@@ -71,12 +100,28 @@ static BOOL isTrack(id track) {
 
 #pragma mark - the queue
 
-@interface SGRSystemQueueView () <UITableViewDataSource, UITableViewDelegate>
+@interface SGRSystemQueueView () <UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate>
 @end
+
+static BOOL noReasons(id limits, NSString *name) {
+    SEL selector = NSSelectorFromString(name);
+    if (![limits respondsToSelector:selector]) return YES;
+    id reasons = ((id (*)(id, SEL))objc_msgSend)(limits, selector);
+    return ![reasons respondsToSelector:@selector(count)] || [reasons count] == 0;
+}
+
+BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
+    SEL restrictions = NSSelectorFromString(@"restrictions");
+    id limits = [state respondsToSelector:restrictions] ? ((id (*)(id, SEL))objc_msgSend)(state, restrictions) : nil;
+    if (!limits) return YES;
+    if (!repeat) return noReasons(limits, @"disallowTogglingShuffleReasons");
+    return noReasons(limits, @"disallowTogglingRepeatContextReasons") || noReasons(limits, @"disallowTogglingRepeatTrackReasons");
+}
 
 @implementation SGRSystemQueueView {
     UIButton *_automix;   // one chip, three states as repeat has: off, AutoMix (beat-matched), Crossfade
     UIButton *_shuffle, *_repeat;   // shown while the controls have them hidden (showsShuffle, showsRepeat)
+    UIButton *_clear;               // clears Playing Next, dimmed while it holds nothing
     BOOL _shuffling;
     NSInteger _repeatMode;          // 0 off, 1 the playlist or album, 2 the track
     UITableView *_list;
@@ -85,6 +130,13 @@ static BOOL isTrack(id track) {
     NSArray<NSString *> *_shownURIs;   // the tracks last shown, so the same queue again is not laid out again
     NSArray *_upcoming;                // Spotify's whole list of tracks to come, when shown from it; nil from the state
     void (^_waiting)(void);            // a new list held back while a finger is on the list (a track being moved)
+    // A track being moved by its grip (reordered:): its row's picture following the finger up and down, the row it stands
+    // in now, and where it was picked up.
+    UIView *_lifted;
+    NSIndexPath *_liftedAt, *_liftedFrom;
+    __weak SPTPlayerTrack *_liftedTrack;   // the track lifted: its row stays hidden wherever UIKit draws it meanwhile
+    CGFloat _liftOffset;
+    BOOL _quietMoves;                  // the moves of one lift handed to Spotify once, at the let go
     BOOL _repeatContext;
 }
 
@@ -107,16 +159,20 @@ static BOOL isTrack(id track) {
     _list.dataSource = self;
     _list.delegate = self;
     _list.showsVerticalScrollIndicator = NO;
-    // Always in reordering, as the Music app's queue has its grips out; a tap still plays the track.
-    _list.editing = YES;
-    _list.allowsSelectionDuringEditing = YES;
-    _list.contentInset = UIEdgeInsetsMake(kListTopFade / 2, 0, 12, 0);
+    // Grips out as the Music app's queue has them, drawn by the rows: a press on a grip lifts its track, which follows the
+    // finger up and down only, iOS's reorder (its owner, 2026-11-02), and a swipe left takes a track out. UIKit's own
+    // reordering turned swipes off, and its drag and drop let the row float anywhere. A tap still plays.
+    UILongPressGestureRecognizer *reorder = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(reordered:)];
+    reorder.minimumPressDuration = 0.08;
+    reorder.delegate = self;
+    [_list addGestureRecognizer:reorder];
+    _list.contentInset = UIEdgeInsetsMake(kListTopFade / 2, 0, kListFootFade, 0);
     [_list registerClass:SGRQueueRow.class forCellReuseIdentifier:@"row"];
     // No gap of the grouped style's own over the first group.
     _list.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, CGFLOAT_MIN)];
     // The list fades out at its top edge, under the chips, as the lyrics' lines do at theirs.
     _listFade = [CAGradientLayer layer];
-    _listFade.colors = @[(id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor];
+    _listFade.colors = @[(id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.clearColor.CGColor];
     _list.layer.mask = _listFade;
     _shuffle = [self chipWithImage:chipSymbol(@"shuffle") title:@"Shuffle"];
     _repeat = [self chipWithImage:chipSymbol(@"repeat") title:@"Repeat"];
@@ -125,8 +181,13 @@ static BOOL isTrack(id track) {
        forControlEvents:UIControlEventTouchUpInside];
     [_repeat addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf stepRepeat]; }]
       forControlEvents:UIControlEventTouchUpInside];
-    for (UIView *view in @[_list, _automix, _shuffle, _repeat]) [self addSubview:view];
+    // Clear, beside AutoMix (its owner, 2026-11-02): every track queued by hand out at once.
+    _clear = [self chipWithImage:chipSymbol(@"xmark") title:@"Clear Playing Next"];
+    _clear.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
+    [_clear addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf tapClear]; }] forControlEvents:UIControlEventTouchUpInside];
+    for (UIView *view in @[_list, _automix, _shuffle, _repeat, _clear]) [self addSubview:view];
     [self syncCrossfade];
+    [self syncClear];
     return self;
 }
 
@@ -156,19 +217,20 @@ static UIImage *crossfadeGlyph(void) {
     return glyph;
 }
 
-// The Music app's AutoMix symbol (its owner's screenshot, 2026-11-02): a ring overlapping a filled disc with a hole in
-// its middle. Drawn once, a template.
+// The Music app's AutoMix symbol (its owner's screenshots, 2026-11-02): a thin, faded ring behind a filled disc with a
+// hole in its middle. Drawn once, a template (the ring's fade is its alpha, which a template keeps).
 static UIImage *automixGlyph(void) {
     static UIImage *glyph;
     if (glyph) return glyph;
     CGSize size = CGSizeMake(26, 16);
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size];
     glyph = [[renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        CGFloat d = 14, y = 1, line = 2.6;
-        [UIColor.blackColor set];
+        CGFloat d = 14, y = 1, line = 1.6;
+        [[UIColor colorWithWhite:0 alpha:0.4] set];
         UIBezierPath *ring = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(CGRectMake(1, y, d, d), line / 2, line / 2)];
         ring.lineWidth = line;
         [ring stroke];
+        [UIColor.blackColor set];
         UIBezierPath *disc = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(size.width - 1 - d, y, d, d)];
         [disc appendPath:[UIBezierPath bezierPathWithOvalInRect:CGRectInset(CGRectMake(size.width - 1 - d, y, d, d), d * 0.32, d * 0.32)]];
         disc.usesEvenOddFillRule = YES;
@@ -226,6 +288,7 @@ static UIImage *chipSymbol(NSString *name) {
 
 // The glyphs alone while Shuffle or Repeat stand beside AutoMix, the Music app's row of four; AutoMix alone keeps its name.
 - (BOOL)glyphsOnly {
+    // AutoMix and Clear alone share the row at half its width each, room for their names (its owner, 2026-11-02).
     return _showsShuffle || _showsRepeat;
 }
 
@@ -284,11 +347,34 @@ static UIImage *chipSymbol(NSString *name) {
 
 - (void)chipsChanged {
     [self syncAutoMixAnimated:NO];
+    [self syncClear];
     [self syncShuffleRepeatAnimated:NO];
     [self setNeedsLayout];
 }
 
 // The tap shows the next state at once, as Spotify's own buttons do; Spotify's state confirms it (showState:).
+- (void)tapClear {
+    if (!SGRReduceMotion()) {
+        UIButton *clear = _clear;
+        clear.transform = CGAffineTransformMakeScale(0.94, 0.94);
+        SGRAnimate(SGRMotionPress, ^{ clear.transform = CGAffineTransformIdentity; }, nil);
+    }
+    [self clearQueued];
+}
+
+// Clear lit while Playing Next holds tracks it can take out, dimmed while not.
+- (void)syncClear {
+    BOOL any = NO;
+    for (SGRQueueGroup *group in _groups) if ([group.heading isEqualToString:@"Playing Next"] && group.tracks.count) any = YES;
+    BOOL on = any && _upcoming != nil;
+    NSString *title = self.glyphsOnly ? nil : @" Clear";
+    if (!([_clear titleForState:UIControlStateNormal] == title || [[_clear titleForState:UIControlStateNormal] isEqualToString:title]))
+        [UIView performWithoutAnimation:^{ [self->_clear setTitle:title forState:UIControlStateNormal]; [self->_clear layoutIfNeeded]; }];
+    [self paintChip:_clear on:NO];
+    _clear.enabled = on;
+    _clear.alpha = on ? 1 : 0.4;
+}
+
 - (void)stepShuffle {
     _shuffling = !_shuffling;
     [self syncShuffleRepeatAnimated:YES];
@@ -329,6 +415,7 @@ static UIImage *chipSymbol(NSString *name) {
     if (_showsShuffle) [chips addObject:_shuffle];
     if (_showsRepeat) [chips addObject:_repeat];
     [chips addObject:_automix];
+    [chips addObject:_clear];
     CGFloat chipWidth = MAX(0, (size.width - 2 * kSideMargin - kChipGap * (chips.count - 1)) / chips.count);
     [chips enumerateObjectsUsingBlock:^(UIView *chip, NSUInteger i, BOOL *stop) {
         chip.bounds = CGRectMake(0, 0, chipWidth, kChipHeight);
@@ -339,8 +426,10 @@ static UIImage *chipSymbol(NSString *name) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     _listFade.frame = _list.bounds;
-    CGFloat edge = _list.bounds.size.height > 0 ? MIN(0.3, kListTopFade / _list.bounds.size.height) : 0;
-    _listFade.locations = @[@0, @(edge), @1];
+    // Faded at the top under the chips, and at the foot over the progress bar (its owner, 2026-11-02).
+    CGFloat height = _list.bounds.size.height;
+    CGFloat edge = height > 0 ? MIN(0.3, kListTopFade / height) : 0, foot = height > 0 ? MIN(0.3, kListFootFade / height) : 0;
+    _listFade.locations = @[@0, @(edge), @(1 - foot), @1];
     [CATransaction commit];
 }
 
@@ -350,7 +439,7 @@ static UIImage *chipSymbol(NSString *name) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         typeof(self) me = weakSelf;
         if (!me || !me->_waiting) return;
-        if (me->_list.isTracking || me->_list.isDragging) { [me showWaitingLater]; return; }
+        if (me->_list.isTracking || me->_list.isDragging || me->_lifted) { [me showWaitingLater]; return; }
         void (^show)(void) = me->_waiting;
         me->_waiting = nil;
         show();
@@ -380,8 +469,14 @@ static UIImage *chipSymbol(NSString *name) {
     _repeatContext = options.repeatingContext;
     [self syncCrossfade];
     // Spotify's own state for Shuffle and Repeat, animated when it changed while shown.
-    BOOL shuffling = options.shufflingContext;
-    NSInteger repeatMode = options.repeatingTrack ? 2 : options.repeatingContext ? 1 : 0;
+    // Off and dimmed while Spotify does not let them change (autoplay, radio), as its Connect menu shows them.
+    BOOL shuffleAllowed = SGRSystemOptionAllowed(state, NO), repeatAllowed = SGRSystemOptionAllowed(state, YES);
+    BOOL shuffling = shuffleAllowed && options.shufflingContext;
+    NSInteger repeatMode = !repeatAllowed ? 0 : options.repeatingTrack ? 2 : options.repeatingContext ? 1 : 0;
+    _shuffle.enabled = shuffleAllowed;
+    _repeat.enabled = repeatAllowed;
+    _shuffle.alpha = shuffleAllowed ? 1 : 0.4;
+    _repeat.alpha = repeatAllowed ? 1 : 0.4;
     BOOL changed = shuffling != _shuffling || repeatMode != _repeatMode;
     _shuffling = shuffling;
     _repeatMode = repeatMode;
@@ -392,7 +487,7 @@ static UIImage *chipSymbol(NSString *name) {
     // The state's few never stand in for the whole list already shown: Spotify's whole queue follows them each time.
     if (!upcoming.count && _upcoming) return;
     // Never laid out anew under a finger: a reload in the middle of a move drops the row being moved.
-    if (_list.isTracking || _list.isDragging) {
+    if (_list.isTracking || _list.isDragging || _lifted) {
         __weak typeof(self) weakSelf = self;
         BOOL scheduled = _waiting != nil;
         _waiting = ^{ [weakSelf showState:state upcoming:upcoming from:contextTitle]; };
@@ -435,6 +530,7 @@ static UIImage *chipSymbol(NSString *name) {
     _shownURIs = @[signature];
     _groups = groups;
     [_list reloadData];
+    [self syncClear];
 }
 
 #pragma mark - UITableViewDataSource
@@ -455,6 +551,8 @@ static UIImage *chipSymbol(NSString *name) {
     row.accessibilityLabel = [NSString stringWithFormat:@"%@, %@", track.trackTitle ?: @"", row.artist.text ?: @""];
     NSString *uri = SGURIString(track.URI) ?: @"";
     row.coverFor = uri;
+    row.grip.hidden = _upcoming == nil;
+    row.alpha = _lifted && track == _liftedTrack ? 0 : 1;
     row.cover.image = nil;
     __weak SGRQueueRow *weakRow = row;
     SGRTrackPicture(track, ^(UIImage *image) {
@@ -494,14 +592,6 @@ static UIImage *chipSymbol(NSString *name) {
 
 #pragma mark - moving tracks
 
-- (UITableViewCellEditingStyle)tableView:(UITableView *)table editingStyleForRowAtIndexPath:(NSIndexPath *)path {
-    return UITableViewCellEditingStyleNone;
-}
-
-- (BOOL)tableView:(UITableView *)table shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)path {
-    return NO;
-}
-
 - (BOOL)tableView:(UITableView *)table canMoveRowAtIndexPath:(NSIndexPath *)path {
     return _upcoming != nil;
 }
@@ -530,7 +620,14 @@ static UIImage *chipSymbol(NSString *name) {
     [whole removeObjectAtIndex:fromIndex];
     [whole insertObject:item atIndex:toIndex];
     _upcoming = [whole copy];
-    // The places anew: the tracks in the whole list's order, handed out to the rows in theirs.
+    [self renumberPlaces];
+    _shownURIs = nil;
+    if (!_quietMoves && self.onReorder) self.onReorder(_upcoming);
+}
+
+// The places anew: the tracks in the whole list's order, handed out to the rows in theirs.
+- (void)renumberPlaces {
+    NSArray *whole = _upcoming;
     NSUInteger g = 0, row = 0, shown = 0;
     for (NSUInteger place = 0; place < whole.count && g < _groups.count; place++) {
         if (!isTrack(whole[place]) || shown >= kMostTracks) continue;
@@ -538,8 +635,203 @@ static UIImage *chipSymbol(NSString *name) {
         while (g < _groups.count && row >= _groups[g].places.count) { g++; row = 0; }
         if (g < _groups.count) _groups[g].places[row++] = @(place);
     }
+}
+
+#pragma mark - moving by the grip
+
+// Only a press on a movable row's grip: the rest of the row scrolls, taps and swipes as before.
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
+    if (!_upcoming) return NO;
+    CGPoint point = [recognizer locationInView:_list];
+    NSIndexPath *path = [_list indexPathForRowAtPoint:point];
+    SGRQueueRow *row = path ? (SGRQueueRow *)[_list cellForRowAtIndexPath:path] : nil;
+    if (![row isKindOfClass:SGRQueueRow.class] || row.grip.hidden) return NO;
+    CGRect grip = [row.grip convertRect:CGRectInset(row.grip.bounds, -8, 0) toView:_list];
+    return CGRectContainsPoint(grip, point);
+}
+
+- (void)reordered:(UILongPressGestureRecognizer *)press {
+    CGPoint point = [press locationInView:_list];
+    switch (press.state) {
+        case UIGestureRecognizerStateBegan: {
+            NSIndexPath *path = [_list indexPathForRowAtPoint:point];
+            UITableViewCell *cell = path ? [_list cellForRowAtIndexPath:path] : nil;
+            if (!cell) return;
+            // The row's picture on a thin blur, the Music app's lifted row (its owner, 2026-11-02): the rows under it show
+            // through softened, with a light tint over them.
+            UIView *picture = [[UIView alloc] initWithFrame:cell.frame];
+            picture.layer.shadowColor = UIColor.blackColor.CGColor;
+            picture.layer.shadowOpacity = 0.3;
+            picture.layer.shadowRadius = 10;
+            picture.layer.shadowOffset = CGSizeMake(0, 4);
+            UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+            blur.frame = picture.bounds;
+            blur.layer.cornerRadius = 10;
+            blur.layer.cornerCurve = kCACornerCurveContinuous;
+            blur.clipsToBounds = YES;
+            blur.contentView.backgroundColor = [UIColor colorWithWhite:1 alpha:0.06];
+            [picture addSubview:blur];
+            UIView *content = [cell snapshotViewAfterScreenUpdates:NO];
+            content.frame = picture.bounds;
+            [picture addSubview:content];
+            [_list addSubview:picture];
+            _lifted = picture;
+            _liftedAt = _liftedFrom = path;
+            _liftedTrack = _groups[(NSUInteger)path.section].tracks[(NSUInteger)path.row];
+            _liftOffset = point.y - cell.center.y;
+            cell.alpha = 0;
+            [UISelectionFeedbackGenerator.new selectionChanged];
+            SGRAnimate(SGRMotionPress, ^{ picture.transform = CGAffineTransformMakeScale(1.02, 1.02); }, nil);
+            if (self.onDragging) self.onDragging(YES);
+            break;
+        }
+        case UIGestureRecognizerStateChanged: {
+            if (!_lifted) return;
+            // Up and down only, held inside the rows of its own group.
+            NSInteger section = _liftedAt.section;
+            NSInteger rows = [_list numberOfRowsInSection:section];
+            CGRect first = [_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:section]];
+            CGRect last = [_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:MAX(0, rows - 1) inSection:section]];
+            CGFloat y = MIN(MAX(point.y - _liftOffset, CGRectGetMidY(first)), CGRectGetMidY(last));
+            _lifted.center = CGPointMake(_lifted.center.x, y);
+            // The list scrolls under a finger held near its top or foot.
+            CGFloat top = _list.contentOffset.y + _list.adjustedContentInset.top, foot = _list.contentOffset.y + _list.bounds.size.height - _list.adjustedContentInset.bottom;
+            CGFloat step = point.y < top + 44 ? -8 : point.y > foot - 44 ? 8 : 0;
+            if (step) {
+                CGFloat minY = -_list.adjustedContentInset.top, maxY = MAX(minY, _list.contentSize.height + _list.adjustedContentInset.bottom - _list.bounds.size.height);
+                _list.contentOffset = CGPointMake(0, MIN(MAX(_list.contentOffset.y + step, minY), maxY));
+            }
+            NSIndexPath *target = [_list indexPathForRowAtPoint:CGPointMake(CGRectGetMidX(_list.bounds), y)];
+            if (!target || target.section != section || [target isEqual:_liftedAt]) return;
+            _quietMoves = YES;
+            [self tableView:_list moveRowAtIndexPath:_liftedAt toIndexPath:target];
+            _quietMoves = NO;
+            // The place first: UIKit draws rows anew during the move, and the lifted one must already be known there.
+            NSIndexPath *was = _liftedAt;
+            _liftedAt = target;
+            [_list moveRowAtIndexPath:was toIndexPath:target];
+            [_list cellForRowAtIndexPath:target].alpha = 0;
+            [UISelectionFeedbackGenerator.new selectionChanged];
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed: {
+            UIView *picture = _lifted;
+            if (!picture) return;
+            NSIndexPath *at = _liftedAt;
+            BOOL moved = ![at isEqual:_liftedFrom];
+            _lifted = nil;
+            _liftedTrack = nil;
+            UITableViewCell *cell = [_list cellForRowAtIndexPath:at];
+            CGRect home = [_list rectForRowAtIndexPath:at];
+            SGRAnimate(SGRMotionLayout, ^{
+                picture.transform = CGAffineTransformIdentity;
+                picture.center = CGPointMake(CGRectGetMidX(home), CGRectGetMidY(home));
+                picture.layer.shadowOpacity = 0;
+            }, ^(BOOL finished) {
+                cell.alpha = 1;
+                [picture removeFromSuperview];
+            });
+            if (self.onDragging) self.onDragging(NO);
+            if (moved && self.onReorder) self.onReorder(_upcoming);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+#pragma mark - clearing the queue
+
+// Every track queued by hand (the Playing Next group) out at once, the Music app's Clear (its owner, 2026-11-02).
+- (void)clearQueued {
+    if (!_upcoming) return;
+    NSUInteger index = NSNotFound;
+    for (NSUInteger i = 0; i < _groups.count; i++) if ([_groups[i].heading isEqualToString:@"Playing Next"]) index = i;
+    if (index == NSNotFound) return;
+    NSMutableIndexSet *places = [NSMutableIndexSet indexSet];
+    for (NSNumber *place in _groups[index].places) [places addIndex:place.unsignedIntegerValue];
+    NSMutableArray *whole = [_upcoming mutableCopy];
+    [places enumerateIndexesWithOptions:NSEnumerationReverse usingBlock:^(NSUInteger place, BOOL *stop) {
+        if (place < whole.count) [whole removeObjectAtIndex:place];
+    }];
+    _upcoming = [whole copy];
+    NSMutableArray<SGRQueueGroup *> *groups = [_groups mutableCopy];
+    [groups removeObjectAtIndex:index];
+    _groups = groups;
+    [self renumberPlaces];
     _shownURIs = nil;
+    if (_groups.count) [_list deleteSections:[NSIndexSet indexSetWithIndex:index] withRowAnimation:UITableViewRowAnimationFade];
+    else [_list reloadData];
+    SGLog(@"system player: queue cleared, %lu tracks out", (unsigned long)places.count);
+    [self syncClear];
     if (self.onReorder) self.onReorder(_upcoming);
+}
+
+#pragma mark - removing tracks
+
+// A track taken out of what is to come (its owner, 2026-11-02): out of the whole list, handed back to Spotify as a move
+// is (onReorder, setQueue:), and its row out of the list at once. A group left empty goes with its heading.
+- (void)removeRowAt:(NSIndexPath *)path {
+    if (!_upcoming || (NSUInteger)path.section >= _groups.count) return;
+    SGRQueueGroup *group = _groups[(NSUInteger)path.section];
+    if ((NSUInteger)path.row >= group.tracks.count) return;
+    NSUInteger place = group.places[(NSUInteger)path.row].unsignedIntegerValue;
+    NSMutableArray *whole = [_upcoming mutableCopy];
+    if (place >= whole.count) return;
+    [whole removeObjectAtIndex:place];
+    _upcoming = [whole copy];
+    [group.tracks removeObjectAtIndex:(NSUInteger)path.row];
+    [group.places removeObjectAtIndex:(NSUInteger)path.row];
+    BOOL emptied = group.tracks.count == 0;
+    if (emptied) {
+        NSMutableArray<SGRQueueGroup *> *groups = [_groups mutableCopy];
+        [groups removeObjectAtIndex:(NSUInteger)path.section];
+        _groups = groups;
+    }
+    [self renumberPlaces];
+    _shownURIs = nil;
+    // The last group gone, the list is drawn again whole: a reload may not run inside a batch of updates.
+    if (emptied && !_groups.count) [_list reloadData];
+    else if (emptied) [_list deleteSections:[NSIndexSet indexSetWithIndex:(NSUInteger)path.section] withRowAnimation:UITableViewRowAnimationFade];
+    else [_list deleteRowsAtIndexPaths:@[path] withRowAnimation:UITableViewRowAnimationFade];
+    [self syncClear];
+    if (self.onReorder) self.onReorder(_upcoming);
+}
+
+// Where a track's row is now, by the track itself; nil once it has gone.
+- (NSIndexPath *)placeOfTrack:(SPTPlayerTrack *)track {
+    if (!track) return nil;
+    for (NSUInteger section = 0; section < _groups.count; section++) {
+        NSUInteger row = [_groups[section].tracks indexOfObjectIdenticalTo:track];
+        if (row != NSNotFound) return [NSIndexPath indexPathForRow:(NSInteger)row inSection:(NSInteger)section];
+    }
+    return nil;
+}
+
+// A swipe to the left, as the Music app's queue has: Remove.
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)table trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)path {
+    if (!_upcoming) return nil;
+    if ((NSUInteger)path.section >= _groups.count || (NSUInteger)path.row >= _groups[(NSUInteger)path.section].tracks.count) return nil;
+    __weak typeof(self) weakSelf = self;
+    // The track itself, found again at the tap: the list can be drawn anew while the button shows, and the row's place
+    // then holds another track.
+    __weak SPTPlayerTrack *track = _groups[(NSUInteger)path.section].tracks[(NSUInteger)path.row];
+    // A round red button with a minus, the Music app's (its owner's recording, 2026-11-02): the glyph alone, no title.
+    UIContextualAction *remove = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:nil
+                                                                       handler:^(UIContextualAction *action, UIView *view, void (^done)(BOOL)) {
+        NSIndexPath *now = [weakSelf placeOfTrack:track];
+        if (now) [weakSelf removeRowAt:now];
+        done(now != nil);
+    }];
+    // The Music app's: a white disc with the minus cut through it, on the red (its owner's screenshot, 2026-11-02).
+    remove.image = [UIImage systemImageNamed:@"minus.circle.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightSemibold]];
+    remove.backgroundColor = UIColor.systemRedColor;
+    remove.accessibilityLabel = @"Remove";
+    UISwipeActionsConfiguration *config = [UISwipeActionsConfiguration configurationWithActions:@[remove]];
+    config.performsFirstActionWithFullSwipe = YES;
+    return config;
 }
 
 - (UIView *)tableView:(UITableView *)table viewForFooterInSection:(NSInteger)section {

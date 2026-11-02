@@ -31,6 +31,7 @@
 #import "Redesigned/NowPlayingBar/NowPlayingBar.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Shared/Player/SGLastTrack.h"
+#import "Shared/Player/PlayerSettings.h"
 #import "Player.h"
 
 // The card's height as a share of its width, kept between the two bounds.
@@ -365,8 +366,16 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
     // Native redesign draws its own player page and mini player: Follow the cover, Spotify's icons and the glass bar's Mini
     // player section are not theirs, and its mini player's rows are on a page of their own (App/Pages.m).
     if (SGNativeRedesignStored()) {
-        [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume)],
-            @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device.")];
+        // One section for what the page's controls show, each switch on to show its control (its owner, 2026-11-02): Hide
+        // on the player's Shuffle, Repeat and Switch to video turned round, on the same keys.
+        [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
+                                                          SGShownRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle),
+                                                          SGShownRow(@"Repeat", nil, SGRKeyPlayerHideRepeat),
+                                                          SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch),
+                                                          SGOptionRow(@"Match the lyrics button", @"The title, play and pause, and skip", SGRKeyPlayerSoftControls)],
+            @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
+            @"Shuffle and Repeat switched off move into the queue's row. "
+            @"Match the lyrics button draws the song's title, play and pause, and skip buttons in the see-through white of the lyrics and queue buttons while they're open.")];
     } else {
         [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
                                                           SGOptionRow(@"Follow the cover", nil, SGRKeyPlayerFollowsCover),

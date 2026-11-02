@@ -576,6 +576,14 @@ static NSString *sg_previewTrack;
 static NSURL *sg_previewFile;
 static UIImage *sg_previewPoster;
 static void (^sg_previewArrived)(void);
+// The last track the page's walk found no clip for, and when: asked again within kNoneKept, it is not walked again.
+static NSString *sg_noneTrack;
+static CFTimeInterval sg_noneAt;
+static const CFTimeInterval kNoneKept = 30;
+
+BOOL SGRPlayerMotionNoneFor(NSString *track) {
+    return SGRSystemTabsOn() && track && [track isEqualToString:sg_noneTrack] && CACurrentMediaTime() - sg_noneAt < kNoneKept;
+}
 
 UIView *SGRPlayerMotionPreview(void (^arrived)(void)) {
     SGShownTrack *shown = SGShownTrackNow();
@@ -588,6 +596,7 @@ UIView *SGRPlayerMotionPreview(void (^arrived)(void)) {
     BOOL asked = [track isEqualToString:sg_previewTrack];
     if (asked && sg_previewFile) return previewOf(sg_previewFile, sg_previewPoster);
     if (!arrived) return nil;
+    if (SGRPlayerMotionNoneFor(track)) return nil;
     // The newest page's to be told; a walk already out for this track is waited on rather than asked again.
     sg_previewArrived = [arrived copy];
     if (asked) return nil;
@@ -598,10 +607,16 @@ UIView *SGRPlayerMotionPreview(void (^arrived)(void)) {
     SGMotionClipFor(track, shown.canvasURL, shown.artist, shown.album, SGMotionTall, SGMotionPixels(),
                     ^(NSURL *file, NSString *source) {
         if (![track isEqualToString:sg_previewTrack]) return;
-        // Nothing found is not kept: the page asks again the next time it shows Animated.
+        // Nothing found is kept a little while (SGRPlayerMotionNoneFor), and the page told, so it shows Fluid at once
+        // rather than waiting out its hold (its owner, 2026-11-02: Animated to Fluid lagged).
+        // Native redesign's alone: the redesigned player's page keeps main's way (nothing kept, nobody told).
         if (!file) {
+            void (^done)(void) = SGRSystemTabsOn() ? sg_previewArrived : nil;
             sg_previewTrack = nil;
             sg_previewArrived = nil;
+            sg_noneTrack = track;
+            sg_noneAt = CACurrentMediaTime();
+            if (done) done();
             return;
         }
         SGMotionPoster(file, ^(UIImage *poster) {

@@ -212,10 +212,10 @@ static const CGFloat kDeviceRoom = 80;
     }
     _play.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
     right -= button;
-    // The device button before play when the Mini player page has it on: over the bar always, in the bar's row only as
-    // the glass bar keeps it there (its row key, which the switch sets with it) and while the title keeps room.
+    // The AirPlay button before play while the Mini player page has it on, over the bar and in its row alike, while the
+    // title keeps room.
     CGFloat textX = CGRectGetMaxX(_cover.frame) + 10;
-    BOOL device = !SGHidden(SGRHideBarConnect) && (!inlined || SGFlag(SGRKeyBarInlineConnect, NO)) && right - button - 4 - textX >= kDeviceRoom;
+    BOOL device = SGEnabled(SGRKeyMiniPlayerAirPlay) && right - button - 4 - textX >= kDeviceRoom;
     _device.hidden = !device;
     if (device) {
         _device.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);

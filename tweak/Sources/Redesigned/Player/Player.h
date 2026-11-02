@@ -16,6 +16,8 @@
 //     PlayerScroll.x     the list held at its top, so the player is one screen and cannot be scrolled up,
 //                        and its pull held off while the progress bar is scrubbed
 //     PlayerLyrics.x     the lyrics in the player: the cover as a thumbnail, the title up beside it
+//     PlayerGestures.x   the gestures' hookup
+//     PlayerMorph.x      the open and close grown out of the now playing bar's card, the cover flown
 //     PlayerMotion.x     Animated artwork: the Canvas or Apple Music's animated cover behind the player
 //     PlayerVisualiser.m the Visualizer background: a calm spectrum of the song in the cover's colors, read
 //                        through SGRSpectrum.m from the audio effects' tap on Spotify's output
@@ -201,7 +203,7 @@ void SGRPlayerMenuSetBackground(SGRPlayerBackgroundKind kind);
 #pragma mark - Mod Settings (PlayerSettings.m)
 
 // The redesign's Player page: a card of the player over the background chosen and the control that picks
-// it, the background's rows and its Controls under it, then `more`, the sections either look
+// it, the background's rows and the Mini player section under it, then `more`, the sections either look
 // shares (App/Pages.m).
 UIViewController *SGRPlayerSettingsPage(NSArray *more);
 
@@ -214,7 +216,7 @@ void SGRPlayerVanish(UIView *view);
 void SGRPlayerPlayGlyphIn(UIView *host);
 
 // The footer's shared parts (PlayerFooter.x), for the AI DJ's footer (DJPlayer.x). `row` is the footer unit's view:
-// moved down over the home indicator with the controls following, the volume row placed and the lit controls painted.
+// moved down over the home indicator with the controls following, the volume row and Follow the cover placed.
 void SGRPlayerLowerRow(UIView *row);
 // Connect's glyph in `connect`, laid out and with the device name hidden; nil while it has no size yet, and `host`
 // then lays out again on the next turn of the run loop. Leave Connect where it is while it is nil.

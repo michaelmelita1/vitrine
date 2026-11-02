@@ -2029,12 +2029,15 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
               player ? NSStringFromClass([player class]) : @"nil");
         return;
     }
+    // The fetched queue is Spotify's own object: its tracks go back as they were if the hand-back throws.
+    NSArray *before = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
     @try {
         [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
         [player setQueue:queue];
         SGLog(@"system player: queue moved, %lu tracks handed back", (unsigned long)upcoming.count);
     } @catch (NSException *e) {
         SGLog(@"system player: queue move failed: %@", e.reason);
+        @try { if (before) [(id<SPTPlayerQueue>)queue setNextTracks:before]; } @catch (NSException *again) {}
     }
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{

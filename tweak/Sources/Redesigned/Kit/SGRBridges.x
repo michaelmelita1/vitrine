@@ -99,6 +99,59 @@ static NSURLSession *artworkSession(void) {
     return session;
 }
 
+void SGRTrackPicture(SPTPlayerTrack *track, void (^done)(UIImage *image)) {
+    if (!done) return;
+    static NSCache<NSString *, UIImage *> *cache;
+    if (!cache) {
+        cache = [NSCache new];
+        cache.countLimit = 120;
+    }
+    // The smallest size first: a list's cover is small.
+    NSDictionary *metadata = [track respondsToSelector:@selector(metadata)] ? track.metadata : nil;
+    NSURL *url = nil;
+    NSString *key = nil;
+    if ([metadata isKindOfClass:NSDictionary.class]) {
+        for (NSString *field in @[@"image_small_url", @"image_url", @"image_large_url"]) {
+            NSString *stored = SGLocalFileCoverInURL(metadata[field]);
+            if (stored) {
+                url = [NSURL fileURLWithPath:stored];
+                key = stored;
+                break;
+            }
+            NSString *value = metadata[field], *identifier = imageIDIn(value);
+            if (!identifier) continue;
+            url = [value hasPrefix:@"https://"] ? [NSURL URLWithString:value] : [NSURL URLWithString:[@"https://i.scdn.co/image/" stringByAppendingString:identifier]];
+            key = identifier;
+            break;
+        }
+    }
+    if (!url || !key) {
+        done(nil);
+        return;
+    }
+    UIImage *known = [cache objectForKey:key];
+    if (known) {
+        done(known);
+        return;
+    }
+    void (^finish)(NSData *) = ^(NSData *data) {
+        UIImage *image = data.length ? [UIImage imageWithData:data] : nil;
+        image = [image imageByPreparingThumbnailOfSize:CGSizeMake(120, 120)] ?: image;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (image) [cache setObject:image forKey:key];
+            done(image);
+        });
+    };
+    if (url.isFileURL) {
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{ finish([NSData dataWithContentsOfURL:url]); });
+        return;
+    }
+    [[artworkSession() dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+        finish(status == 200 ? data : nil);
+    }] resume];
+}
+
 // A stored cover is read and decoded off the main thread; there is nothing to try again.
 static void loadStoredPicture(NSString *key, NSURL *url) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -205,6 +258,11 @@ UIImage *SGRNowPlayingArtwork(NSString **trackURI, NSString **identity) {
             : [NSString stringWithFormat:@"%@#%lu", sg_artworkKey, (unsigned long)sg_artworkSerial];
     }
     return sg_artwork;
+}
+
+BOOL SGRNowPlayingArtworkCurrent(void) {
+    followPlayer();
+    return sg_artwork && sg_wantedKey && [sg_artworkKey isEqualToString:sg_wantedKey];
 }
 
 // The player's reports, in the order they come.

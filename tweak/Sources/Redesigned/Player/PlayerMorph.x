@@ -24,6 +24,7 @@
 // Skipped on a regular width (Spotify's iPad branch), with Reduce Motion on, or while the bar has no
 // card (hidden, not styled yet): Spotify's own transition then runs untouched.
 #import "Core/SGCore.h"
+#import "Redesigned/Navbar/Navbar.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Redesigned/NowPlayingBar/NowPlayingBar.h"
 #import "Player.h"
@@ -522,6 +523,8 @@ static void followTransition(id transition, id<UIViewControllerContextTransition
 
 %ctor {
     if (!SGRedesignedUI()) return;
+    // Native redesign opens a player page of the mod's from its own mini player (Redesigned/Navbar/SystemPlayerTransition.m).
+    if (SGRSystemTabsOn()) return;
     %init;
     SGRequireClasses(@[@"SPTBarOverlayPresentationTransition"]);
 }

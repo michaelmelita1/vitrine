@@ -37,3 +37,10 @@ CGFloat SGRNowPlayingStripHeight(void);
 // The Jam strip in `host`'s coordinates, through any transform between them (the minimized tab bar's row moves the
 // bar by one); CGRectNull outside a Jam or when the strip is not inside `host`.
 CGRect SGRNowPlayingStripFrameIn(UIView *host);
+
+// Native redesign's mini player settings, a page of the redesign's Player page (App/Pages.m) in place of the Mini player
+// section: Apple Music style, Swipe to skip and the Skip and AirPlay buttons of its mini player (SystemTabs.x).
+UIViewController *SGRMiniPlayerSettingsPage(void);
+// For Native redesign's mini player and player page (Redesigned/Navbar/SystemTabs.x): the cover Spotify's bar shows, nil
+// before it has one. Spotify's bar itself is kept out of sight then.
+UIImage *SGRNowPlayingCover(void);

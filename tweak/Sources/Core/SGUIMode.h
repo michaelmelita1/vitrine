@@ -30,3 +30,12 @@ BOOL SGNativeUI(void);
 // The stored switch rather than the launch's (below iOS 26, with the warning accepted), for settings pages opened after it was flipped: they
 // show what the restart will bring.
 BOOL SGRedesignedUIStored(void);
+
+// Native redesign, a switch under Redesigned UI (iOS 26 and on): the redesign with iOS's own tab bar, the mod's mini player
+// in it and the mod's own player page (Redesigned/Navbar/SystemTabs.x, SystemPlayer.m) in place of the glass bar, the
+// glass now playing bar and Spotify's player. Its settings take the place of the ones those had; off, the redesign is
+// as it was. Off until switched on, read once at launch like the look.
+#define SGKeyNativeRedesign @"spotifyglass.redesign.native"
+BOOL SGNativeRedesign(void);
+// The stored switch, for settings pages: what the restart brings.
+BOOL SGNativeRedesignStored(void);

@@ -69,3 +69,32 @@ void SGRShrinkTabTitles(UIView *bar);
 
 UIViewController *SGRNavbarSettingsPage(void);   // the tab editor, in Mod Settings
 UIViewController *SGRNavbarEditorPage(void);     // the tab editor alone, for the welcome tour
+
+// Native redesign's tab bar (SystemTabs.x). A UITabBarController over Spotify's tab area, its tabs Spotify's own and
+// the mod's mini player in its bottomAccessory, so UIKit minimizes the bar and moves the mini player into its row as the
+// Music app does. On with Native redesign (Core/SGUIMode.h's SGNativeRedesign), read once at launch.
+BOOL SGRSystemTabsOn(void);
+// A sideways swipe on the system tab bar's mini player pages to the next or previous track (SystemTabs.x). On until
+// switched off on the Mini player page, read at each swipe.
+#define SGRKeyMiniPlayerSwipe @"spotifyglass.redesign.navbar.miniPlayerSwipe"
+// The next button beside play on the system tab bar's mini player (SystemTabs.x). On until switched off on the Mini player
+// page, read at each of its layouts.
+#define SGRKeyMiniPlayerNext @"spotifyglass.redesign.navbar.miniPlayerNext"
+// Lays the system tab bar's mini player out again, for a setting of the Mini player page that changed; nothing without it.
+void SGRRefreshMiniPlayer(void);
+// TabBar.x hands it Spotify's tab items and the one on screen at each of Spotify's bar passes.
+void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UIView *> *sources, UIView *active);
+// TabBarMinimize.x hands it the page's scroll view as it scrolls, for UIKit's minimize on scroll.
+void SGRSystemTabsFollowScroll(UIScrollView *scrollView);
+// TabBar.x's tab items, for SystemTabs.x: an item's glyph (filled when active), its name, and a tap passed on to it.
+UIImage *SGRTabSourceGlyph(UIView *source, BOOL active);
+NSString *SGRTabSourceTitle(UIView *source);
+// Whether Spotify's item is the active tab now, read off its own label as the glass bar reads it: Spotify swaps the item's
+// icon to the filled one while it is, so the glyph read then is the filled one.
+BOOL SGRTabSourceIsActive(UIView *source);
+void SGRForwardTabTap(UIView *source);
+// The system bar minimized and expanded by the mod's own rule (TabBarMinimize.x) through the controller's own setter,
+// when this iOS has one (SGRSystemTabsCanMinimize); else UIKit's minimize on scroll stays.
+BOOL SGRSystemTabsCanMinimize(void);
+BOOL SGRSystemTabsMinimized(void);
+void SGRSystemTabsSetMinimized(BOOL minimized);

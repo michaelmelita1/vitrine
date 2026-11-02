@@ -28,6 +28,10 @@ CGRect SGRPlayerCoverFrameIn(UIView *host) {
 void SGRPlayerSetCoverHidden(BOOL hidden) { sg_cover.alpha = hidden ? 0 : 1; }
 // A playing cover at full size, and no animated artwork over it (PlayerMotion.x).
 CGFloat SGRPlayerCoverScale(void) { return 1; }
+// Outside a Jam: no strip over the bar. Native redesign off, so the morph is installed.
+CGRect SGRNowPlayingStripFrameIn(UIView *host) { return CGRectNull; }
+CGFloat SGRNowPlayingStripHeight(void) { return 0; }
+BOOL SGRSystemTabsOn(void) { return NO; }
 BOOL SGRPlayerMotionShowing(void) { return NO; }
 id SGRPlayerField(void) { return nil; }
 UIImage *SGRNowPlayingArtwork(NSString **uri, NSString **identity) { return sg_art; }

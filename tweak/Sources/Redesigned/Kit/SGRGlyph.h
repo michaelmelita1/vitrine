@@ -14,7 +14,16 @@
 // A swap replaces the glyph with the symbol transition on iOS 17 (none under Reduce Motion); the same
 // symbol again is a no-op.
 - (void)setSymbol:(NSString *)symbol animated:(BOOL)animated;
+// The same at `speed` times SF Symbols' replace pace (the plain call is 2).
+- (void)setSymbol:(NSString *)symbol animated:(BOOL)animated speed:(CGFloat)speed;
+// Symbols drawn without their text baseline, so a scale of the glyph (a press, the replace between symbols) keeps its
+// middle where it is rather than sinking to the baseline. Set before the next symbol.
+@property (nonatomic) BOOL withoutBaseline;
 @end
+
+// A glyph drawn pressed (dimmed and a little smaller) or let go of, with the press motion: the glyph button's own, for
+// a glyph drawn inside a control of Spotify's.
+void SGRGlyphPress(UIView *glyph, BOOL pressed);
 
 // A glyph that is a button: at least 44pt to touch whatever the glyph's size, dims and springs back
 // when pressed, 0.35 alpha and "dimmed" to VoiceOver when disabled, and shows the large content

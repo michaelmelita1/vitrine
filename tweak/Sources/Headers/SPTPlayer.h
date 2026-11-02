@@ -66,4 +66,17 @@
 - (id)setShufflingContext:(BOOL)on;
 - (id)setRepeatingContext:(BOOL)on;
 - (id)setRepeatingTrack:(BOOL)on;
+// The whole queue, SPTPlayerQueue, handed to `callback` on `queue` (SPTEsperantoPlayer, 9.1.90: listed on the phone,
+// 2026-11-02, v32@0:8@?16@24).
+- (void)fetchQueue:(void (^)(id queue))callback on:(dispatch_queue_t)queue;
+// Hands Spotify a queue back, an SPTPlayerQueue as fetched with its nextTracks set anew (listed on the phone, 2026-11-02).
+// Declared void: its return type is not proven, and a void read as an object would be retained as garbage.
+- (void)setQueue:(id)queue;
+@end
+
+// Spotify's queue: the track playing, the ones before and every one to come (the state's future holds only the next
+// two or three), SPTPlayerTrack each, read with a type check.
+@protocol SPTPlayerQueue <NSObject>
+@property (nonatomic, copy) NSArray *nextTracks;
+@property (nonatomic, readonly) NSArray *prevTracks;
 @end

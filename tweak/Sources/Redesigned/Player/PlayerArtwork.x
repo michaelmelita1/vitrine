@@ -250,6 +250,10 @@ static void watchHold(UIView *tilt) {
     objc_setAssociatedObject(tilt, &kHoldKey, hold, OBJC_ASSOCIATION_ASSIGN);
 }
 
+void SGRPlayerAttachCoverHold(UIView *cover) {
+    if (cover) watchHold(cover);
+}
+
 %hook _TtC35CreativeWorkCommons_CoverArtTiltKit16CoverArtTiltView
 - (void)layoutSubviews {
     UIView *tilt = (UIView *)self;

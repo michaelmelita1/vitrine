@@ -58,6 +58,20 @@ BOOL SGNativeUI(void) {
     return !SGRedesignedUI();
 }
 
+BOOL SGNativeRedesign(void) {
+    static BOOL on;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        on = SGRedesignedUI() && SGRedesignAvailable() && SGFlag(SGKeyNativeRedesign, NO);
+        if (on) SGLog(@"ui: native redesign");
+    });
+    return on;
+}
+
+BOOL SGNativeRedesignStored(void) {
+    return SGRedesignedUIStored() && SGRedesignAvailable() && SGFlag(SGKeyNativeRedesign, NO);
+}
+
 BOOL SGRedesignedUIStored(void) {
     // The stored switch is left alone rather than turned off: a phone updated to iOS 26 gets the
     // redesign it was last asked for back. Below 26 it counts only with the warning accepted.

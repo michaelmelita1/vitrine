@@ -341,3 +341,8 @@ void SGRPlayerSetCoverAccent(UIColor *cover) {
     if (!SGRedesignedUI() || !SGRPlayerFollowsCover()) return;
     %init;
 }
+
+// The color Native redesign's player page (Redesigned/Navbar/SystemPlayer.m) lights its controls in: white.
+UIColor *SGRPlayerLitColor(void) {
+    return UIColor.whiteColor;
+}

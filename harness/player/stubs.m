@@ -260,6 +260,15 @@ BOOL SGMotionAppleMusicOn(void) { return YES; }
 // TabBar.x: the Mini player section's Apple Music style switch lays the tab bar out again; there is none here.
 void SGRSetTabBarMinimized(BOOL minimized, BOOL animated) {}
 void SGRRefreshTabBar(void) {}
+// The system tab bar (Navbar/SystemTabs.x), which this harness does not build: off, with nothing to refresh.
+BOOL SGRSystemTabsOn(void) { return NO; }
+void SGRRefreshMiniPlayer(void) {}
+// Native redesign's own volume row (Navbar/SystemVolume.m), which this harness does not build.
+void SGRSystemVolumeSliderSet(UISlider *slider) {}
+// Native redesign's Animated background (Navbar/SystemMotion.m), asked for only under Native redesign, off here.
+UIView *SGRSystemMotionPreviewOf(NSURL *file, UIImage *poster) { return nil; }
+// The lyrics' own language check (LyricsTranslation.m), which this harness does not build: never another language.
+BOOL SGKaraokeInAnotherLanguage(NSArray<SGKaraokeLine *> *lines, NSString *language) { return NO; }
 
 // The ⋯'s system menu (PlayerMenu.m, ContextMenu.x), which this harness does not build; PlayerHeader.x hands it
 // the ⋯, and with no button of the mod's over it the ⋯'s own touches press its circle.

@@ -338,6 +338,8 @@ static BOOL inSight(UIView *view, UIView *unit) {
 }
 
 static void placeText(UIView *page) {
+    // Under Native redesign's tab bar Spotify's bar is unseen (alpha 0), and its text with it: nothing to lay out.
+    if (SGRSystemTabsOn()) return;
     // The cell lays itself out before its content view places Spotify's text, so the text is placed first.
     [page layoutIfNeeded];
     __block UIView *unit = nil;
@@ -642,10 +644,29 @@ static void styleNowPlayingBar(UIViewController *container) {
     });
 }
 
+// For Native redesign's mini player and player page (Redesigned/Navbar/SystemTabs.x): the cover Spotify's bar shows, nil
+// before it has one.
+UIImage *SGRNowPlayingCover(void) {
+    __block UIImage *cover = nil;
+    UIView *artwork = sg_cardArtwork ?: sgr_nowPlayingRoot;
+    SGForEachView(artwork, ^(UIView *v) {
+        if (cover || ![v isKindOfClass:UIImageView.class]) return;
+        UIImage *image = ((UIImageView *)v).image;
+        if (image.size.width >= 24 && fabs(image.size.width - image.size.height) < 2) cover = image;
+    });
+    return cover;
+}
+
 %hook _TtC18NowPlaying_BarImpl36NowPlayingBarContainerViewController
 - (void)viewDidLayoutSubviews {
     %orig;
     styleNowPlayingBar((UIViewController *)self);
+    // Native redesign shows a mini player of its own (SystemTabs.x); Spotify's stays, unseen, for its cover.
+    if (SGRSystemTabsOn()) {
+        UIView *view = ((UIViewController *)self).viewIfLoaded;
+        if (view.alpha > 0) view.alpha = 0;
+        view.userInteractionEnabled = NO;
+    }
 }
 %end
 
@@ -656,6 +677,9 @@ static void styleNowPlayingBar(UIViewController *container) {
 // bar's old place and took every touch there (#70), so a touch on nothing of the moved bar's goes through.
 %hook _TtC22NowPlaying_BarPageImplP33_CCC0D2EEA6D4725EECD8965E8C38C86D20TouchPassthroughView
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    // Native redesign shows a mini player of its own: Spotify's bar, unseen, takes nothing. Its page's view stayed where
+    // the card had stood and took the touches there (its owner, 2026-10-31).
+    if (SGRSystemTabsOn()) return nil;
     UIView *hit = %orig;
     UIView *moved = sg_inline;
     if (![moved isDescendantOfView:(UIView *)self] || (hit && [hit isDescendantOfView:moved])) return hit;

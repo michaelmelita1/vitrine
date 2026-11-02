@@ -1,6 +1,7 @@
 // Whether the user follows the page's artist, read from Spotify's collection state (following saves the
 // artist to the collection) rather than the Follow button, whose only state is its localized title.
 // The provider is the one Spotify's own code uses, kept weakly.
+#import <objc/message.h>
 #import <os/lock.h>
 #import "Core/SGCore.h"
 #import "Artist.h"
@@ -145,6 +146,8 @@ static id currentProvider(void) {
 @property (nonatomic) BOOL subscribed;
 @property (nonatomic) NSInteger following;   // -1 until the first state arrives
 @property (nonatomic, copy) void (^changed)(void);
+// What the log calls the state: "follow", or "saved" for SGRCollectionWatchURI.
+@property (nonatomic, copy) NSString *what;
 @end
 
 @implementation SGRFollowWatch
@@ -178,10 +181,11 @@ static void subscribe(SGRFollowWatch *watch, id provider) {
     __weak SGRFollowWatch *weakWatch = watch;
     NSURL *uri = watch.uri;
     watch.subscribed = YES;
-    SGLog(@"redesign artist: follow subscribes for %@ on %@", uri.absoluteString, NSStringFromClass([provider class]));
+    NSString *what = watch.what ?: @"follow";
+    SGLog(@"redesign artist: %@ subscribes for %@ on %@", what, uri.absoluteString, NSStringFromClass([provider class]));
     watch.token = [(id<SGRCollectionStateProvider>)provider subscribeCollectionStateForURL:uri completion:^(id state, NSError *error) {
         if (error || ![state respondsToSelector:@selector(contains:)]) {
-            SGLog(@"redesign artist: follow state for %@ unreadable: %@ %@", uri.absoluteString, [state class], error);
+            SGLog(@"redesign artist: %@ state for %@ unreadable: %@ %@", what, uri.absoluteString, [state class], error);
             return;
         }
         NSInteger raw = [state respondsToSelector:@selector(rawValue)] ? [(id<SGRCollectionState>)state rawValue] : -1;
@@ -189,7 +193,7 @@ static void subscribe(SGRFollowWatch *watch, id provider) {
         dispatch_async(dispatch_get_main_queue(), ^{
             SGRFollowWatch *current = weakWatch;
             if (!current || current.following == following) return;
-            SGLog(@"redesign kit: follow state %ld for %@", (long)raw, uri.absoluteString);
+            SGLog(@"redesign kit: %@ state %ld for %@", what, (long)raw, uri.absoluteString);
             current.following = following;
             if (current.changed) current.changed();
         });
@@ -219,6 +223,42 @@ BOOL SGRArtistFollowing(UIView *page, NSString *moreIdentifier, BOOL *following,
     if (provider) subscribe(watch, provider);
     if (watch.following < 0) return NO;
     if (following) *following = watch.following == 1;
+    return YES;
+}
+
+id SGRCollectionWatchURI(NSURL *uri, void (^changed)(void)) {
+    if (!uri) return nil;
+    SGRFollowWatch *watch = [SGRFollowWatch new];
+    watch.uri = uri;
+    watch.what = @"saved";
+    watch.following = -1;
+    watch.changed = changed;
+    id provider = currentProvider();
+    if (provider) subscribe(watch, provider);
+    return watch;
+}
+
+BOOL SGRCollectionWatchSaved(id watch, BOOL *saved) {
+    if (![watch isKindOfClass:SGRFollowWatch.class]) return NO;
+    SGRFollowWatch *follow = watch;
+    id provider = follow.subscribed ? nil : currentProvider();
+    if (provider) subscribe(follow, provider);
+    if (follow.following < 0) return NO;
+    if (saved) *saved = follow.following == 1;
+    return YES;
+}
+
+BOOL SGRCollectionSetSaved(NSURL *uri, BOOL saved) {
+    id platform = sg_platform;
+    SEL selector = saved ? NSSelectorFromString(@"addURL:showUIConfirmation:completion:") : NSSelectorFromString(@"removeURL:showUIConfirmation:completion:");
+    if (!uri || ![platform respondsToSelector:selector]) {
+        SGLog(@"redesign artist: cannot %@ %@ (platform %@)", saved ? @"save" : @"unsave", uri.absoluteString, platform ? NSStringFromClass([platform class]) : @"not known yet");
+        return NO;
+    }
+    // Spotify's own confirmation ("Added to Liked Songs"), as a tap on its add button gives; a completion that reads no
+    // arguments, as HeadGestures.x passes, is safe whatever it is called with.
+    void (^done)(void) = ^{ SGLog(@"redesign artist: %@ %@", saved ? @"saved" : @"unsaved", uri.absoluteString); };
+    ((void (*)(id, SEL, NSURL *, BOOL, id))objc_msgSend)(platform, selector, uri, YES, done);
     return YES;
 }
 

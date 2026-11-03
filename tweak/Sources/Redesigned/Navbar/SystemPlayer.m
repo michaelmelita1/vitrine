@@ -448,9 +448,10 @@ static const NSTimeInterval kTransportSpring = 0.5;
 // finger's lift: the arrows move over the first kForwardMoveShare of kForwardDuration and the new back one brightens over
 // the rest. No more often than once a length, the latest tap kept.
 // Its length, its ease (the power the slide's slowing takes), how soon the front glyph is away (a multiple of the move)
-// and how far it drifts (a share of the double arrow): its owner's, tuned on the phone from the Music app's (2026-11-02).
-static const NSTimeInterval kForwardDuration = 0.42;
-static const CGFloat kForwardEase = 2.2, kForwardAway = 6, kForwardDrift = 0.23;
+// and how far it drifts (a share of the double arrow): its owner's, tuned on the phone from the Music app's (2026-11-02,
+// the length 2026-11-04).
+static const NSTimeInterval kForwardDuration = 0.6;
+static const CGFloat kForwardEase = 2.2, kForwardAway = 6.02, kForwardDrift = 0.23;
 static const CGFloat kForwardMoveShare = 0.52, kForwardBackStart = 0.15, kForwardBackGray = 0.5;
 // The gaps from the bottom row up to the times, times the redesigned player's (kVolumeAboveRow and the rest): its
 // owner's, tuned on the phone (2026-11-02), and adjustable from the ⋯ menu's Controls Spacing, kept under the key.
@@ -485,6 +486,10 @@ static const CGFloat kForwardBoxShare = 1.5;
 @property (nonatomic) CGFloat progress;
 // `arrow` is the double arrow's picture, drawn `size` across (the glyph's bounds).
 - (instancetype)initWithArrow:(UIImage *)arrow size:(CGSize)size tint:(UIColor *)tint;
+// The progress from 0 to 1 over `duration`, linearly, run by Core Animation: the steps are worked out up front and played
+// by the render server, so a busy main thread (Spotify's track change) can't stall them as it did a display link's (its
+// owner, 2026-11-04). The label is left at 1, which is the glyph; `done` comes after.
+- (void)runOver:(NSTimeInterval)duration done:(void (^)(void))done;
 @end
 
 @implementation SGRForwardLabel {
@@ -598,6 +603,42 @@ static CGFloat frontTriangleStart(UIImage *arrow, CGRect drawn, CGFloat width, C
     CGFloat lit = brighten * brighten * (3 - 2 * brighten);
     _back.alpha = kForwardBackGray * MIN(1, grow * 3) + (1 - kForwardBackGray) * lit;
 }
+
+- (void)runOver:(NSTimeInterval)duration done:(void (^)(void))done {
+    // One step a frame at 120 Hz, played straight between them.
+    NSUInteger steps = MAX(2, (NSUInteger)ceil(duration * 120));
+    NSArray<UIImageView *> *views = @[_back, _middle, _front];
+    NSMutableArray<NSMutableArray *> *positions = [NSMutableArray array], *transforms = [NSMutableArray array], *opacities = [NSMutableArray array];
+    for (NSUInteger i = 0; i < views.count; i++) {
+        [positions addObject:[NSMutableArray array]];
+        [transforms addObject:[NSMutableArray array]];
+        [opacities addObject:[NSMutableArray array]];
+    }
+    for (NSUInteger step = 0; step <= steps; step++) {
+        self.progress = (CGFloat)step / steps;
+        for (NSUInteger i = 0; i < views.count; i++) {
+            CALayer *layer = views[i].layer;
+            [positions[i] addObject:[NSValue valueWithCGPoint:layer.position]];
+            [transforms[i] addObject:[NSValue valueWithCATransform3D:layer.transform]];
+            [opacities[i] addObject:@(layer.opacity)];
+        }
+    }
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [CATransaction setCompletionBlock:done];
+    for (NSUInteger i = 0; i < views.count; i++) {
+        NSArray *values[] = {positions[i], transforms[i], opacities[i]};
+        NSString *paths[] = {@"position", @"transform", @"opacity"};
+        for (int k = 0; k < 3; k++) {
+            CAKeyframeAnimation *animation = [CAKeyframeAnimation animationWithKeyPath:paths[k]];
+            animation.values = values[k];
+            animation.duration = duration;
+            animation.calculationMode = kCAAnimationLinear;
+            [views[i].layer addAnimation:animation forKey:[@"step." stringByAppendingString:paths[k]]];
+        }
+    }
+    [CATransaction commit];
+}
 @end
 
 @interface SGRSystemControlButton : SGRGlyphButton
@@ -639,8 +680,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
     UIImage *_flippedFrom, *_flipped;   // previous's picture and its mirror, for the step
     // The arrow's step: the label while it runs, its clock, when the last began and whether a tap waits for the window.
     SGRForwardLabel *_forward;
-    CADisplayLink *_forwardLink;
-    CFTimeInterval _forwardStart, _forwardLastBegan;
+    CFTimeInterval _forwardLastBegan;
     NSInteger _forwardDirection;
     BOOL _forwardWaiting;
 }
@@ -766,6 +806,8 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
     if (move) {
         void (^scale)(void) = ^{
             glyph.transform = pressed ? CGAffineTransformMakeScale(kTransportLabelScale, kTransportLabelScale) : CGAffineTransformIdentity;
+            // A running skip step stands in for the glyph, mirrored for previous.
+            self->_forward.transform = CGAffineTransformScale(glyph.transform, self->_forwardDirection < 0 ? -1 : 1, 1);
             self.transform = pressed ? CGAffineTransformMakeScale(kTransportButtonScale, kTransportButtonScale) : CGAffineTransformIdentity;
         };
         if (@available(iOS 17.0, *)) {
@@ -870,7 +912,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
     if (SGRReduceMotion() || !self.window || !self.glyph.image) return;
     _forwardDirection = direction;
     CFTimeInterval now = CACurrentMediaTime(), next = _forwardLastBegan + kForwardDuration;
-    if (_forwardLink || now < next) {
+    if (_forward || now < next) {
         if (_forwardWaiting) return;
         _forwardWaiting = YES;
         __weak typeof(self) weakSelf = self;
@@ -886,7 +928,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 }
 
 - (void)beginForward {
-    if (_forwardLink || !self.window) return;
+    if (_forward || !self.window) return;
     SGRGlyphView *glyph = self.glyph;
     // The label is the glyph's picture at the glyph's size: at rest its two halves are the double arrow.
     CGSize size = glyph.bounds.size;
@@ -903,22 +945,16 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
     _forward.transform = CGAffineTransformScale(glyph.transform, _forwardDirection < 0 ? -1 : 1, 1);
     [self addSubview:_forward];
     glyph.hidden = YES;
-    _forwardLastBegan = _forwardStart = CACurrentMediaTime();
-    _forwardLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(forwardTicked:)];
-    // The screen's full rate: a link that asks for none is held to 60 Hz on a 120 Hz screen, and the step looked slow and
-    // stepped beside the press's springs (its owner, 2026-11-01). Spotify's Info.plist lets the app past 60
-    // (CADisableMinimumFrameDurationOnPhone).
-    _forwardLink.preferredFrameRateRange = CAFrameRateRangeMake(80, 120, 120);
-    [_forwardLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+    _forwardLastBegan = CACurrentMediaTime();
+    SGRForwardLabel *label = _forward;
+    __weak typeof(self) weakSelf = self;
+    [label runOver:kForwardDuration done:^{
+        typeof(self) me = weakSelf;
+        if (me && me->_forward == label) [me endForward];
+    }];
 }
 
-- (void)forwardTicked:(CADisplayLink *)link {
-    CGFloat progress = (CACurrentMediaTime() - _forwardStart) / kForwardDuration;
-    _forward.transform = CGAffineTransformScale(self.glyph.transform, _forwardDirection < 0 ? -1 : 1, 1);
-    _forward.progress = progress;
-    if (progress < 1 && self.window) return;
-    [_forwardLink invalidate];
-    _forwardLink = nil;
+- (void)endForward {
     [_forward removeFromSuperview];
     _forward = nil;
     self.glyph.hidden = NO;
@@ -926,12 +962,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 
 - (void)didMoveToWindow {
     [super didMoveToWindow];
-    if (self.window || !_forwardLink) return;
-    [_forwardLink invalidate];
-    _forwardLink = nil;
-    [_forward removeFromSuperview];
-    _forward = nil;
-    self.glyph.hidden = NO;
+    if (!self.window && _forward) [self endForward];
 }
 @end
 
@@ -1001,6 +1032,7 @@ static BOOL openSpotifyConnect(NSString **how) {
 @interface SGRSystemRouteButton : AVRoutePickerView
 @property (nonatomic, copy) void (^onHold)(void);
 - (void)setGlyphPointSize:(CGFloat)size;
+- (void)setGlyphTint:(UIColor *)tint;
 @end
 
 @implementation SGRSystemRouteButton {
@@ -1018,7 +1050,8 @@ static BOOL openSpotifyConnect(NSString **how) {
     _glyph = [[SGRGlyphView alloc] initWithSymbol:@"airplayaudio" pointSize:20 weight:UIImageSymbolWeightRegular];
     _glyph.userInteractionEnabled = NO;
     _glyph.isAccessibilityElement = NO;
-    _glyph.tintColor = SGRPrimary();
+    // The page's row: the lyrics and queue glyphs' see-through white (its owner, 2026-11-04). The mini player's is white.
+    _glyph.tintColor = SGRSecondary();
     [self addSubview:_glyph];
     UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(held:)];
     hold.minimumPressDuration = 0.4;
@@ -1028,6 +1061,10 @@ static BOOL openSpotifyConnect(NSString **how) {
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(syncOutput) name:SGRPlayerOutputDidChangeNotification object:nil];
     [self syncOutput];
     return self;
+}
+
+- (void)setGlyphTint:(UIColor *)tint {
+    _glyph.tintColor = tint;
 }
 
 - (void)setGlyphPointSize:(CGFloat)size {
@@ -1081,6 +1118,7 @@ static BOOL openSpotifyConnect(NSString **how) {
 UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     SGRSystemRouteButton *button = [[SGRSystemRouteButton alloc] initWithFrame:CGRectMake(0, 0, 36, 36)];
     [button setGlyphPointSize:pointSize];
+    [button setGlyphTint:SGRPrimary()];
     NSString *where = [place copy];
     button.onHold = ^{
         NSString *how = nil;

@@ -126,6 +126,7 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     NSInteger _repeatMode;          // 0 off, 1 the playlist or album, 2 the track
     UITableView *_list;
     CAGradientLayer *_listFade;
+    CGFloat _controlsCover;   // how much of the list's foot the controls cover now (controlsHeight, or 0 in a drag)
     NSArray<SGRQueueGroup *> *_groups;
     NSArray<NSString *> *_shownURIs;   // the tracks last shown, so the same queue again is not laid out again
     NSArray *_upcoming;                // Spotify's whole list of tracks to come, when shown from it; nil from the state
@@ -136,6 +137,8 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     NSIndexPath *_liftedAt, *_liftedFrom;
     __weak SPTPlayerTrack *_liftedTrack;   // the track lifted: its row stays hidden wherever UIKit draws it meanwhile
     CGFloat _liftOffset;
+    CGPoint _dragPoint;                // the finger, in this view, for the frames between its moves
+    CADisplayLink *_dragLink;
     BOOL _quietMoves;                  // the moves of one lift handed to Spotify once, at the let go
     BOOL _repeatContext;
 }
@@ -151,10 +154,14 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     // Grouped, so the group headings scroll with their tracks rather than stand over them.
     _list = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
     _list.sectionFooterHeight = 10;
-    _list.estimatedSectionFooterHeight = 10;
     _list.backgroundColor = UIColor.clearColor;
     _list.separatorStyle = UITableViewCellSeparatorStyleNone;
     _list.rowHeight = kRowHeight;
+    // Exact sizes, none guessed: a row moved while the list scrolls up made UIKit measure the guessed groups above
+    // again and put the list back down by the difference, so a lifted track never got higher (phone log, 2026-11-03).
+    _list.estimatedRowHeight = 0;
+    _list.estimatedSectionHeaderHeight = 0;
+    _list.estimatedSectionFooterHeight = 0;
     _list.sectionHeaderTopPadding = 0;
     _list.dataSource = self;
     _list.delegate = self;
@@ -426,10 +433,44 @@ static UIImage *chipSymbol(NSString *name) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     _listFade.frame = _list.bounds;
-    // Faded at the top under the chips, and at the foot over the progress bar (its owner, 2026-11-02).
+    [self placeFade];
+    [CATransaction commit];
+}
+
+// The part under the controls is theirs: touches there go through to them while they show.
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    if (_controlsCover > 0 && point.y > self.bounds.size.height - _controlsCover) return nil;
+    return [super hitTest:point withEvent:event];
+}
+
+// Faded at the top under the chips, and at the foot over the progress bar (its owner, 2026-11-02), the foot's fade ending
+// where the controls begin.
+- (void)placeFade {
     CGFloat height = _list.bounds.size.height;
-    CGFloat edge = height > 0 ? MIN(0.3, kListTopFade / height) : 0, foot = height > 0 ? MIN(0.3, kListFootFade / height) : 0;
-    _listFade.locations = @[@0, @(edge), @(1 - foot), @1];
+    if (height <= 0) return;
+    CGFloat end = MAX(0, height - _controlsCover);
+    CGFloat edge = MIN(0.3, kListTopFade / height);
+    CGFloat stop = end / height, start = MAX(edge, (end - kListFootFade) / height);
+    _listFade.locations = @[@0, @(edge), @(start), @(stop)];
+}
+
+- (void)setControlsHeight:(CGFloat)height {
+    if (height == _controlsHeight) return;
+    _controlsHeight = height;
+    CGPoint offset = _list.contentOffset;
+    UIEdgeInsets inset = _list.contentInset;
+    inset.bottom = kListFootFade + height;
+    _list.contentInset = inset;
+    _list.contentOffset = offset;
+}
+
+- (void)setControlsCover:(CGFloat)cover animated:(BOOL)animated {
+    if (cover == _controlsCover) return;
+    _controlsCover = cover;
+    [CATransaction begin];
+    if (animated) [CATransaction setAnimationDuration:cover > 0 ? 0.45 : 0.3];
+    else [CATransaction setDisableActions:YES];
+    [self placeFade];
     [CATransaction commit];
 }
 
@@ -639,6 +680,59 @@ static UIImage *chipSymbol(NSString *name) {
 
 #pragma mark - moving by the grip
 
+// The card under the finger, held inside its group's rows and inside the part of the list that shows; the list scrolled
+// while the finger is near its top or foot, faster the further in; and the rows moved round the card.
+- (void)followDrag {
+    if (!_lifted) return;
+    CGPoint finger = _dragPoint;
+    NSInteger section = _liftedAt.section;
+    NSInteger rows = [_list numberOfRowsInSection:section];
+    if (rows <= 0) return;
+    CGRect list = _list.frame;
+    CGFloat top = CGRectGetMinY(list) + kListTopFade / 2, foot = CGRectGetMaxY(list) - _controlsCover - kListFootFade / 2;
+    CGFloat zone = 44, step = 0;
+    if (finger.y < top + zone) step = -MIN(7, 1 + (top + zone - finger.y) / 8);
+    else if (finger.y > foot - zone) step = MIN(7, 1 + (finger.y - foot + zone) / 8);
+    if (step) {
+        // No further than the group's own first and last rows: past them the card can't follow (its owner, 2026-11-03).
+        CGFloat groupTop = CGRectGetMinY([_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:section]]);
+        CGFloat groupFoot = CGRectGetMaxY([_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:rows - 1 inSection:section]]);
+        CGFloat minY = MAX(-_list.adjustedContentInset.top, groupTop - (top - CGRectGetMinY(list)));
+        CGFloat maxY = MIN(_list.contentSize.height + _list.adjustedContentInset.bottom - _list.bounds.size.height,
+                           groupFoot - (foot - CGRectGetMinY(list)));
+        CGFloat now = _list.contentOffset.y;
+        CGFloat offset = step < 0 ? MAX(now + step, MIN(now, minY)) : MIN(now + step, MAX(now, maxY));
+        if (offset != now) _list.contentOffset = CGPointMake(0, offset);
+    }
+    CGFloat half = _lifted.bounds.size.height / 2;
+    CGFloat firstMid = [_list convertPoint:CGPointMake(0, CGRectGetMidY([_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:section]])) toView:self].y;
+    CGFloat lastMid = [_list convertPoint:CGPointMake(0, CGRectGetMidY([_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:rows - 1 inSection:section]])) toView:self].y;
+    CGFloat y = finger.y - _liftOffset;
+    y = MIN(MAX(y, top + half), MAX(top + half, foot - half));
+    y = MIN(MAX(y, firstMid), lastMid);
+    _lifted.center = CGPointMake(_lifted.center.x, y);
+    NSIndexPath *target = [_list indexPathForRowAtPoint:[self convertPoint:CGPointMake(CGRectGetMidX(self.bounds), y) toView:_list]];
+    if (!target || target.section != section || [target isEqual:_liftedAt]) return;
+    _quietMoves = YES;
+    [self tableView:_list moveRowAtIndexPath:_liftedAt toIndexPath:target];
+    _quietMoves = NO;
+    // The place first: UIKit draws rows anew during the move, and the lifted one must already be known there.
+    NSIndexPath *was = _liftedAt;
+    _liftedAt = target;
+    [_list moveRowAtIndexPath:was toIndexPath:target];
+    [_list cellForRowAtIndexPath:target].alpha = 0;
+    [UISelectionFeedbackGenerator.new selectionChanged];
+}
+
+- (void)dragTicked:(CADisplayLink *)link {
+    if (!_lifted || !self.window) {
+        [link invalidate];
+        if (link == _dragLink) _dragLink = nil;
+        return;
+    }
+    [self followDrag];
+}
+
 // Only a press on a movable row's grip: the rest of the row scrolls, taps and swipes as before.
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
     if (!_upcoming) return NO;
@@ -659,7 +753,10 @@ static UIImage *chipSymbol(NSString *name) {
             if (!cell) return;
             // The row's picture on a thin blur, the Music app's lifted row (its owner, 2026-11-02): the rows under it show
             // through softened, with a light tint over them.
-            UIView *picture = [[UIView alloc] initWithFrame:cell.frame];
+            // Over the list rather than in it: in it, the card scrolled with the rows and went under the list's top fade
+            // and the chips when dragged up (its owner's recordings, 2026-11-03); over it, it stays under the finger
+            // inside the part of the list that shows, while the rows run beneath.
+            UIView *picture = [[UIView alloc] initWithFrame:[_list convertRect:cell.frame toView:self]];
             picture.layer.shadowColor = UIColor.blackColor.CGColor;
             picture.layer.shadowOpacity = 0.3;
             picture.layer.shadowRadius = 10;
@@ -674,49 +771,34 @@ static UIImage *chipSymbol(NSString *name) {
             UIView *content = [cell snapshotViewAfterScreenUpdates:NO];
             content.frame = picture.bounds;
             [picture addSubview:content];
-            [_list addSubview:picture];
+            [self insertSubview:picture aboveSubview:_list];
             _lifted = picture;
             _liftedAt = _liftedFrom = path;
             _liftedTrack = _groups[(NSUInteger)path.section].tracks[(NSUInteger)path.row];
-            _liftOffset = point.y - cell.center.y;
+            _liftOffset = [press locationInView:self].y - picture.center.y;
             cell.alpha = 0;
             [UISelectionFeedbackGenerator.new selectionChanged];
             SGRAnimate(SGRMotionPress, ^{ picture.transform = CGAffineTransformMakeScale(1.02, 1.02); }, nil);
             if (self.onDragging) self.onDragging(YES);
+            _dragPoint = [press locationInView:self];
+            // The list scrolls on under a finger held still near its top or foot, every frame, not only as it moves.
+            [_dragLink invalidate];
+            _dragLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(dragTicked:)];
+            _dragLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 120, 120);
+            [_dragLink addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
             break;
         }
         case UIGestureRecognizerStateChanged: {
             if (!_lifted) return;
-            // Up and down only, held inside the rows of its own group.
-            NSInteger section = _liftedAt.section;
-            NSInteger rows = [_list numberOfRowsInSection:section];
-            CGRect first = [_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:section]];
-            CGRect last = [_list rectForRowAtIndexPath:[NSIndexPath indexPathForRow:MAX(0, rows - 1) inSection:section]];
-            CGFloat y = MIN(MAX(point.y - _liftOffset, CGRectGetMidY(first)), CGRectGetMidY(last));
-            _lifted.center = CGPointMake(_lifted.center.x, y);
-            // The list scrolls under a finger held near its top or foot.
-            CGFloat top = _list.contentOffset.y + _list.adjustedContentInset.top, foot = _list.contentOffset.y + _list.bounds.size.height - _list.adjustedContentInset.bottom;
-            CGFloat step = point.y < top + 44 ? -8 : point.y > foot - 44 ? 8 : 0;
-            if (step) {
-                CGFloat minY = -_list.adjustedContentInset.top, maxY = MAX(minY, _list.contentSize.height + _list.adjustedContentInset.bottom - _list.bounds.size.height);
-                _list.contentOffset = CGPointMake(0, MIN(MAX(_list.contentOffset.y + step, minY), maxY));
-            }
-            NSIndexPath *target = [_list indexPathForRowAtPoint:CGPointMake(CGRectGetMidX(_list.bounds), y)];
-            if (!target || target.section != section || [target isEqual:_liftedAt]) return;
-            _quietMoves = YES;
-            [self tableView:_list moveRowAtIndexPath:_liftedAt toIndexPath:target];
-            _quietMoves = NO;
-            // The place first: UIKit draws rows anew during the move, and the lifted one must already be known there.
-            NSIndexPath *was = _liftedAt;
-            _liftedAt = target;
-            [_list moveRowAtIndexPath:was toIndexPath:target];
-            [_list cellForRowAtIndexPath:target].alpha = 0;
-            [UISelectionFeedbackGenerator.new selectionChanged];
+            _dragPoint = [press locationInView:self];
+            [self followDrag];
             break;
         }
         case UIGestureRecognizerStateEnded:
         case UIGestureRecognizerStateCancelled:
         case UIGestureRecognizerStateFailed: {
+            [_dragLink invalidate];
+            _dragLink = nil;
             UIView *picture = _lifted;
             if (!picture) return;
             NSIndexPath *at = _liftedAt;
@@ -724,7 +806,7 @@ static UIImage *chipSymbol(NSString *name) {
             _lifted = nil;
             _liftedTrack = nil;
             UITableViewCell *cell = [_list cellForRowAtIndexPath:at];
-            CGRect home = [_list rectForRowAtIndexPath:at];
+            CGRect home = [_list convertRect:[_list rectForRowAtIndexPath:at] toView:self];
             SGRAnimate(SGRMotionLayout, ^{
                 picture.transform = CGAffineTransformIdentity;
                 picture.center = CGPointMake(CGRectGetMidX(home), CGRectGetMidY(home));

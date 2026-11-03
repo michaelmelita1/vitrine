@@ -1675,7 +1675,13 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _lyricsNote.frame = CGRectInset(_stage.bounds, kMargin, 0);
     _lyricsSpinner.frame = _stage.bounds;
     // While a track is moved the queue runs down to the foot of the screen, the controls away (setQueueDragging:).
-    _queueView.frame = _queueDragging ? CGRectMake(0, stageTop, width, MAX(0, height - safe.bottom - stageTop)) : stage;
+    // The queue runs down behind the controls, its last track resting just above them (SGRSystemQueueView's
+    // controlsHeight), so a drag that puts the controls away resizes nothing and the list never jumps (its owner,
+    // 2026-11-03).
+    CGRect whole = CGRectMake(0, stageTop, width, MAX(0, height - safe.bottom - stageTop));
+    _queueView.controlsHeight = MAX(0, whole.size.height - stage.size.height);
+    _queueView.frame = whole;
+    [_queueView setControlsCover:_queueDragging ? 0 : _queueView.controlsHeight animated:self.view.window != nil];
     // The add button at the trailing margin, its glyph's edge on it, centered on the title and artist; they end before it.
     CGFloat addInset = (kAddSide - kAddGlyph) / 2, textRight = width - kMargin - (_add.hidden ? 0 : kAddSide - addInset + 8);
     BOOL topRow = _lyricsOpen || _queueOpen;

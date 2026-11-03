@@ -27,6 +27,11 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 @property (nonatomic, copy) void (^onRepeat)(void);
 // A track lifted to be moved (YES) and let go (NO): the page puts its controls away meanwhile, as the Music app does.
 @property (nonatomic, copy) void (^onDragging)(BOOL dragging);
+// The page's controls over the foot of the list: the list runs on under them, its last track resting just above them
+// (blank room that tall ends the list), and is faded out there. The list is never resized for a drag, so nothing in it
+// moves when the controls go: only `controlsCover` goes to 0, and the rows under them show (its owner, 2026-11-03).
+@property (nonatomic) CGFloat controlsHeight;
+- (void)setControlsCover:(CGFloat)cover animated:(BOOL)animated;
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
 // The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the

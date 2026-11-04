@@ -17,6 +17,9 @@ void SGSetEnabled(NSString *key, BOOL on);
 // Settings/SGModPage.h write these.
 NSInteger SGInt(NSString *key, NSInteger fallback);
 void SGSetInt(NSString *key, NSInteger value);
+// A number on a slider, kept like the switches.
+double SGDouble(NSString *key, double fallback);
+void SGSetDouble(NSString *key, double value);
 
 // What -stringForKey: answers (a string as it is, a number as its stringValue, else nil), kept like the switches.
 // A writer of such a key calls SGPrefsChanged() after its write, as SGSetInt does.

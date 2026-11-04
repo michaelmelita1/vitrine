@@ -234,7 +234,6 @@ static UIViewPropertyAnimator *makeAnimator(void) {
     animator.reversed = !animator.reversed;
     [context cancelInteractiveTransition];
     [animator continueAnimationWithTimingParameters:nil durationFactor:1];
-    SGLog(@"system player: a tap on the mini player turned the close back");
     return YES;
 }
 

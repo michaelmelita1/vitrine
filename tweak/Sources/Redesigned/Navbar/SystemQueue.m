@@ -402,14 +402,11 @@ static UIImage *chipSymbol(NSString *name) {
         SGAutoMixSetStyle(SGAutoMixBeatMatched);
         SGSetEnabled(SGKeyAutoMix, YES);
         SGAutoMixApply(YES);
-        SGLog(@"system player: queue turned AutoMix on, beat-matched");
     } else if (SGAutoMixCurrentStyle() == SGAutoMixBeatMatched) {
         SGAutoMixSetStyle(SGAutoMixCrossfade);
-        SGLog(@"system player: queue turned AutoMix to crossfade");
     } else {
         SGSetEnabled(SGKeyAutoMix, NO);
         SGAutoMixApply(NO);
-        SGLog(@"system player: queue turned AutoMix off");
     }
     [self syncAutoMixAnimated:YES];
 }
@@ -646,17 +643,25 @@ static UIImage *chipSymbol(NSString *name) {
 }
 
 - (void)tableView:(UITableView *)table moveRowAtIndexPath:(NSIndexPath *)from toIndexPath:(NSIndexPath *)to {
-    if (!_upcoming || from.section != to.section || [from isEqual:to]) return;
+    [self moveTrackFrom:from to:to];
+}
+
+// The track at `from` moved to `to` in its group and in the whole list, both or neither: every place is checked before
+// anything changes, so the rows and _upcoming never disagree (the review, 2026-11-04). NO when nothing moved.
+- (BOOL)moveTrackFrom:(NSIndexPath *)from to:(NSIndexPath *)to {
+    if (!_upcoming || from.section != to.section || [from isEqual:to] || from.section < 0 || (NSUInteger)from.section >= _groups.count) return NO;
     SGRQueueGroup *group = _groups[(NSUInteger)from.section];
     NSMutableArray<SPTPlayerTrack *> *tracks = group.tracks;
+    NSUInteger count = MIN(tracks.count, group.places.count);
+    if (from.row < 0 || to.row < 0 || (NSUInteger)from.row >= count || (NSUInteger)to.row >= count) return NO;
     // Its place in the whole list, and the place of the track it lands on (the list may hold more than tracks).
     NSUInteger fromIndex = group.places[(NSUInteger)from.row].unsignedIntegerValue;
     NSUInteger toIndex = group.places[(NSUInteger)to.row].unsignedIntegerValue;
+    NSMutableArray *whole = [_upcoming mutableCopy];
+    if (fromIndex >= whole.count || toIndex >= whole.count) return NO;
     SPTPlayerTrack *moved = tracks[(NSUInteger)from.row];
     [tracks removeObjectAtIndex:(NSUInteger)from.row];
     [tracks insertObject:moved atIndex:(NSUInteger)to.row];
-    NSMutableArray *whole = [_upcoming mutableCopy];
-    if (fromIndex >= whole.count || toIndex >= whole.count) return;
     id item = whole[fromIndex];
     [whole removeObjectAtIndex:fromIndex];
     [whole insertObject:item atIndex:toIndex];
@@ -664,6 +669,7 @@ static UIImage *chipSymbol(NSString *name) {
     [self renumberPlaces];
     _shownURIs = nil;
     if (!_quietMoves && self.onReorder) self.onReorder(_upcoming);
+    return YES;
 }
 
 // The places anew: the tracks in the whole list's order, handed out to the rows in theirs.
@@ -714,8 +720,9 @@ static UIImage *chipSymbol(NSString *name) {
     NSIndexPath *target = [_list indexPathForRowAtPoint:[self convertPoint:CGPointMake(CGRectGetMidX(self.bounds), y) toView:_list]];
     if (!target || target.section != section || [target isEqual:_liftedAt]) return;
     _quietMoves = YES;
-    [self tableView:_list moveRowAtIndexPath:_liftedAt toIndexPath:target];
+    BOOL moved = [self moveTrackFrom:_liftedAt to:target];
     _quietMoves = NO;
+    if (!moved) return;
     // The place first: UIKit draws rows anew during the move, and the lifted one must already be known there.
     NSIndexPath *was = _liftedAt;
     _liftedAt = target;
@@ -846,7 +853,6 @@ static UIImage *chipSymbol(NSString *name) {
     _shownURIs = nil;
     if (_groups.count) [_list deleteSections:[NSIndexSet indexSetWithIndex:index] withRowAnimation:UITableViewRowAnimationFade];
     else [_list reloadData];
-    SGLog(@"system player: queue cleared, %lu tracks out", (unsigned long)places.count);
     [self syncClear];
     if (self.onReorder) self.onReorder(_upcoming);
 }

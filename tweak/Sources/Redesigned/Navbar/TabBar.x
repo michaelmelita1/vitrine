@@ -180,26 +180,15 @@ BOOL SGRTabSourceEncoreGlyphs(UIView *source, UIImage **outline, UIImage **fille
     NSArray<NSString *> *names = SGEncoreGlyphNames();
     Class iconClass = NSClassFromString(@"SPTEncoreIcon");
     id icon = nil;
-    NSString *picked = nil;
     for (NSString *name in candidates) {
         if (![names containsObject:name]) continue;
         @try { icon = ((id (*)(id, SEL))objc_msgSend)(iconClass, NSSelectorFromString(name)); } @catch (NSException *e) { icon = nil; }
-        if (icon) {
-            picked = name;
-            break;
-        }
+        if (icon) break;
     }
     if (!icon) return NO;
     id variant = activeVariantOf(icon);
     UIImage *drawnOutline = drawGlyph(live, icon, NO), *drawnFilled = drawGlyph(live, variant ?: icon, YES);
     if (!drawnOutline || !drawnFilled) return NO;
-    static NSMutableSet<NSString *> *told;
-    if (!told) told = [NSMutableSet set];
-    NSString *line = [NSString stringWithFormat:@"%@ -> %@, filled %@", labelIn(source).text, picked, iconName(variant) ?: @"(none, the same glyph)"];
-    if (![told containsObject:line]) {
-        [told addObject:line];
-        SGLog(@"system tabs: %@", line);
-    }
     if (outline) *outline = drawnOutline;
     if (filled) *filled = drawnFilled;
     return YES;

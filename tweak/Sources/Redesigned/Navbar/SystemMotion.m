@@ -116,6 +116,13 @@ static const CGFloat kDimEaseFrom = 0.25;
 // clip's colors there to one dark brown, so the blurred foot showed none of the picture the lock screen shows (device,
 // 2026-10-24). The title is large text, readable at less. Behind the lyrics, and with Increase Contrast, it is whole.
 static const CGFloat kDimUnderControls = 0.55;
+// Below the controls it goes on darkening to the bottom of the screen, as the Music app's animated artwork does: off its
+// owner's screenshots of a light song (2026-11-04), about 27% black at 70% of the screen, 44% at 85% and 60% at the
+// foot. These are shares of the dim worked out for the clip, at kDimFootAt of the screen and at its foot, tuned in
+// harness/system-motion over that song's own animated cover until the page read as the Music app's, row for row (155 at
+// 78%, 137 at 85%, 122 at 92%, 106 at the foot, against its 154, 135, 115 and 96). A dark clip's dim is small, so the ramp
+// barely shows there.
+static const CGFloat kDimFootAt = 0.85, kDimByFoot = 0.8, kDimAtFoot = 1.6;
 // The frames measured for the dim besides the poster, in seconds into the clip (one past its end is skipped).
 static const double kMeasuredAt[] = {1, 2};
 
@@ -227,7 +234,7 @@ static UIBlurEffect *blurEffect(void) {
     // The copies reach far past the field, stretched as they are; nothing past it is drawn or blurred.
     _picture.layer.masksToBounds = YES;
     _dim = [CAGradientLayer layer];
-    _dim.colors = @[(id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor];
+    _dim.colors = @[(id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor];
     _dim.opacity = kDimLeast;
     [_picture.layer addSublayer:_dim];
     _scrim = [CAGradientLayer layer];
@@ -321,8 +328,13 @@ static UIBlurEffect *blurEffect(void) {
     CGFloat below = MAX(0, total - top - height);
     _footCopy.instanceCount = below > 0 ? 2 : 1;
     _footCopy.instanceTransform = flipAbout(top + height, kMirrorStretch);
-    _dim.frame = bounds;
-    _dim.locations = @[@(MIN(1, (top + screen * kDimEaseFrom) / total)), @(MIN(1, (blurFrom + blurRamp) / total))];
+    // On past the field's foot by twice the blur's radius: the variable blur on the clip reaches that far beyond it, where
+    // the mirrored foot goes on undimmed, and pulled that light back up into the bottom of the screen (harness/system-motion's
+    // clip, 2026-11-04: a flat 60% dim read 98 mid-screen and 132 at the foot).
+    CGFloat dimmed = total + 2 * kVariableBlurRadius;
+    _dim.frame = CGRectMake(0, 0, width, dimmed);
+    _dim.locations = @[@((top + screen * kDimEaseFrom) / dimmed), @((blurFrom + blurRamp) / dimmed),
+                       @(screen * kDimFootAt / dimmed), @(screen / dimmed)];
     _seamMask.frame = bounds;
     _seamMask.locations = @[@(MIN(1, blurFrom / total)), @(MIN(1, (blurFrom + blurRamp) / total))];
     if (_variable) {
@@ -391,9 +403,19 @@ static UIBlurEffect *blurEffect(void) {
 - (void)updateDim {
     BOOL contrast = UIAccessibilityDarkerSystemColorsEnabled();
     CGFloat dim = clipDim(brightEnd(_luminances), contrast, _lyricsUp);
-    _dim.opacity = (float)(_lyricsUp || contrast ? dim : dim * kDimUnderControls);
     CGFloat top = _lyricsUp ? 1 : 0;
-    _dim.colors = @[(id)[UIColor colorWithWhite:0 alpha:top].CGColor, (id)UIColor.blackColor.CGColor];
+    if (_lyricsUp || contrast) {
+        _dim.opacity = (float)dim;
+        _dim.colors = @[(id)[UIColor colorWithWhite:0 alpha:top].CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor,
+                        (id)UIColor.blackColor.CGColor];
+        return;
+    }
+    // Its share under the controls, then on to the foot (kDimAtFoot), as the layer's opacity at its whole.
+    CGFloat whole = MIN(1, dim * kDimAtFoot);
+    _dim.opacity = (float)whole;
+    CGFloat (^share)(CGFloat) = ^CGFloat(CGFloat of) { return whole > 0 ? MIN(1, dim * of / whole) : 0; };
+    _dim.colors = @[(id)UIColor.clearColor.CGColor, (id)[UIColor colorWithWhite:0 alpha:share(kDimUnderControls)].CGColor,
+                    (id)[UIColor colorWithWhite:0 alpha:share(kDimByFoot)].CGColor, (id)UIColor.blackColor.CGColor];
 }
 
 // The variable blur on the clip, whole where a stop says 1 and none where it says 0, eased between, each stop at a

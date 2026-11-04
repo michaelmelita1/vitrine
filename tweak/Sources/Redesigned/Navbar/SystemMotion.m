@@ -118,9 +118,9 @@ static const CGFloat kDimEaseFrom = 0.25;
 static const CGFloat kDimUnderControls = 0.55;
 // Below the controls it goes on darkening to the bottom of the screen, as the Music app's animated artwork does: off its
 // owner's screenshots of a light song (2026-11-04), about 27% black at 70% of the screen, 44% at 85% and 60% at the
-// foot. These are shares of the dim worked out for the clip, at kDimFootAt of the screen and at its foot, tuned in
-// harness/system-motion over that song's own animated cover until the page read as the Music app's, row for row (155 at
-// 78%, 137 at 85%, 122 at 92%, 106 at the foot, against its 154, 135, 115 and 96). A dark clip's dim is small, so the ramp
+// foot. These are shares of the dim worked out for the clip, at kDimFootAt of the screen and at its foot, tuned over that
+// song's own animated cover until the page read as the Music app's, row for row (155 at 78%, 137 at 85%, 122 at 92%, 106
+// at the foot, against its 154, 135, 115 and 96). A dark clip's dim is small, so the ramp
 // barely shows there.
 static const CGFloat kDimFootAt = 0.85, kDimByFoot = 0.8, kDimAtFoot = 1.6;
 // The frames measured for the dim besides the poster, in seconds into the clip (one past its end is skipped).
@@ -329,8 +329,8 @@ static UIBlurEffect *blurEffect(void) {
     _footCopy.instanceCount = below > 0 ? 2 : 1;
     _footCopy.instanceTransform = flipAbout(top + height, kMirrorStretch);
     // On past the field's foot by twice the blur's radius: the variable blur on the clip reaches that far beyond it, where
-    // the mirrored foot goes on undimmed, and pulled that light back up into the bottom of the screen (harness/system-motion's
-    // clip, 2026-11-04: a flat 60% dim read 98 mid-screen and 132 at the foot).
+    // the mirrored foot goes on undimmed, and pulled that light back up into the bottom of the screen (2026-11-04, over a
+    // real clip: a flat 60% dim read 98 mid-screen and 132 at the foot).
     CGFloat dimmed = total + 2 * kVariableBlurRadius;
     _dim.frame = CGRectMake(0, 0, width, dimmed);
     _dim.locations = @[@((top + screen * kDimEaseFrom) / dimmed), @((blurFrom + blurRamp) / dimmed),

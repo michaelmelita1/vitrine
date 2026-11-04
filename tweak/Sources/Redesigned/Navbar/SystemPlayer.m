@@ -458,15 +458,9 @@ static const CGFloat kForwardMoveShare = 0.52, kForwardBackStart = 0.15, kForwar
 static const CGFloat kControlsSpacingDefault = 1.35, kControlsSpacingLeast = 0.8, kControlsSpacingMost = 1.6;
 static NSString *const kControlsSpacingKey = @"spotifyglass.redesign.navbar.player.controlsGap";
 
-// Read once, then set by the slider as it moves, so a layout reads no defaults.
-static CGFloat sg_controlsSpacing = -1;
-
+// Through the prefs memo (Core/SGPrefs.h), so a layout reads no defaults.
 static CGFloat controlsSpacing(void) {
-    if (sg_controlsSpacing < 0) {
-        id stored = [NSUserDefaults.standardUserDefaults objectForKey:kControlsSpacingKey];
-        sg_controlsSpacing = [stored isKindOfClass:NSNumber.class] ? MIN(kControlsSpacingMost, MAX(kControlsSpacingLeast, [stored doubleValue])) : kControlsSpacingDefault;
-    }
-    return sg_controlsSpacing;
+    return MIN(kControlsSpacingMost, MAX(kControlsSpacingLeast, SGDouble(kControlsSpacingKey, kControlsSpacingDefault)));
 }
 
 #pragma mark - the skip's arrow
@@ -1119,11 +1113,9 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     SGRSystemRouteButton *button = [[SGRSystemRouteButton alloc] initWithFrame:CGRectMake(0, 0, 36, 36)];
     [button setGlyphPointSize:pointSize];
     [button setGlyphTint:SGRPrimary()];
-    NSString *where = [place copy];
     button.onHold = ^{
         NSString *how = nil;
-        BOOL asked = openSpotifyConnect(&how);
-        SGLog(@"system player: held AirPlay on %@, Spotify's Connect sheet %@ by %@", where, asked ? @"asked for" : @"not asked for", how);
+        openSpotifyConnect(&how);
     };
     return button;
 }
@@ -1239,6 +1231,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     NSMapTable<UIView *, NSArray *> *_dragAlphas;
     NSUInteger _dragReturn;       // the latest let go's, so an older one's delayed return is dropped   // each control's alpha and touches before, put back as it is let go
     id _spotifyQueue;             // Spotify's queue as last fetched (SPTPlayerQueue), handed back with a track moved
+    NSArray<NSString *> *_spotifyQueueKey;   // the playing track's and the tracks to come's URIs at that fetch
     SGRSystemQueueView *_queueView;   // out of the page while closed
     UIImageView *_queueBubble;        // the queue button's light disc while the queue is open, the Music app's
     UIImageView *_lyricsBubble;       // the lyrics button's, while the lyrics are up
@@ -1263,7 +1256,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // Counts the opens, so a landing timed for an earlier open does not land a later one.
     NSUInteger _openCount;
     CGRect _thumb;   // where the cover goes while the lyrics are up
-    NSString *_coverTrack;   // the track the cover last changed for, for the log
 }
 
 - (BOOL)outOfDate {
@@ -1434,10 +1426,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // page stays where it is.
     _route.onHold = ^{
         NSString *how = nil;
-        BOOL asked = openSpotifyConnect(&how);
-        SGLog(@"system player: held AirPlay, Spotify's Connect sheet %@ by %@", asked ? @"asked for" : @"not asked for", how);
-        // Whether it came up over the page, either way: a link taken that presents nothing says so too.
-        [weakSelf noteSheetFor:@"Connect"];
+        openSpotifyConnect(&how);
     };
     // The output's name under the glyph, as the redesigned player's footer draws it (PlayerFooter.x's
     // SGRPlayerPlaceRoute): the Music app's 15pt at about 68% white, semibold to read as its blended regular does, and
@@ -1471,7 +1460,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
-        SGLog(@"system player: queue track picked, %@", track.trackTitle);
     };
 
     // The lines, and in their place while they have none to show (the karaoke view fades its siblings out while it
@@ -1889,8 +1877,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     show();
     __weak typeof(self) weakSelf = self;
     [slider addAction:[UIAction actionWithHandler:^(UIAction *action) {
-        [NSUserDefaults.standardUserDefaults setDouble:slider.value forKey:kControlsSpacingKey];
-        sg_controlsSpacing = slider.value;
+        SGSetDouble(kControlsSpacingKey, slider.value);
         show();
         [weakSelf.view setNeedsLayout];
     }] forControlEvents:UIControlEventValueChanged];
@@ -1898,7 +1885,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [reset setTitle:@"Reset" forState:UIControlStateNormal];
     [reset addAction:[UIAction actionWithHandler:^(UIAction *action) {
         [NSUserDefaults.standardUserDefaults removeObjectForKey:kControlsSpacingKey];
-        sg_controlsSpacing = kControlsSpacingDefault;
+        SGPrefsChanged();
         slider.value = kControlsSpacingDefault;
         show();
         [weakSelf.view setNeedsLayout];
@@ -1955,10 +1942,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 // A page of Spotify's opens in its navigation under the page, so the page closes first, as the Music app's player does
 // for Go to Album.
 - (void)closeAndOpen:(NSString *)uri {
-    SGLog(@"system player: the page closes for %@", uri);
-    [self dismissViewControllerAnimated:YES completion:^{
-        if (!SGOpenSpotifyURI([NSURL URLWithString:uri])) SGLog(@"system player: %@ not opened (no link dispatcher)", uri);
-    }];
+    [self dismissViewControllerAnimated:YES completion:^{ SGOpenSpotifyURI([NSURL URLWithString:uri]); }];
 }
 
 #pragma mark - the add button
@@ -2044,7 +2028,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
             [self.view insertSubview:_visualiser aboveSubview:_field];
             [self fadeIn:_visualiser animated:animated];
         }
-        SGLog(@"system player: background %@", SGRPlayerBackgroundNames()[(NSUInteger)kind]);
     }
     [self syncClipAnimated:animated];
     [self syncFieldHeld];
@@ -2094,7 +2077,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         [self.view insertSubview:clip aboveSubview:_field];
         [self fadeIn:clip animated:animated];
     }
-    SGLog(@"system player: animated artwork %@ for %@", clip ? @"shown" : @"none, Fluid shows", track);
     [self syncFieldHeld];
     [self blurBackground:_lyricsOpen || _queueOpen animated:NO];
     [self syncCoverShownAnimated:animated];
@@ -2338,7 +2320,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (!lines && !none && track && self.view.window) SGKaraokeRequestLyrics(track);
     SGRSystemLyrics shown = lines ? SGRSystemLyricsLines : none ? SGRSystemLyricsNone : SGRSystemLyricsLoading;
     if (shown != _lyricsShown || !(track == _lyricsTrack || [track isEqualToString:_lyricsTrack])) {
-        SGLog(@"system player: lyrics of %@ %@", track, shown == SGRSystemLyricsLines ? @"in" : shown == SGRSystemLyricsNone ? @"none" : @"being looked for");
         _lyricsShown = shown;
         _lyricsTrack = track;
     }
@@ -2440,31 +2421,43 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [self setQueueOpen:!_queueOpen];
 }
 
-// A track moved in the page's queue: Spotify's queue as fetched, its tracks to come in the new order, handed back to the
-// player (setQueue:), then fetched again so the page shows what Spotify kept.
+// What a queue was made from: the playing track's URI, then each track to come's.
+static NSArray<NSString *> *queueKey(NSArray *next) {
+    NSMutableArray<NSString *> *key = [NSMutableArray arrayWithObject:SGURIString(SGPlayerState().track.URI) ?: @""];
+    for (id item in next) [key addObject:[item respondsToSelector:@selector(URI)] ? (SGURIString([item URI]) ?: @"") : @""];
+    return key;
+}
+
+// A track moved or taken out in the page's queue: Spotify's queue fetched again, and only if it is still the one the
+// page showed (the same track playing and the same tracks to come), its tracks to come in the new order handed back
+// (setQueue:). The track can change during a drag or a swipe, and a queue from before it played a track again or
+// skipped one (the review, 2026-11-04); then nothing goes back and the page shows Spotify's queue instead.
 - (void)handQueueBack:(NSArray *)upcoming {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
-    id queue = _spotifyQueue;
-    if (!queue || ![queue respondsToSelector:@selector(setNextTracks:)] || ![player respondsToSelector:@selector(setQueue:)]) {
-        SGLog(@"system player: queue move not handed back (queue %@, player %@)", queue ? NSStringFromClass([queue class]) : @"nil",
-              player ? NSStringFromClass([player class]) : @"nil");
-        return;
-    }
-    // The fetched queue is Spotify's own object: its tracks go back as they were if the hand-back throws.
-    NSArray *before = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
-    @try {
-        [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
-        [player setQueue:queue];
-        SGLog(@"system player: queue moved, %lu tracks handed back", (unsigned long)upcoming.count);
-    } @catch (NSException *e) {
-        SGLog(@"system player: queue move failed: %@", e.reason);
-        @try { if (before) [(id<SPTPlayerQueue>)queue setNextTracks:before]; } @catch (NSException *again) {}
-    }
+    NSArray<NSString *> *shown = _spotifyQueueKey;
+    if (!shown || ![player respondsToSelector:@selector(fetchQueue:on:)] || ![player respondsToSelector:@selector(setQueue:)]) return;
     __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [player fetchQueue:^(id queue) {
         typeof(self) me = weakSelf;
-        if (me && me->_queueOpen) [me refreshQueue];
-    });
+        if (!me) return;
+        NSArray *next = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
+        if ([next isKindOfClass:NSArray.class] && [queueKey(next) isEqualToArray:shown] && [queue respondsToSelector:@selector(setNextTracks:)]) {
+            // Spotify's own object: its tracks go back as they were if the hand-back throws.
+            @try {
+                [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
+                [player setQueue:queue];
+                // The next change, before the fetch below, is checked against this one.
+                me->_spotifyQueueKey = queueKey(upcoming);
+            } @catch (NSException *e) {
+                @try { [(id<SPTPlayerQueue>)queue setNextTracks:next]; } @catch (NSException *again) {}
+            }
+        }
+        // Fetched again a moment later, so the page shows what Spotify kept.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            typeof(self) again = weakSelf;
+            if (again && again->_queueOpen) [again refreshQueue];
+        });
+    } on:dispatch_get_main_queue()];
 }
 
 // The queue shown from the state at once, then from Spotify's whole queue as it comes (its owner, 2026-11-02: the
@@ -2483,12 +2476,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         me->_spotifyQueue = queue;
         NSArray *next = answer;
         if (![next isKindOfClass:NSArray.class]) return;
-        static BOOL told;
-        if (!told) {
-            told = YES;
-            SGLog(@"system player: Spotify's queue has %lu tracks to come (%@ first), the state %lu", (unsigned long)next.count,
-                  next.count ? NSStringFromClass([next.firstObject class]) : @"none", (unsigned long)[SGPlayerState().future count]);
-        }
+        me->_spotifyQueueKey = queueKey(next);
         [me->_queueView showState:SGPlayerState() upcoming:next from:from];
     } on:dispatch_get_main_queue()];
 }
@@ -2515,7 +2503,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (open == _queueOpen) return;
     if (open && _lyricsOpen) [self setLyricsOpen:NO];
     _queueOpen = open;
-    SGLog(@"system player: queue %@", open ? @"open" : @"closed");
     UIView *view = self.view, *queue = _queueView;
     if (open) {
         [self refreshQueue];
@@ -2568,7 +2555,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (open && _queueOpen) [self setQueueOpen:NO];
     if (!open) [self setAlone:NO animated:NO];
     _lyricsOpen = open;
-    SGLog(@"system player: lyrics %@", open ? @"open" : @"closed, the cover is back");
     if (self.view.window) SGRPlayerSetPageLyricsOpen(open);
     [self blurBackground:open || _queueOpen animated:self.view.window != nil];
     if (open) [self restartRest];
@@ -2773,7 +2759,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
             id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
             if (way < 0) [player skipToNextTrackWithOptions:nil];
             else [player skipToPreviousTrackWithOptions:nil];
-            SGLog(@"system player: the title swiped to the %@ track", way < 0 ? @"next" : @"previous");
             // A skip that changes nothing (back from a track under way only restarts it) brings the title back.
             __weak typeof(self) weakSelf = self;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -2847,10 +2832,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     BOOL current = art && SGRNowPlayingArtworkCurrent();
     UIImage *image = current ? art : _cover.image ? nil : SGRNowPlayingCover() ?: art;
     NSString *playing = SGURIString(SGPlayerState().track.URI);
-    if (playing && ![playing isEqualToString:_coverTrack] && (current || !_cover.image)) {
-        _coverTrack = playing;
-        SGLog(@"system player: cover of %@ from %@ (%.0fx%.0f)", playing, current ? @"the Kit" : @"the bar, until the Kit's comes", image.size.width, image.size.height);
-    }
     // The field reads the Kit's picture by its identity, the same picture once.
     if (current) [_field setArtwork:art identity:identity animated:self.view.window != nil];
     if (!image || image == _cover.image) return;
@@ -2973,19 +2954,6 @@ static NSString *speedLabel(double speed) {
     _speed.hidden = !speed;
     [_previous setNeedsLayout];
     [_next setNeedsLayout];
-    SGLog(@"system player: %@", episode ? @"an episode, 15 s skips and its speed" : @"a song, its skips, shuffle and repeat");
-}
-
-// Whether what Spotify was asked for came up over the page a moment later: a sheet it pushes somewhere under the page
-// instead of presenting would not, and the log says so.
-- (void)noteSheetFor:(NSString *)what {
-    __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        typeof(self) me = weakSelf;
-        if (!me.view.window) return;
-        UIViewController *over = me.presentedViewController;
-        SGLog(@"system player: after %@, %@ over the page", what, over ? NSStringFromClass(over.class) : @"nothing");
-    });
 }
 
 - (void)toggleShuffle {

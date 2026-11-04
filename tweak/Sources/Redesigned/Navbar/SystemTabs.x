@@ -170,9 +170,6 @@ static const CGFloat kDeviceRoom = 80;
 }
 
 - (void)environmentChanged {
-    UITabAccessoryEnvironment environment = self.traitCollection.tabAccessoryEnvironment;
-    SGLog(@"system tabs: the mini player is %@ (environment %ld)", environment == UITabAccessoryEnvironmentInline ? @"in the bar's row"
-          : environment == UITabAccessoryEnvironmentRegular ? @"over the bar" : @"neither", (long)environment);
     [self setNeedsLayout];
 }
 
@@ -197,9 +194,6 @@ static const CGFloat kDeviceRoom = 80;
     CGFloat side = MAX(20, shape.size.height - 2 * kCoverInset);
     CGPoint middle = CGPointMake(CGRectGetMinX(shape) + shape.size.height / 2, CGRectGetMidY(shape));
     _cover.frame = CGRectMake(round(middle.x - side / 2), round(middle.y - side / 2), side, side);
-    static NSUInteger told;
-    if (told++ < 4) SGLog(@"system tabs: the mini player %@ in a capsule %@ (%@), cover %@", NSStringFromCGRect(self.bounds), NSStringFromCGRect(shape),
-                          capsule ? NSStringFromClass(capsule.class) : @"none", NSStringFromCGRect(_cover.frame));
     // Round over the bar too, as in the row (its owner, 2026-10-31).
     _cover.layer.cornerRadius = side / 2;
     CGFloat button = 36, right = size.width - 6;
@@ -357,7 +351,6 @@ static const CGFloat kDeviceRoom = 80;
             id player = SGPlayer();
             if (way < 0) [player skipToNextTrackWithOptions:nil];
             else [player skipToPreviousTrackWithOptions:nil];
-            SGLog(@"system tabs: the mini player swiped to the %@ track", way < 0 ? @"next" : @"previous");
             // A skip that changes nothing (back from a track already under way only restarts it) brings the strip back.
             __weak typeof(self) weakSelf = self;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -505,36 +498,7 @@ static SGRSystemPlayerPage *takePage(void) {
 
 @implementation SGRSystemTabsHost
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hit = [super hitTest:point withEvent:event];
-    UIView *taken = [self taken:hit];
-    static NSUInteger told;
-    // Every touch on the lower part of the screen, where the bar and the card are, with what holds it.
-    if (event.type == UIEventTypeTouches && point.y > self.bounds.size.height - 260 && told++ < 120) {
-        NSMutableString *chain = [NSMutableString string];
-        NSUInteger levels = 0;
-        for (UIView *v = hit.superview; v && v != self && levels < 5; v = v.superview, levels++) [chain appendFormat:@" < %@", NSStringFromClass(v.class)];
-        // Where a touch passed on lands among Spotify's views under the host.
-        NSString *under = @"-";
-        if (!taken) {
-            NSArray<UIView *> *siblings = self.superview.subviews;
-            NSUInteger me = [siblings indexOfObject:self];
-            for (NSInteger i = (NSInteger)me - 1; i >= 0; i--) {
-                UIView *sibling = siblings[i];
-                UIView *found = [sibling hitTest:[self convertPoint:point toView:sibling] withEvent:event];
-                if (!found) continue;
-                NSMutableString *path = [NSMutableString stringWithString:NSStringFromClass(found.class)];
-                NSUInteger levels = 0;
-                for (UIView *v = found.superview; v && v != self.superview && levels < 4; v = v.superview, levels++) [path appendFormat:@" < %@", NSStringFromClass(v.class)];
-                under = path;
-                break;
-            }
-        }
-        UIView *content = self.accessoryContent;
-        SGLog(@"system tabs: touch at %@ hits %@%@, %@ (under it: %@); the card's content at %@ in a window %d, alpha %.2f, hidden %d", NSStringFromCGPoint(point),
-              hit ? NSStringFromClass(hit.class) : @"nothing", chain, taken ? @"kept" : @"passed to Spotify", under,
-              NSStringFromCGRect([content convertRect:content.bounds toView:self]), content.window != nil, content.alpha, content.hidden);
-    }
-    return taken;
+    return [self taken:[super hitTest:point withEvent:event]];
 }
 
 - (UIView *)taken:(UIView *)hit {
@@ -647,7 +611,6 @@ API_AVAILABLE(ios(26.0))
     UIView *first = buttons.firstObject;
     CGPoint point = [hold locationInView:bar];
     BOOL onFirst = first ? CGRectContainsPoint([first convertRect:first.bounds toView:bar], point) : point.x < bar.bounds.size.width / 4;
-    SGLog(@"system tabs: held at %@ over %@ (%lu buttons)", NSStringFromCGPoint(point), onFirst ? @"the first tab" : @"another tab", (unsigned long)buttons.count);
     if (!onFirst) return;
     self.heldUntil = CACurrentMediaTime() + 2;
     [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium] impactOccurred];
@@ -679,13 +642,6 @@ static void clearBackdrops(UITabBarController *controller) {
             if (sub.userInteractionEnabled) sub.userInteractionEnabled = NO;
             for (UIView *inner in sub.subviews) if (inner.backgroundColor) inner.backgroundColor = UIColor.clearColor;
         }
-    }
-    static BOOL told;
-    if (!told) {
-        told = YES;
-        NSMutableString *tree = [NSMutableString string];
-        for (UIView *sub in root.subviews) [tree appendFormat:@" [%@ %@ bg %@]", NSStringFromClass(sub.class), NSStringFromCGRect(sub.frame), sub.backgroundColor];
-        SGLog(@"system tabs: the controller's views:%@", tree);
     }
 }
 
@@ -748,7 +704,6 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
             tabs.mini = mini;
             controller.bottomAccessory = [[UITabAccessory alloc] initWithContentView:mini];
             host.accessoryContent = mini;
-            SGLog(@"system tabs: a tab bar controller over %@", NSStringFromClass(container.class));
         }
         UITabBarController *controller = tabs.controller;
         SGRSystemTabsHost *host = tabs.host;
@@ -841,8 +796,6 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
             controller.tabs = items;
             tabs.sources = sources;
             tabs.titles = titles;
-            SGLog(@"system tabs: %lu tabs, search at %@, %@", (unsigned long)items.count, searchIndex == NSNotFound ? @"none" : @(searchIndex),
-                  namesHidden ? @"icons only" : @"with names");
         }
         NSUInteger index = active ? [sources indexOfObject:active] : NSNotFound;
         // The trailing search tab, while another tab is the one shown, keeps its outline in white whatever UIKit asks of it:
@@ -899,8 +852,6 @@ void SGRSystemTabsFollowScroll(UIScrollView *scrollView) {
         if (!page || [page contentScrollViewForEdge:NSDirectionalRectEdgeBottom] == scrollView) return;
         [page setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeBottom];
         [page setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeTop];
-        SGLog(@"system tabs: minimize follows %@ %p (content %.0f tall in %.0f) on page %lu", NSStringFromClass(scrollView.class), scrollView,
-              scrollView.contentSize.height, scrollView.bounds.size.height, (unsigned long)sg_tabs.controller.selectedIndex);
     }
 }
 
@@ -926,13 +877,7 @@ BOOL SGRSystemTabsCanMinimize(void) {
     if (@available(iOS 26.0, *)) {
         UITabBar *bar = sg_tabs.controller.tabBar;
         if (!bar || sg_providerRefused) return NO;
-        static BOOL told;
-        id provider = visualProvider(bar);
-        if (!told) {
-            told = YES;
-            SGLog(@"system tabs: the bar's visual provider %@", provider ? NSStringFromClass([provider class]) : @"missing, UIKit's scroll minimize instead");
-        }
-        return provider != nil;
+        return visualProvider(bar) != nil;
     }
     return NO;
 }
@@ -951,15 +896,10 @@ void SGRSystemTabsSetMinimized(BOOL minimized) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(visualProvider(bar), NSSelectorFromString(@"setMinimized:"), minimized);
         } @catch (NSException *e) {
             sg_providerRefused = YES;
-            SGLog(@"system tabs: the bar's visual provider refused (%@), UIKit's scroll minimize instead", e.reason);
             return;
         }
         // The tabs' glyphs again once the accessory has moved: Search is drawn plain only while the bar is minimized.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ SGRRefreshTabBar(); });
-        static NSUInteger told;
-        if (told++ < 12) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            SGLog(@"system tabs: %@ by the scroll, the accessory now %@", minimized ? @"minimizing" : @"expanding", SGRSystemTabsMinimized() ? @"in the row" : @"over the bar");
-        });
     }
 }
 
@@ -992,6 +932,17 @@ static UIViewController *presenterOverPage(UIViewController *from, UIViewControl
     return top;
 }
 
+// The sheet a controller under the page asked for and the page's top presented instead, kept weakly on the asker: a
+// dismissal Spotify sends that asker later is the sheet's (the review, 2026-11-04). Sent on as it was, it found nothing
+// presented there, so the sheet stayed up, or the asker, if presented itself, closed instead.
+@interface SGRRedirectedSheet : NSObject
+@property (nonatomic, weak) UIViewController *sheet;
+@end
+@implementation SGRRedirectedSheet
+@end
+
+static char kRedirectedKey;
+
 %hook UIViewController
 - (void)presentViewController:(UIViewController *)presented animated:(BOOL)animated completion:(void (^)(void))completion {
     UIViewController *top = presented ? presenterOverPage((UIViewController *)self, presented) : nil;
@@ -999,8 +950,28 @@ static UIViewController *presenterOverPage(UIViewController *from, UIViewControl
         %orig;
         return;
     }
-    SGLog(@"system player: %@ presented from %@ under the page goes up from %@ over it", NSStringFromClass(presented.class), NSStringFromClass([self class]), NSStringFromClass(top.class));
+    SGRRedirectedSheet *box = [SGRRedirectedSheet new];
+    box.sheet = presented;
+    objc_setAssociatedObject(self, &kRedirectedKey, box, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [top presentViewController:presented animated:animated completion:completion];
+}
+
+- (void)dismissViewControllerAnimated:(BOOL)animated completion:(void (^)(void))completion {
+    SGRRedirectedSheet *box = objc_getAssociatedObject(self, &kRedirectedKey);
+    if (!box) {
+        %orig;
+        return;
+    }
+    UIViewController *sheet = box.sheet;
+    UIViewController *presenter = sheet.presentingViewController;
+    // Only while the sheet is still up and the asker has nothing of its own presented, which it would mean instead.
+    if (!presenter || sheet.isBeingDismissed || ((UIViewController *)self).presentedViewController) {
+        objc_setAssociatedObject(self, &kRedirectedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        %orig;
+        return;
+    }
+    objc_setAssociatedObject(self, &kRedirectedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [presenter dismissViewControllerAnimated:animated completion:completion];
 }
 %end
 

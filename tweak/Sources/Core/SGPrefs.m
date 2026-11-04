@@ -70,6 +70,11 @@ NSInteger SGInt(NSString *key, NSInteger fallback) {
     return value ? [value integerValue] : fallback;
 }
 
+double SGDouble(NSString *key, double fallback) {
+    id value = stored(key);
+    return [value isKindOfClass:NSNumber.class] ? [value doubleValue] : fallback;
+}
+
 NSString *SGString(NSString *key) {
     id value = stored(key);
     if ([value isKindOfClass:NSString.class]) return value;
@@ -83,6 +88,11 @@ NSArray *SGArray(NSString *key) {
 
 void SGSetInt(NSString *key, NSInteger value) {
     [NSUserDefaults.standardUserDefaults setInteger:value forKey:key];
+    SGPrefsChanged();
+}
+
+void SGSetDouble(NSString *key, double value) {
+    [NSUserDefaults.standardUserDefaults setDouble:value forKey:key];
     SGPrefsChanged();
 }
 

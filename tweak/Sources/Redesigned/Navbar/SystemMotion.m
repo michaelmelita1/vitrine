@@ -251,8 +251,6 @@ static UIBlurEffect *blurEffect(void) {
     _topBlur.maskView = topMask;
     [self addSubview:_topBlur];
     _variable = [NSClassFromString(@"CAFilter") filterWithType:@"variableBlur"] != nil;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ SGLog(@"redesign player: animated artwork blurs %@", self->_variable ? @"with variableBlur" : @"with a material"); });
     _lyricsBlur = [[UIVisualEffectView alloc] initWithEffect:nil];
     _lyricsBlur.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self addSubview:_lyricsBlur];

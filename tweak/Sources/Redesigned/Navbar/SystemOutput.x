@@ -132,7 +132,6 @@ static void rememberModels(NSArray *routes) {
             if (![model isKindOfClass:NSString.class] || !model.length || [models[name] isEqualToString:model]) continue;
             models[name] = model;
             changed = YES;
-            SGLog(@"system player: %@ is a %@", name, model);
         } @catch (NSException *e) {}
     }
     if (changed) [NSUserDefaults.standardUserDefaults setObject:models forKey:kOutputModelsKey];
@@ -194,7 +193,11 @@ static void fetchPicked(AVAudioSessionPortDescription *port) {
     Class controllerClass = NSClassFromString(@"MPAVRoutingController");
     SEL fetch = NSSelectorFromString(@"fetchAvailableRoutesWithCompletionHandler:");
     @try {
-        if (!sg_routing && controllerClass) sg_routing = ((id (*)(id, SEL, NSString *))objc_msgSend)([controllerClass alloc], @selector(initWithName:), @"vitrine");
+        // alloc and init by hand, outside ARC: init consumes what alloc made and returns its own +1 (AGENTS.md).
+        if (!sg_routing && [controllerClass instancesRespondToSelector:@selector(initWithName:)]) {
+            void *raw = ((void *(*)(Class, SEL))objc_msgSend)(controllerClass, @selector(alloc));
+            sg_routing = CFBridgingRelease(((void *(*)(void *, SEL, NSString *))objc_msgSend)(raw, @selector(initWithName:), @"vitrine"));
+        }
         id controller = sg_routing;
         if (![controller respondsToSelector:fetch] || ![controller respondsToSelector:@selector(setDiscoveryMode:)]) return;
         ((void (*)(id, SEL, NSInteger))objc_msgSend)(controller, @selector(setDiscoveryMode:), 3);
@@ -242,7 +245,6 @@ static void fetchPicked(AVAudioSessionPortDescription *port) {
                     sg_pickedProduct = [product isKindOfClass:NSString.class] ? product : nil;
                     sg_pickedStale = NO;
                 } @catch (NSException *e) {}
-                SGLog(@"system player: AirPlay to %@, a %@", sg_pickedName ?: @"a route MediaPlayer did not name", sg_pickedProduct ?: @"model it did not name");
                 paintConnectAgain();
             });
         });
@@ -338,12 +340,6 @@ static NSString *outputSymbol(void) {
                           @"beats.studiobuds.plus": @"beats.studiobuds", @"macbook": @"laptopcomputer", @"beats.powerbeats.pro": @"beats.powerbeats", @"beats.powerbeats3": @"beats.powerbeats"};
     while (!hasDeviceSymbol(symbol) && older[symbol]) symbol = older[symbol];
     if (!hasDeviceSymbol(symbol)) symbol = kConnectSymbol;
-    static NSString *told;
-    NSString *line = [NSString stringWithFormat:@"%@ (%@), drawn as %@", port.portType, port.portName, symbol];
-    if (![told isEqualToString:line]) {
-        told = line;
-        SGLog(@"system player: output %@", line);
-    }
     return symbol;
 }
 

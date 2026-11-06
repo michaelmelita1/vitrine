@@ -359,11 +359,6 @@ static BOOL adFree(void) {
 - (UIView *)tipsView {
     UIStackView *lyrics = cardRow(@"quote.bubble", @"Lyrics", @"A live preview of the look, the sources in order, and lyrics even where "
                                   @"Spotify has none.\nMod Settings > Lyrics", nil);
-    if (@available(iOS 17.0, *)) {
-        UIStackView *liveActivity = cardRow(@"platter.filled.bottom.iphone", @"Live Activity",
-                                            @"The track on the lock screen.\nMod Settings > Live Activity", nil);
-        return tipsCard(@[lyrics, liveActivity]);
-    }
     return tipsCard(@[lyrics]);
 }
 

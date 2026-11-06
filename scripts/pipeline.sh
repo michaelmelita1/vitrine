@@ -101,17 +101,6 @@ echo "    $TWEAK_DEB"
 FILES=("$TWEAK_DEB")
 [ "$WITH_FLEX" = 1 ] && FILES+=("$FLEX_DEB")
 
-# The Live Activity (Shared/LiveActivity) draws in a widget extension of its own.
-if xcrun --sdk iphoneos --find swiftc >/dev/null 2>&1; then
-  EXT_DIR="$ROOT/out/extension"
-  unzip -p "$IN" "${APP_DIR}Info.plist" > "$ROOT/out/.info.plist"
-  "$ROOT/scripts/build-extension.sh" "$ROOT/out/.info.plist" "$EXT_DIR"
-  rm -f "$ROOT/out/.info.plist"
-  FILES+=("$EXT_DIR/SpotifyGlassLiveActivity.appex")
-else
-  echo "==> no Xcode selected: building without the Live Activity extension"
-fi
-
 # Spotify's widget reads what the app writes through App Group suites the re-signed IPA is not entitled
 # to, and Siri reads the login from a keychain group it is not entitled to either; this dylib, loaded by
 # the app and its extensions, puts them all on groups the signature does have.
@@ -209,11 +198,6 @@ if [ ${#ICONS[@]} -gt 0 ]; then
   OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
   (cd "$PATCH" && zip -q -r "$OUT_ABS" "$APP_DIR")
   rm -rf "$PATCH"
-fi
-
-if [ -n "${EXT_DIR:-}" ]; then
-  echo "==> adding the Live Activity intents to Spotify's App Intents metadata"
-  "$ROOT/scripts/merge-appintents.py" "$OUT" "$APP_DIR" "$EXT_DIR/app/Metadata.appintents"
 fi
 
 echo "==> done: $OUT"

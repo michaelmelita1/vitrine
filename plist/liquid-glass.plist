@@ -4,10 +4,6 @@
 <dict>
 	<key>UIDesignRequiresCompatibility</key>
 	<false/>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
 	<key>MusicHapticsSupported</key>
 	<true/>
 	<key>NSBonjourServices</key>

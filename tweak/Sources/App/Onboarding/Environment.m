@@ -5,7 +5,6 @@
 // over the same Spotify before, left behind, offered once for deleting.
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Haptics/Haptics.h"
-#import "Shared/LiveActivity/LiveActivity.h"
 #import "Core/SGCore.h"
 #import "Settings/SGModPage.h"
 #import "Settings/SGPageStyle.h"
@@ -63,7 +62,6 @@ static NSArray<NSString *> *missingAppChanges(void) {
     id compatibility = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIDesignRequiresCompatibility"];
     if (SGRedesignedUI() && [compatibility isKindOfClass:NSNumber.class] && [compatibility boolValue])
         [missing addObject:@"the tab bar is drawn without its glass"];
-    if (!SGLiveActivityAllowedByInstall()) [missing addObject:@"the Live Activity is missing"];
     if (!SGMusicHapticsListedByInstall())
         [missing addObject:@"iOS does not list Spotify for Music Haptics, which stops vibrations in the background"];
     return missing;
@@ -83,8 +81,8 @@ static SGProblem appChanges(void) {
 static SGProblem lookNeedsIOS26(void) {
     return @[@"Vitrine's look needs iOS 26",
              [NSString stringWithFormat:@"The redesign is built on iOS 26's Liquid Glass, so on iOS %@ Spotify keeps its own look. "
-                 @"What does not draw on Spotify's screens still works: ads and privacy, lyrics sources, Karaoke, "
-                 @"the Live Activity and the rest of Mod Settings.", UIDevice.currentDevice.systemVersion]];
+                 @"What does not draw on Spotify's screens still works: ads and privacy, lyrics sources, Karaoke and "
+                 @"the rest of Mod Settings.", UIDevice.currentDevice.systemVersion]];
 }
 
 // One problem is the alert's title and message; several are a paragraph each under a count.

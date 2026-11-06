@@ -1,4 +1,5 @@
 #import "Core/SGCore.h"
+#import "Shared/Player/SleepTimer.h"
 #import "Shared/AppIcon/AppIcon.h"
 #import "Shared/Fonts/Fonts.h"
 #import "Shared/LyricsTranslation/LyricsTranslation.h"
@@ -11,7 +12,6 @@
 #import "Shared/LyricsMeanings/Meanings.h"
 #import "Shared/Player/PlayerSettings.h"
 #import "Shared/Sing/Sing.h"
-#import "Shared/LiveActivity/LiveActivity.h"
 #import "Redesigned/Lyrics/LyricsText.h"
 #import "Redesigned/Lyrics/LyricsLook.h"
 #import "Redesigned/Navbar/Navbar.h"
@@ -74,8 +74,14 @@ UIViewController *SGPlayerSettingsPage(void) {
         SGSection(nil, @[SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)]), nil];
     // Spotify's own sleep timer fade, a flag it built and did not ship (Shared/Player/SpotifySleepTimer.m stands aside
     // while it is on). The only one kept of the Labs page that was.
-    [sections addObject:SGNotedSection(nil, @[SGFlagRow(@"Sleep timer fades out", @"ios-feature-sleeptimer.enable_fade_out")],
-                                       @"Spotify's own fade as the sleep timer ends. Applies after you restart Spotify.")];
+    // The sleep timer: how long the mod fades Spotify's own timer out (Shared/Player/SpotifySleepTimer.m), and Spotify's
+    // own fade, a flag it built and did not ship (which the mod's stands aside for).
+    NSArray<NSString *> *fades = SGSleepTimerFadeNames();
+    SGModRow *fade = SGMenuRow(@"Fade out", fades, ^NSString *{ return fades[(NSUInteger)SGSleepTimerFadeChoice()]; },
+                               ^(NSInteger index) { SGSetInt(SGKeySleepTimerFade, index); });
+    [sections addObject:SGNotedSection(@"Sleep timer", @[fade, SGFlagRow(@"Spotify's own fade", @"ios-feature-sleeptimer.enable_fade_out")],
+                                       @"Fade out is how long the sound fades before the sleep timer from the player's ⋯ pauses Spotify. "
+                                       @"Spotify's own fade applies after you restart Spotify.")];
 
     // The page leads with a card of the player and the background's control, then its own rows.
     return SGRPlayerSettingsPage(sections);

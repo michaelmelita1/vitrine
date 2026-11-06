@@ -1,7 +1,7 @@
 // Onboarding: a welcome page over Home the first time this build runs, in glass: Vitrine's logo landing,
 // then what the look is (or, below iOS 26, that it needs 26), a No ads switch that
 // turns Hide ads, Hide upsells and Spoof Premium on together (off leaves them alone), pointers to what people
-// miss in Mod Settings (Lyrics and the Live Activity), and a line on holding
+// miss in Mod Settings (Lyrics), and a line on holding
 // Home for Mod Settings. Those switches are read at launch, so turning them on ends the welcome in a restart. After an update instead, a What's new sheet lists what the version brought. The Mod page
 // offers both again.
 #import <UIKit/UIKit.h>

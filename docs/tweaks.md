@@ -17,7 +17,6 @@
     tweak/Sources/App/          what brings the layers together: Mod Settings' root and composed pages, the Mod page,
                                 backup and signing, the welcome tour
     tweak/Sources/Diagnostics/  screen dumps, the tree server, the phone driver and the main thread hang sampler of FLEX builds
-    extension/LiveActivity/     the Live Activity widget, a WidgetKit extension of its own
     extension/AppGroups/        a dylib loaded by Spotify and its widget, Siri and notification extensions that moves
                                 Spotify's App Groups and its extension-credentials keychain group into groups the
                                 re-signed IPA has; without it the widget stays a placeholder and Siri asks to verify
@@ -403,39 +402,6 @@ Shared:
                   scored on the Mac against harness/haptics/, as are the pure steps (build/track), the hook, the two
                   switches, the stand-down and the move from the old choice in the simulator against its sim/, the
                   settings against harness/haptics-page/
-    LiveActivity/ a Live Activity on the lock screen and in the Dynamic Island in one of three views, the line being
-                  sung with the next one under it, the tracks up next (a tap on one skipping ahead to it), or a control
-                  menu of tabs, Controls (previous, play and pause, next, shuffle, repeat), Queue and a sleep Timer of
-                  the mod's own (Player/SleepTimer.m: 15 min, 30 min, 1 hour, End of track, End of album) that fades
-                  the sound out and pauses Spotify, and stays set when the card is switched off (LiveActivity.h lists its files): a timer polls the player and
-                  sends a new state only when what the view shows changes, local updates only, no push, and asks ActivityKit
-                  only then. It ticks four times a second in the lyrics view and once a second in the others. The card
-                  is tinted with the cover's color and shows the cover itself, a JPEG of a few dozen pixels inside
-                  the state, which ActivityKit caps at 4 KB (the bridge sends it without the cover when it would
-                  not fit); the color is darkened to a luminance of 0.04 at most, so the white text keeps 4.5:1 on any
-                  cover, and the cover is read only once the now playing title is the new track's. The page's options
-                  ride in the state too, read on every tick, so they apply within a tick: the lines' alignment, what the
-                  lyrics view shows on a track with no timed lyrics (a note under the track, or the track large), the
-                  colors (Spotify's green; Artwork, the cover's color lightened to about the green's luminance in its
-                  place; Plain, white on the system's own background), and the progress bar. Artwork off sends no
-                  cover at all. The page's preview (SGLiveActivityPreview.m) is a mock of the card in UIKit, not the
-                  widget, checked in the simulator against harness/live-activity-page/. Taps are
-                  LiveActivityIntents run inside Spotify and take a second or two to show on the card. The widget is extension/LiveActivity; ActivityKit pairs the two
-                  by the attributes' type in LiveActivityShared.swift, compiled into both. It starts only with Spotify
-                  in front; its settings apply at once. It ends when Spotify is swiped away while running; killed
-                  while suspended, Spotify cannot end it, so each state goes stale a minute on (an unchanged card is
-                  sent again every 20 s) and a launch ends any left over before it starts a new one. The same folder
-                  gives Siri, the Shortcuts app and the Action button Like This Song, Play or Pause, Next and Previous
-                  Track, Karaoke and Sleep Timer (AppShortcuts.swift lists them as Spotify's App Shortcuts), and iOS 18
-                  controls for Control Center and the lock screen of Like, Karaoke and the sleep timer
-                  (extension/LiveActivity/Controls.swift), buttons, as the extension cannot read Karaoke's state. Each is
-                  a LiveActivityIntent or AudioPlaybackIntent, so it runs inside Spotify, launched in the background
-                  when needed, and LiveActivity.x answers it with the activity on or off, Like through
-                  Player/LikedSongs.x's collection platform and Karaoke through SGSetSingOn; the sleep timer (15 min, 30 min,
-                  1 hour, End of track, End of album or Off) is the card's own, Player/SleepTimer.m, which keeps its
-                  own clock with the activity off. The intent asks again for 8 s while the player is not up,
-                  then tells Siri to open Spotify. Checked in the simulator against harness/shortcuts/
-
     ListeningStats/ listening stats kept on the phone (ListeningStats.h lists its files): each music track timed while
                   it plays through PlayerState's observer and written to a text log in Application Support once it ran 30 s
                   or half the track (ListeningStats.x), Spotify's data export read in, either shape, loose or zipped, plays

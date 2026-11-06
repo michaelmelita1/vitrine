@@ -2,8 +2,7 @@
 // playing, or at the end of the album or playlist playing, and over the last seconds before that (the Fade
 // out choice, 30 s unless picked) it fades the sound out through the mod's own gain (SGPlayerSetGain), not
 // the system volume. A second after the pause the gain is back to normal, so the next play is at full
-// volume. The Live Activity's Timer tab, the Sleep Timer shortcut and its Control Center control set it
-// (Shared/LiveActivity), and the card reads it back.
+// volume. Its Fade out choice also fades Spotify's own timer (SpotifySleepTimer.m), which the player page's ⋯ sets.
 //
 // It lasts until it is up or canceled, or Spotify quits; nothing is stored but the fade's length. While one
 // is set a timer checks it four times a second, on the main thread, playing or paused.
@@ -20,7 +19,7 @@ typedef NS_ENUM(NSInteger, SGSleepTimerMode) {
     SGSleepTimerEndOfAlbum,  // just before the end of the last track of the album or playlist playing
 };
 
-// The fade's length, an index into SGSleepTimerFadeNames() (Live Activity page, Sleep timer section). Read
+// The fade's length, an index into SGSleepTimerFadeNames() (the Player page's Sleep timer section). Read
 // on every check, so a change applies to a timer already running. For a time it fades over the last seconds
 // before the end; at the end of the track or the album over the last seconds of the (last) track, by the
 // player's position and the track's length, and over the whole track when the track is shorter.

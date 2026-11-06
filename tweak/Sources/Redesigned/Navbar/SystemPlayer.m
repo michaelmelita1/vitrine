@@ -34,9 +34,8 @@
 // seeks, a scroll back, a pause or VoiceOver brings it all back. The recognizers for that are taps and a watcher that
 // never recognizes, so the zoom's close keeps the only vertical drag.
 //
-// Turned sideways, the landscape player (SystemLandscape.m, iOS 27.3's) turns in over the page, its lyrics up if the
-// page's are (SystemTurn.m, told through SGRSystemTurnSetPage and SGRSystemTurnSetLyrics); the page itself stays portrait
-// (its owner, 2026-11-01: left to turn, it stretched into a broken landscape layout).
+// Turned sideways with the app (SystemTurn.m), the page holds the landscape player (SystemLandscape.m, iOS 27.3's) over
+// everything of its own, on its lyrics or queue if the page's are up, and comes back on what it showed.
 //
 // The Player page's settings reach it too (its owner, 2026-11-01): Volume (the row goes and the controls close up, read at
 // each open), Hide on the player's Shuffle and Repeat (by alpha in their slots, as PlayerControls.x hides them), the hold
@@ -1648,12 +1647,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         }
         [self.view layoutIfNeeded];
     }];
-}
-
-- (UIView *)landscapeTurnCover:(UIImage **)image {
-    if (!_cover.image || _coverHolder.hidden || _coverHolder.alpha < 0.01 || _cover.hidden || _cover.alpha < 0.01) return nil;
-    *image = _cover.image;
-    return _coverHolder;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {

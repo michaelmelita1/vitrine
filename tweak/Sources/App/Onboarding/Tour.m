@@ -359,14 +359,12 @@ static BOOL adFree(void) {
 - (UIView *)tipsView {
     UIStackView *lyrics = cardRow(@"quote.bubble", @"Lyrics", @"A live preview of the look, the sources in order, and lyrics even where "
                                   @"Spotify has none.\nMod Settings > Lyrics", nil);
-    BOOL liveActivity = NO;
-    if (@available(iOS 17.0, *)) liveActivity = YES;
-    UIStackView *airPods = cardRow(@"airpods.pro", liveActivity ? @"AirPods gestures, Live Activity" : @"AirPods gestures",
-                                   liveActivity ? @"Nod twice or shake your head to control the music, with a chime; and the track on the "
-                                                  @"lock screen.\nMod Settings > AirPods gestures, Live Activity"
-                                                : @"Nod twice or shake your head to control the music, with a chime."
-                                                  @"\nMod Settings > AirPods gestures", nil);
-    return tipsCard(@[lyrics, airPods]);
+    if (@available(iOS 17.0, *)) {
+        UIStackView *liveActivity = cardRow(@"platter.filled.bottom.iphone", @"Live Activity",
+                                            @"The track on the lock screen.\nMod Settings > Live Activity", nil);
+        return tipsCard(@[lyrics, liveActivity]);
+    }
+    return tipsCard(@[lyrics]);
 }
 
 - (void)viewDidLoad {

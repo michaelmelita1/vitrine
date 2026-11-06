@@ -62,7 +62,7 @@ UIViewController *SGPlayerSettingsPage(void) {
         return SGFlag(SGKeyArtistBlock, NO) ? @(SGBlockedArtists().count).stringValue : @"Off";
     };
 
-    // AirPods gestures, the lock screen widget and Vibrations have rows of their own on Mod Settings' main page.
+    // The lock screen widget and Vibrations have rows of their own on Mod Settings' main page.
     NSArray<SGModRow *> *pages = @[
         SGWithTile(SGPageRow(@"Mini player", ^UIViewController *{ return SGRMiniPlayerSettingsPage(); }), @"rectangle.bottomthird.inset.filled", UIColor.systemPinkColor),
         SGWithTile(blocked, @"person.crop.circle.badge.xmark", UIColor.systemRedColor),

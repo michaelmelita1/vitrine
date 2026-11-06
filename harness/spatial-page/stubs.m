@@ -1,5 +1,5 @@
 // What the Sing page and the Spatial voice page call outside their own files: Sing.x's and SGSingModel.m's state,
-// a model on the phone and Sing off, and Shared/HeadGestures' motion, played from a script of the head's yaw
+// a model on the phone and Sing off, and Shared/Sing/HeadMotion's motion, played from a script of the head's yaw
 // at 25 motions a second, as AirPods send them, while the preview listens.
 #import <CoreMotion/CoreMotion.h>
 #import <objc/runtime.h>

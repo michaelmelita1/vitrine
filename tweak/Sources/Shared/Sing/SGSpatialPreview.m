@@ -16,7 +16,7 @@
 #import <CoreMotion/CoreMotion.h>
 #import "Core/SGCore.h"
 #import "Settings/SGPageStyle.h"
-#import "Shared/HeadGestures/HeadGestures.h"
+#import "Shared/Sing/HeadMotion.h"
 #import "SGSingEngine.h"
 #import "Sing.h"
 

@@ -55,6 +55,6 @@ id SGRCollectionWatchURI(NSURL *uri, void (^changed)(void));
 // YES once the collection has answered for the watch's URI, with the answer; subscribes if it could not before.
 BOOL SGRCollectionWatchSaved(id watch, BOOL *saved);
 // Saves `uri` to the collection (a track: Liked Songs) or takes it out, through Spotify's collection platform's
-// addURL:showUIConfirmation:completion: (as Shared/HeadGestures/HeadGestures.x likes) and its
+// addURL:showUIConfirmation:completion: (as Shared/Player/LikedSongs.x does) and its
 // removeURL:showUIConfirmation:completion: (in the 9.1.90 binary beside it). NO when the platform is not known yet.
 BOOL SGRCollectionSetSaved(NSURL *uri, BOOL saved);

@@ -75,10 +75,10 @@ void SGKaraokeSeek(NSInteger ms) {
     [sg_player seekTo:ms / 1000.0];
 }
 
-// Shared/HeadGestures' head motion, for spatial voice: none in the simulator, so the voice stays ahead.
+// Shared/Sing/HeadMotion's head motion, for spatial voice: none in the simulator, so the voice stays ahead.
 void SGHeadMotionListen(NSString *name, void (^handler)(id motion)) {}
 void SGHeadMotionAskPermission(void) {}
-BOOL SGHeadGesturesAvailable(void) {
+BOOL SGHeadMotionAvailable(void) {
     return NO;
 }
 

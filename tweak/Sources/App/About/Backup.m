@@ -114,7 +114,6 @@ static NSDictionary *fromChroma(NSDictionary *settings) {
         @"spotifyglass.redesign.sing.ignoreHeat": @"spotifyglass.sing.ignoreHeat",
         @"spotifyglass.redesign.spatialVoice": @"spotifyglass.sing.spatial",
         @"spotifyglass.redesign.player.hideVideoSwitch": @"spotifyglass.hide.videoSwitch",
-        @"spotifyglass.gestures.head": @"spotifyglass.headgestures",
         @"spotifyglass.redesign.inlinePlayer": @"spotifyglass.redesign.navbar.minimize",
     };
     NSSet<NSString *> *dropped = [NSSet setWithArray:@[@"spotifyglass.redesign.menuNumbers", @"spotifyglass.eevee.warned",

@@ -5,7 +5,7 @@
 #import <os/lock.h>
 #import "Core/SGCore.h"
 #import "Artist.h"
-#import "Shared/HeadGestures/HeadGestures.h"
+#import "Shared/Player/LikedSongs.h"
 
 @protocol SGRCollectionState <NSObject>
 + (id)saved;
@@ -44,7 +44,7 @@ static void keepProvider(id provider) {
 static __weak id sg_platform;
 
 // The platform that saves to Liked Songs, from whichever of Spotify's four the app last reached for, as
-// Shared/HeadGestures/HeadGestures.x keeps it: 9.1.90 may never make SPTCollectionPlatformImplementation, whose init was
+// Shared/Player/LikedSongs.x keeps it: 9.1.90 may never make SPTCollectionPlatformImplementation, whose init was
 // the only place it was kept, and the player page's star did nothing (its owner, 2026-11-06). Asked for from any thread.
 static void keepPlatform(id platform) {
     if (![platform respondsToSelector:NSSelectorFromString(@"addURL:showUIConfirmation:completion:")]) return;
@@ -273,7 +273,7 @@ BOOL SGRCollectionSetSaved(NSURL *uri, BOOL saved) {
     SEL selector = saved ? NSSelectorFromString(@"addURL:showUIConfirmation:completion:") : NSSelectorFromString(@"removeURL:showUIConfirmation:completion:");
     if (!uri || ![platform respondsToSelector:selector]) return NO;
     // Spotify's own confirmation ("Added to Liked Songs"), as a tap on its add button gives; a completion that reads no
-    // arguments, as HeadGestures.x passes, is safe whatever it is called with.
+    // arguments, as LikedSongs.x passes, is safe whatever it is called with.
     void (^done)(void) = ^{};
     ((void (*)(id, SEL, NSURL *, BOOL, id))objc_msgSend)(platform, selector, uri, YES, done);
     return YES;

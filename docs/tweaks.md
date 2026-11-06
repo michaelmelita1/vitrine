@@ -372,7 +372,7 @@ Shared:
                   rests again. From the
                   thermal state Serious up Karaoke is held and lets the model go,
                   unless Ignore heat warnings is on, and runs again at Fair. Spatial
-                  voice holds the separated vocals in front as the head turns: HeadGestures' motion gives the yaw off a
+                  voice holds the separated vocals in front as the head turns: HeadMotion.m's head motion gives the yaw off a
                   front that follows the head (Back in front, 5 s unless set), and the render thread pans the vocals' middle at equal power,
                   narrowed, with the far ear up to 0.65 ms late and low-passed; it stands down for iOS's own spatial
                   audio. Its Sound section sets Distance (the voice down by the square root of the distance), Room
@@ -403,22 +403,6 @@ Shared:
                   scored on the Mac against harness/haptics/, as are the pure steps (build/track), the hook, the two
                   switches, the stand-down and the move from the old choice in the simulator against its sim/, the
                   settings against harness/haptics-page/
-    HeadGestures/ AirPods gestures (HeadGestures.h lists its files): CMHeadphoneMotionManager's attitudes, while the
-                  switch is on and Spotify plays, read for a double nod and a shake, each doing what its pull-down
-                  says: Nothing, back or forward 15 s, play or pause (which listens with the song paused too), next or
-                  previous track, shuffle, repeat, or Like, which adds the track to Liked Songs through Spotify's
-                  collection platform (addURL:showUIConfirmation:completion:); Like and Next track until changed. A
-                  tone played through Spotify's playback session confirms each, whatever the Ring/Silent switch says,
-                  unless Chime on activation is off (spotifyglass.headgestures.chime; Try it and teaching always sound).
-                  Try it listens a few seconds and names in its row what it picked up, doing nothing to the song. A
-                  sheet teaches one's own nod and shake, five of each after a tone, a ring showing the head live (a dot
-                  that moves with it, ticks lighting toward where it went; SGHeadMotionListen) and five dots counting
-                  what landed, with Redo last; the threshold kept is the one that fires on all five but one at least, the nod
-                  stored before the shakes begin, so Cancel keeps it. Forget shows only while something is learned.
-                  The one CMHeadphoneMotionManager is lent to other features
-                  (SGHeadMotionListen: Karaoke's spatial voice), and runs for them with the switch off, the detector then
-                  unfed. The detector is
-                  tested on the Mac against harness/head-gestures/, the hook and the page in the simulator against its sim/
     LiveActivity/ a Live Activity on the lock screen and in the Dynamic Island in one of three views, the line being
                   sung with the next one under it, the tracks up next (a tap on one skipping ahead to it), or a control
                   menu of tabs, Controls (previous, play and pause, next, shuffle, repeat), Queue and a sleep Timer of
@@ -447,7 +431,7 @@ Shared:
                   (extension/LiveActivity/Controls.swift), buttons, as the extension cannot read Karaoke's state. Each is
                   a LiveActivityIntent or AudioPlaybackIntent, so it runs inside Spotify, launched in the background
                   when needed, and LiveActivity.x answers it with the activity on or off, Like through
-                  HeadGestures.x's collection platform and Karaoke through SGSetSingOn; the sleep timer (15 min, 30 min,
+                  Player/LikedSongs.x's collection platform and Karaoke through SGSetSingOn; the sleep timer (15 min, 30 min,
                   1 hour, End of track, End of album or Off) is the card's own, Player/SleepTimer.m, which keeps its
                   own clock with the activity off. The intent asks again for 8 s while the player is not up,
                   then tells Siri to open Spotify. Checked in the simulator against harness/shortcuts/
@@ -759,7 +743,7 @@ one page, the mod's own rows first and Spotify's flags below them or on a sub pa
 they change. Its main page groups the rows by what they are, in cards with no headings as Settings has its own,
 under the signing and environment warnings (below iOS 26 one says the look needs 26): Appearance and Tab bar, with a
 restart note; Home, Player, Lyrics, Albums and Artists; Karaoke, Spatial voice (where the iPhone reads headphone
-motion), Audio effects, AutoMix, Live Activity, AirPods gestures and Listening stats; Lock screen, Vibrations and Premium, ads &
+motion), Audio effects, AutoMix, Live Activity and Listening stats; Lock screen, Vibrations and Premium, ads &
 privacy; All flags; Mod. It is checked in the simulator
 against harness/mod-settings/. The Appearance page has (the redesign is always black) the Accent color
 preset, a pull-down of Spotify, Apple Music and Custom read off the color stored (a color set before the presets

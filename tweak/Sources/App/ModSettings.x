@@ -1,7 +1,7 @@
 // Settings: a Mod Settings row at the end of Spotify's settings list opens the mod's own page, its rows
 // grouped by what they are as the system Settings app groups its own, in cards with no headings: what the
 // app looks like (Appearance, Tab bar), the screens a page of its own changes (Home, Player, Lyrics, Albums and
-// Artists), the features that work on any iOS (Sing, Spatial voice, Audio effects, AutoMix, Live Activity, AirPods gestures, Listening
+// Artists), the features that work on any iOS (Sing, Spatial voice, Audio effects, AutoMix, Live Activity, Listening
 // stats), the system's side (Lock screen, Vibrations; Premium, ads & privacy), the advanced pages (All flags, a
 // searchable list of every flag with an override per flag) and Mod, the build, its updates and links. The
 // same row leads the side drawer's list (trees/test6.txt), above Your plan, so the page is a tap from
@@ -24,7 +24,6 @@
 #import "Shared/AutoMix/AutoMix.h"
 #import "Shared/LiveActivity/LiveActivity.h"
 #import "Shared/ListeningStats/ListeningStats.h"
-#import "Shared/HeadGestures/HeadGestures.h"
 #import "Shared/Player/PlayerSettings.h"
 #import "Shared/Sing/Sing.h"
 #import "Shared/Haptics/Haptics.h"
@@ -86,7 +85,6 @@ static UIViewController *modSettingsPage(void) {
         [features addObject:liveActivity];
     }
     [features addObjectsFromArray:@[
-        pageRow(@"AirPods gestures", @"airpods", UIColor.systemCyanColor, ^UIViewController *{ return SGHeadGesturesSettingsPage(); }),
         pageRow(@"Listening stats", @"chart.bar.fill", UIColor.systemBlueColor, ^UIViewController *{ return SGListeningStatsPage(); }),
     ]];
     [sections addObject:SGSection(nil, features)];

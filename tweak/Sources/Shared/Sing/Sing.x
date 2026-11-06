@@ -49,14 +49,14 @@
 // holds the worker and keeps the model and the lead for when Spotify plays again, until iOS says it ended or the sound
 // comes back; Spotify decides whether it resumes.
 //
-// Spatial voice listens to Shared/HeadGestures' motion (the app's one CMHeadphoneMotionManager) while Sing is
+// Spatial voice listens to HeadMotion.m's motion (the app's one CMHeadphoneMotionManager) while Sing is
 // on and Spotify plays, and hands the engine the head's yaw off a front that follows where the head points (Back in front,
 // 5 s unless set), so the voice drifts back ahead of a head that stays turned and the attitude's own drift never carries
 // it off. With no motion (no such headphones, Motion & Fitness not allowed) the voice stays ahead. iOS's own
 // spatial audio on the route already holds the whole song in place, so spatial voice stands down for it.
 //
 // Threading: the stage on the render thread; Spotify starts its output on a thread of its own; the head's
-// motion on HeadGestures' queue; the rest main.
+// motion on HeadMotion's queue; the rest main.
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreML/CoreML.h>
@@ -66,7 +66,7 @@
 #import <pthread.h>
 #import <stdatomic.h>
 #import "Core/SGCore.h"
-#import "Shared/HeadGestures/HeadGestures.h"
+#import "Shared/Sing/HeadMotion.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SpeedPitch.h"
@@ -369,7 +369,7 @@ static void prepareAheadSoon(void) {
 #pragma mark - spatial voice
 
 static BOOL sg_spatialListening;
-// On HeadGestures' motion queue only.
+// On HeadMotion's queue only.
 static SGSpatialFront sg_front;
 // Back in front, read on the motion queue: stored on the main thread.
 static _Atomic double sg_frontSeconds = 5;
@@ -394,7 +394,7 @@ static BOOL systemSpatial(void) {
 }
 
 // Listens to the head while Sing is on, spatial voice is on and Spotify plays, and iOS does not hold the song in
-// place itself; otherwise the voice goes back ahead (HeadGestures hands a listener taken out nil).
+// place itself; otherwise the voice goes back ahead (HeadMotion hands a listener taken out nil).
 static void updateSpatial(void) {
     SPTPlayerState *player = SGPlayerState();
     BOOL wanted = SGSingOn() && !SGSingMissing() && SGSingSpatial() && player.isPlaying && !player.isPaused;
@@ -406,7 +406,7 @@ static void updateSpatial(void) {
 }
 
 BOOL SGSingSpatialAvailable(void) {
-    return SGSingOSSupported() && SGHeadGesturesAvailable();
+    return SGSingOSSupported() && SGHeadMotionAvailable();
 }
 
 BOOL SGSingSpatial(void) {

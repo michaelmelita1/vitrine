@@ -2,7 +2,7 @@
 
 The Sing page (`tweak/Sources/Shared/Sing/SingSettings.m`) and the Spatial voice page under it, with its preview
 (`SGSpatialPreview.m`), on the real Settings/ framework. `stubs.m` stands in for Sing's state (a model on the
-phone, Sing off) and for HeadGestures' motion, which it plays from a script of the head's yaw at 25 motions a
+phone, Sing off) and for HeadMotion's motion, which it plays from a script of the head's yaw at 25 motions a
 second while the preview listens; it also answers Motion & Fitness's permission as the launch line says.
 
     ./build.sh

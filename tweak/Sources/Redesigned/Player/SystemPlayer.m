@@ -43,7 +43,7 @@
 //
 // The commands are the ones the mod already sends (Headers/SPTPlayer.h): pause:/resume:, skipToNextTrackWithOptions:
 // and skipToPreviousTrackWithOptions: (the mini player, the Live Activity), seekTo: (Shared/Lyrics/KaraokeSource.x,
-// Shared/HeadGestures/HeadGestures.x), setShufflingContext:, setRepeatingContext: and setRepeatingTrack: (both again).
+// the Live Activity's), setShufflingContext:, setRepeatingContext: and setRepeatingTrack: (both again).
 #import <AVKit/AVKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -192,7 +192,7 @@ UIImage *SGRSystemNotPlayingArt(void) {
     return art;
 }
 
-// A paused state's position would run on from when it was made; positionAsOfTimestamp holds still (HeadGestures.x).
+// A paused state's position would run on from when it was made; positionAsOfTimestamp holds still.
 static double positionOf(SPTPlayerState *state) {
     if (!state) return 0;
     double position = state.isPaused ? state.positionAsOfTimestamp : state.position;
@@ -3097,7 +3097,7 @@ void SGRSystemToggleShuffle(void) {
     [player setShufflingContext:!state.options.shufflingContext];
 }
 
-// Off, then the playlist or album, then the track, then off again, the way Spotify's button goes (HeadGestures.x).
+// Off, then the playlist or album, then the track, then off again, the way Spotify's button goes.
 void SGRSystemCycleRepeat(void) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerOptions *options = SGPlayerState().options;

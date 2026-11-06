@@ -37,7 +37,7 @@ alert it brings up: "Full-screen artwork", "Needs iOS 26", and an alert naming t
 
 2026-10-06, iPhone 17 Pro on iOS 27.0: the warning row leads; then Redesigned UI (glowing, with its ⓘ), Appearance
 and Tab bar; Player, Lyrics, Albums and Artists (Home & Library in the native look); Sing, Spatial voice, Audio
-effects, Vibrations, Live Activity, AirPods gestures and Listening stats; Lock screen and Premium, ads & privacy;
+effects, Vibrations, Live Activity and Listening stats; Lock screen and Premium, ads & privacy;
 All flags; Mod with the version. Flipping Redesigned UI on in the native look offers the restart and swaps Home &
 Library for Albums and Artists in place.
 

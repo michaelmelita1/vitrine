@@ -15,7 +15,7 @@ picked between (`Native/`, Spotify's own screens with the mod's tweaks on them) 
 are gone.
 
 Anything that doesn't draw on Spotify's screens is `Shared/`: ads, privacy, lyrics sources, blocked artists,
-flags, Vibrations, Speed and pitch, Sing, AirPods gestures and the Live Activity. Some of those
+flags, Vibrations, Speed and pitch, Sing and the Live Activity. Some of those
 were the redesign's until they moved to `Shared/`, so their keys lost the `.redesign.` and `Core/SGPrefs.h`'s
 `SGMigrateKey` carries the old ones over at launch.
 

@@ -9,7 +9,7 @@
 //                         and put where spatial voice holds them
 //     Sing.x              the engine put between Spotify's mixer and its output (through Shared/Player/SpeedPitch.x's
 //                         chain), Spotify's clock and seeks kept true to what plays, the heat, what Sing is doing,
-//                         and the head's turn for spatial voice (Shared/HeadGestures' motion)
+//                         and the head's turn for spatial voice (Shared/Sing/HeadMotion.h)
 //     SingSettings.m      the Sing page, and Spatial voice's under it
 //     SGSingCard.m        the Sing page's card: the song, Sing's state, the vocals and the rest traced live, the level
 //     SGSpatialPreview.m  the Spatial voice page's preview: the voice in front of the listener on a field of dots,
@@ -121,7 +121,7 @@ double SGSingSpatialWidth(void);
 void SGSetSingSpatialSound(double meters, double roomPercent, double frontSeconds, double widthPercent);
 
 // The top of the Spatial voice page: listener and voice on a field of dots seen from behind the head, which
-// follows the head through HeadGestures' motion while it is on screen and the motion is allowed, and idles
+// follows the head through HeadMotion.h's motion while it is on screen and the motion is allowed, and idles
 // otherwise, a line under it saying which.
 @interface SGSpatialPreview : UIView
 // Reads the switch and the motion's permission again.

@@ -16,7 +16,7 @@
 #import "Shared/Player/SleepTimer.h"
 #import "Headers/SPTPlayer.h"
 #import "Shared/Lyrics/Lyrics.h"
-#import "Shared/HeadGestures/HeadGestures.h"
+#import "Shared/Player/LikedSongs.h"
 #import "Shared/Sing/Sing.h"
 #import "LiveActivity.h"
 

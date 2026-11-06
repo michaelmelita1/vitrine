@@ -22,7 +22,7 @@ static const CGFloat kBlurSide = 128, kBlurRadius = 10, kSaturation = 1.5, kBrig
 static const CGFloat kShadeFrom = 0.55, kShadeAlpha = 0.45;
 // The cover's side as a share of the clip's width, and its center's height from the top. The lock screen
 // cuts a 3:4 clip's sides off on a phone's taller screen, so the cover keeps to the middle.
-// ponytail: guessed from the screen's shape, as SGLyricsClip.m's column is; tune both on a device.
+// ponytail: guessed from the screen's shape; tune on a device.
 static const CGFloat kCoverSide = 0.5, kCoverY = 0.45, kCoverRadius = 0.035, kShadowBlur = 0.08;
 // An eight second loop: long enough that the sway reads as slow, short enough to write in a few seconds.
 static const int32_t kLoopSeconds = 8, kFPS = 24;
@@ -157,7 +157,7 @@ CGImageRef SGFluidClipFrame(CGImageRef cover, CGSize size) {
     return frame;
 }
 
-// ponytail: the writing loop is SGLyricsClip.m's again, kept apart so neither clip's drawing leaks into the
+// ponytail: the writing loop is SGMotionClip.m's again, kept apart so neither clip's drawing leaks into the
 // other's; one writer taking a draw block is the step up if a third clip comes.
 BOOL SGFluidClipWrite(NSURL *file, CGImageRef cover, CGSize size) {
     if (!cover) return NO;

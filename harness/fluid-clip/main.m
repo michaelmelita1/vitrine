@@ -6,7 +6,6 @@
 #import <ImageIO/ImageIO.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "Shared/AnimatedArtwork/SGFluidClip.h"
-#import "Shared/LockScreenLyrics/SGLyricsClip.h"
 
 static int failures;
 
@@ -93,7 +92,8 @@ int main(int argc, char **argv) {
         [NSFileManager.defaultManager createDirectoryAtURL:out withIntermediateDirectories:YES attributes:nil error:nil];
         CGImageRef cover = argc > 1 ? newImageAt([NSString stringWithUTF8String:argv[1]]) : newCover();
         // 1206 pixels wide, an iPhone 17 Pro, at SGMotionPixels' three quarters, as LockScreenMotion.x asks.
-        CGSize size = SGLyricsClipSize(round(1206 * 0.75));
+        CGFloat width = floor(round(1206 * 0.75) / 16) * 16;   // AnimatedArtworkSettings.m's SGLockClipSize
+        CGSize size = CGSizeMake(width, round(width * 4 / 3 / 16) * 16);
         NSURL *url = [out URLByAppendingPathComponent:@"fluid.mp4"];
         printf("fluid.mp4\n");
         CFAbsoluteTime start = CFAbsoluteTimeGetCurrent();

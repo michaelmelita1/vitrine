@@ -40,7 +40,7 @@ BOOL SGMotionClipShape(NSURL *file, CGFloat ratio, NSURL *out) {
     if (!reader || ![reader canAddOutput:frames]) return NO;
     [reader addOutput:frames];
 
-    // Written beside the file and moved over it once whole, as SGLyricsClip.m writes, so a clip cut off
+    // Written beside the file and moved over it once whole, so a clip cut off
     // halfway is never found.
     NSURL *partial = [out URLByAppendingPathExtension:@"partial"];
     [NSFileManager.defaultManager removeItemAtURL:partial error:nil];

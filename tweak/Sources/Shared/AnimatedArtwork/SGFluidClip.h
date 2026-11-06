@@ -7,7 +7,7 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
-// The clip's first frame, for the lock screen's preview image. `size` is SGLyricsClipSize's.
+// The clip's first frame, for the lock screen's preview image. `size` is SGLockClipSize's.
 CGImageRef SGFluidClipFrame(CGImageRef cover, CGSize size) CF_RETURNS_RETAINED;
 // Writes the loop as H.264 to `file`, replacing it, and returns once it is written; NO if it was not.
 BOOL SGFluidClipWrite(NSURL *file, CGImageRef cover, CGSize size);

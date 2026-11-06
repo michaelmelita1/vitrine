@@ -8,31 +8,17 @@
 // Moving artwork switch, whose key is moved onto it once: on is Moving artwork, off is Off.
 #define SGKeyLockScreenArtwork @"spotifyglass.lockscreen.artwork"
 #define SGKeyLockScreenMotion @"spotifyglass.lockscreen.motion"
+// The stored numbers stay as they were: 2 and 4 were the lyrics drawn on the artwork (Lyrics, Moving artwork with
+// lyrics), which are gone and read as Off and Moving artwork.
 typedef NS_ENUM(NSInteger, SGLockArtwork) {
     SGLockArtworkOff = 0,
-    SGLockArtworkMotion,   // the Canvas, else Apple Music's animated cover (LockScreenMotion.x)
-    SGLockArtworkLyrics,   // a clip per line of lyrics (Shared/LockScreenLyrics/LyricsArtwork.x)
-    SGLockArtworkEverySong,   // Moving artwork, else the cover over a moving blur of it (LockScreenMotion.x)
-    // The lyrics over the moving artwork, else Lyrics: LockScreenMotion.x finds the clip, LyricsArtwork.x
-    // draws the lines over it.
-    SGLockArtworkMotionLyrics,
+    SGLockArtworkMotion = 1,      // the Canvas, else Apple Music's animated cover (LockScreenMotion.x)
+    SGLockArtworkEverySong = 3,   // Moving artwork, else the cover over a moving blur of it (LockScreenMotion.x)
 };
 // Off below iOS 26, which has no animated artwork on the lock screen.
 SGLockArtwork SGLockScreenArtwork(void);
-// Under Moving artwork with lyrics, LyricsArtwork.x says whether the playing track has no synced lines (YES), so
-// LockScreenMotion.x shows its moving artwork plain, as Moving artwork does, or has them (NO), so it takes it off
-// for the lyrics' clips. Main queue.
-void SGLockMotionShowPlain(BOOL plain);
-static inline BOOL SGLockArtworkShowsLyrics(SGLockArtwork artwork) {
-    return artwork == SGLockArtworkLyrics || artwork == SGLockArtworkMotionLyrics;
-}
-// How the lyrics are drawn, stored as the index of SGLyricsClipStyle (Still unless changed).
-#define SGKeyLockScreenLyricsStyle @"spotifyglass.lockscreen.lyricsStyle"
-// Off until switched on: the lock screen widget's star switches the choice between a choice with lyrics and
-// one without (LockScreenStar.x), and takes the place of Spotify's like and dislike buttons. StarBack is the
-// choice the star left, to go back to.
-#define SGKeyLockScreenStar @"spotifyglass.lockscreen.star"
-#define SGKeyLockScreenStarBack @"spotifyglass.lockscreen.star.back"
+// The 3:4 size of the cover's clip `pixels` wide, both sides a multiple of 16 for the encoder.
+CGSize SGLockClipSize(CGFloat pixels);
 // Off until switched on: download in Low Data Mode too.
 #define SGKeyMotionLowData @"spotifyglass.motion.lowdata"
 

@@ -10,16 +10,12 @@
 // the track names, so an album's songs share one.
 //
 // The choice is read on every track, and a change applies at once: Off takes the clip away, Moving artwork
-// and Every song look the playing track up. Lyrics is LyricsArtwork.x's, which reads it the same way, so the
-// lock screen widget's star (LockScreenStar.x) can swap the two without a restart. Moving artwork with
-// lyrics looks the track up too and hands its clip to LyricsArtwork.x, which draws the lines over it.
+// and Every song look the playing track up.
 #import <MediaPlayer/MediaPlayer.h>
 #import "Core/SGCore.h"
 #import "AnimatedArtwork.h"
 #import "SGFluidClip.h"
 #import "SGMotionClip.h"
-#import "Shared/LockScreenLyrics/LockScreenLyrics.h"
-#import "Shared/LockScreenLyrics/SGLyricsClip.h"
 #import "Shared/Player/NowPlayingExtras.h"
 #import "Shared/Player/PlayerState.h"
 
@@ -33,9 +29,8 @@ static SGLockArtwork sg_choice;
 static dispatch_queue_t sg_queue;   // cuts clips and makes the cover's, one at a time
 static SGMotionFollower *sg_follower;
 
-// Moving artwork with lyrics walks the sources too, and hands the clip to LyricsArtwork.x.
 static BOOL motionOn(SGLockArtwork choice) {
-    return choice == SGLockArtworkMotion || choice == SGLockArtworkEverySong || choice == SGLockArtworkMotionLyrics;
+    return choice == SGLockArtworkMotion || choice == SGLockArtworkEverySong;
 }
 
 // The key a clip shown at `shown` goes under, and the shape it is cut to (width over height): 1:1 for a
@@ -103,25 +98,7 @@ static void show(NSURL *file) {
     });
 }
 
-// Under Moving artwork with lyrics: the clip found for the track, and whether LyricsArtwork.x asked for it
-// plain (the track has no synced lines) and it shows so.
-static NSURL *sg_lyricsFile;
-static BOOL sg_plain, sg_plainShown;
-
-void SGLockMotionShowPlain(BOOL plain) {
-    if (@available(iOS 26.0, *)) {
-        sg_plain = plain;
-        BOOL want = plain && sg_choice == SGLockArtworkMotionLyrics && sg_lyricsFile;
-        if (want == sg_plainShown) return;
-        sg_plainShown = want;
-        if (want) show(sg_lyricsFile);
-        else SGNowPlayingSetExtras(@"motion", nil, nil);
-        SGLog(@"lock motion: %@", want ? [NSString stringWithFormat:@"%@ shown plain, the track has no synced lines", sg_lyricsFile.lastPathComponent]
-                                       : @"the plain clip taken off for the lyrics");
-    }
-}
-
-// The cover Spotify handed the system for `title`, read on the main thread as LyricsArtwork.x reads it,
+// The cover Spotify handed the system for `title`, read on the main thread,
 // then `then` on sg_queue with it, or with NULL when the info is another song's or has none.
 static void withCover(NSString *title, void (^then)(CGImageRef cover)) {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -142,13 +119,13 @@ static NSString *pictureOf(SPTPlayerTrack *track, NSDictionary *metadata) {
     return SGURIString(track.URI);
 }
 
-// The cover's clip is 3:4 (SGLyricsClipSize), so it goes only where the system lists that key.
+// The cover's clip is 3:4 (SGLockClipSize), so it goes only where the system lists that key.
 API_AVAILABLE(ios(26.0))
 static void showCover(NSString *picture) {
     if (![MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys containsObject:MPNowPlayingInfoProperty3x4AnimatedArtwork]) return;
     NSURL *file = SGMotionMadeFile([@"fluid\n" stringByAppendingString:picture]);
     NSString *title = sg_title;
-    CGSize size = SGLyricsClipSize(SGMotionPixels());
+    CGSize size = SGLockClipSize(SGMotionPixels());
     MPMediaItemAnimatedArtwork *artwork = [[MPMediaItemAnimatedArtwork alloc] initWithArtworkID:file.lastPathComponent
         previewImageRequestHandler:^(CGSize wanted, void (^completion)(UIImage *)) {
             withCover(title, ^(CGImageRef cover) {
@@ -178,22 +155,13 @@ static void showCover(NSString *picture) {
         sg_follower = [[SGMotionFollower alloc] initWithBegin:^BOOL(NSString *uri, SPTPlayerState *state) {
             sg_walk++;
             SGNowPlayingSetExtras(@"motion", nil, nil);
-            sg_lyricsFile = nil;
-            sg_plainShown = NO;
             NSDictionary *metadata = [state.track.metadata isKindOfClass:NSDictionary.class] ? state.track.metadata : nil;
             sg_title = state.track.trackTitle;
             sg_picture = pictureOf(state.track, metadata);
             sg_choice = SGLockScreenArtwork();
             return motionOn(sg_choice);
         } found:^(NSString *uri, NSURL *file) {
-            // Under the lyrics instead, and never as this file's extra too: both would fill the same 3:4 key.
-            if (sg_choice == SGLockArtworkMotionLyrics) {
-                if (file) SGLyricsArtworkSetMotion(uri, file);
-                // A track with no synced lines shows it plain, as Moving artwork would; LyricsArtwork.x says which.
-                sg_lyricsFile = file;
-                SGLockMotionShowPlain(sg_plain);
-                SGLog(@"lock motion: %@ for the lyrics of %@", file ? file.lastPathComponent : @"no clip", uri);
-            } else if (file) show(file);
+            if (file) show(file);
             else if (sg_choice == SGLockArtworkEverySong) showCover(sg_picture);
         }];
         // Heard on the writing thread and handed to main without waiting: a main-queue observer makes every

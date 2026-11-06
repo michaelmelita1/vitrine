@@ -1,8 +1,5 @@
 // The redesign's ⋯ as the system menu (ContextMenu.h says what and why).
 //
-// The player's ⋯ is a pull-down button of the mod's (SGRMenuFront) and its sheet lives in a window of the
-// mod's (SGRSheetWindow); everything below about opening the menu over a sheet already up is a page's ⋯.
-//
 // The sheet is ContextMenu_InternalImpl.ContextMenuViewController, presented on its own or as the root of
 // ContextMenuNativeNavigationController; its rows are a table sized to its content (Shared/Player/
 // SpeedPitchMenu.x and harness/menu say more), each a ContextMenuTableViewCell whose only ivar is the
@@ -18,9 +15,7 @@
 // viewWillAppear: and, when that does not come, again from the presentation's completion, the sheet going up
 // unanimated for that to be soon; -performPrimaryAction brings the menu up over the hidden sheet and calls
 // willDisplayMenuForConfiguration: before it returns; a pick runs the action's handler before
-// willEndForConfiguration:, so by the end of the menu's dismissal it is known whether there was one; a deferred
-// element in a submenu is asked for its items when that submenu opens, not with the menu, so More's rows are
-// not kept from one menu to the next: by the time More is opened the sheet has nearly always read them.
+// willEndForConfiguration:, so by the end of the menu's dismissal it is known whether there was one.
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
@@ -35,41 +30,14 @@
 static const NSTimeInterval kSettle = 1;
 // How often the sheet is asked for its rows until it has them.
 static const NSTimeInterval kRowsPoll = 0.1;
-// How long a pick made before the sheet has its live rows waits for them before the sheet is shown.
-static const NSTimeInterval kQuickWait = 4;
-// How long the player's menu waits for Spotify's sheet once its ⋯ action has been run for it.
-static const NSTimeInterval kRequestWindow = 3;
 
 static NSString *const kSheetClass = @"_TtC24ContextMenu_InternalImpl25ContextMenuViewController";
-static NSString *const kTopMenu = @"com.vitrine.systemmenu.top";
-static NSString *const kQuickMenu = @"com.vitrine.systemmenu.quick";
-static NSString *const kMoreMenu = @"com.vitrine.systemmenu.more";
-// The last complete set of Spotify's rows for each kind of sheet, for More to show before the live ones come.
-static NSString *const kStoredRowsKey = @"spotifyglass.redesign.player.menuRows";
 
-static char kAnchorKey, kFrontKey, kPlacedKey, kSessionKey;
+static char kAnchorKey, kSessionKey;
 
 @class SGRMenuSession;
 // The session whose pick is being fired on its hidden sheet, for a page the row pushes inside the sheet.
 static __weak SGRMenuSession *sg_firing;
-// The player's menu asking Spotify for its sheet, and when: the next presentation is that sheet.
-static __weak SGRMenuSession *sg_requesting;
-static CFTimeInterval sg_requestedAt;
-// The session whose sheet is in the mod's own window, and the presentation the mod is making itself.
-static __weak SGRMenuSession *sg_hosted;
-static BOOL sg_redirecting;
-
-// The player's quick items: what the item says, its symbol, the title of Spotify's row it fires (compared
-// without case) and that row's item number, the accessibility identifier of its Encore ListRow on 9.1.78. The
-// number is matched first, so a sheet in another language still finds them; the title is the fallback.
-static NSArray<NSArray<NSString *> *> *quickItems(void) {
-    return @[@[@"Share", @"square.and.arrow.up", @"share", @"9"],
-             @[@"Add to Playlist", @"text.badge.plus", @"add to playlist", @"19"],
-             @[@"Add to Queue", @"text.line.last.and.arrowtriangle.forward", @"add to queue", @"11"]];
-}
-
-// Which quick items (their rows' titles) the last sheet of each kind had.
-static NSMutableDictionary<NSString *, NSArray<NSString *> *> *sg_quickSeen;
 
 #pragma mark - the sheet
 
@@ -255,35 +223,21 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 @property (nonatomic, copy) NSString *title, *subtitle, *identifier;
 @property (nonatomic, strong) UIImage *image;
 @property (nonatomic) BOOL enabled;
-// The quick item this row is, by its row title in quickItems(); nil for none.
-@property (nonatomic, copy) NSString *quick;
 @end
 @implementation SGRSheetRow
 @end
 
 @class SGRMenuAnchor;
 
-// One ⋯ tap: the sheet Spotify presented, the anchor the menu comes from, and what was picked.
-//
-// The player's ⋯ (`direct`) opens its menu itself, from a button of the mod's over Spotify's ⋯ (SGRMenuFront),
-// before Spotify has done anything: Spotify's sheet is asked for (requestSheet, Spotify's ⋯ action run from
-// code) once the menu is up, and presented in a window of the mod's own under the app's (adoptSheet), unseen,
-// for its rows and to run them. A page's ⋯ is the other way round: Spotify's sheet comes first, from its tap,
-// and the menu is opened over it, hidden (takeOver, open).
+// One ⋯ tap: the sheet Spotify presented, the anchor the menu comes from, and what was picked. Spotify's sheet
+// comes first, from the ⋯'s tap, and the menu is opened over it, hidden (takeOver, open).
 @interface SGRMenuSession : NSObject
-@property (nonatomic) BOOL direct;
-// Spotify's ⋯ (direct), whose action brings its sheet up, and the controller Spotify presented that sheet from.
-@property (nonatomic, weak) UIControl *spotify;
-@property (nonatomic, weak) UIViewController *presenter;
 @property (nonatomic, weak) UIViewController *presented;
 @property (nonatomic, weak) SGRMenuAnchor *anchor;
-@property (nonatomic, copy) SGRMenuItems items;
-@property (nonatomic, copy) NSString *kind;
 @property (nonatomic) BOOL displayed, revealed, ended, opened;
 @property (nonatomic, copy) void (^pick)(void);
-// When the ⋯ was touched (0 for a pinned ⋯, whose touch is the Kit's) and when the sheet was taken over, for
-// the log of where the time to the menu goes.
-@property (nonatomic) CFTimeInterval touchedAt, takenAt;
+// When the sheet was taken over (the ⋯'s touch is the Kit's), for the log of where the time to the menu goes.
+@property (nonatomic) CFTimeInterval takenAt;
 - (void)open;
 - (void)tryEarly;
 - (void)present;
@@ -292,8 +246,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 - (void)hide;
 - (void)menuEnded;
 - (UIView *)container;
-- (void)requestSheet;
-- (void)adoptSheet:(UIViewController *)presented from:(UIViewController *)presenter completion:(void (^)(void))completion;
 - (void)rowPresented;
 - (UIMenu *)menu;
 @end
@@ -302,16 +254,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 // (UIKit will not present a menu from a view that takes none), so a tap on the ⋯ reaches the ⋯.
 @interface SGRMenuAnchor : UIButton
 @property (nonatomic, strong) SGRMenuSession *session;
-@end
-
-// The player's ⋯ as a pull-down button of the mod's own (HIG, Pull-down buttons): an invisible button over
-// Spotify's ⋯ that takes its touches and opens the menu on touch down, as UIKit opens any button's menu, so the
-// menu waits for nothing of Spotify's and Spotify's ⋯ action does not run on the tap. Its menu is made afresh
-// as it opens, with a session of its own.
-@interface SGRMenuFront : SGRMenuAnchor
-@property (nonatomic, weak) UIControl *spotify;
-@property (nonatomic, copy) SGRMenuItems items;
-@property (nonatomic, copy) SGRMenuKind kind;
 @end
 
 @implementation SGRMenuAnchor
@@ -327,122 +269,29 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [super contextMenuInteraction:interaction willEndForConfiguration:configuration animator:animator];
     SGRMenuSession *session = self.session;
     self.session = nil;
-    self.userInteractionEnabled = [self isKindOfClass:SGRMenuFront.class];
+    self.userInteractionEnabled = NO;
     // At once, not at the end of the menu's dismissal: on the phone that end never came (the animator's
     // completion never ran), so every pick and close waited out a 3 s limit with the hidden sheet over the
     // player. The pick fires a turn later, which the sheet takes while the menu is still fading.
     [session menuEnded];
-    // The player's ⋯ is pressed for as long as its menu is up (the touch that opened it was canceled at once,
-    // as the menu came): its targets for the press are told now that it is let go.
-    if ([self isKindOfClass:SGRMenuFront.class]) [self sendActionsForControlEvents:UIControlEventTouchUpOutside];
 }
 
 @end
-
-@implementation SGRMenuFront
-
-- (UIContextMenuConfiguration *)contextMenuInteraction:(UIContextMenuInteraction *)interaction configurationForMenuAtLocation:(CGPoint)location {
-    SGRMenuSession *session = [SGRMenuSession new];
-    session.direct = YES;
-    session.opened = YES;
-    session.touchedAt = session.takenAt = CACurrentMediaTime();
-    session.anchor = self;
-    session.spotify = self.spotify;
-    session.items = self.items;
-    session.kind = self.kind ? self.kind() : nil;
-    self.session = session;
-    self.menu = [session menu];
-    return [super contextMenuInteraction:interaction configurationForMenuAtLocation:location];
-}
-
-// One line per touch down, so the phone log says the finger reached the mod's button and what it held then.
-- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    [super touchesBegan:touches withEvent:event];
-    SGLog(@"system menu: touch down on the mod's ⋯ at %@ in the window (menu %@, %@)", NSStringFromCGRect([self convertRect:self.bounds toView:nil]),
-          self.menu ? @"held" : @"none", self.enabled && self.userInteractionEnabled ? @"taking touches" : @"not taking touches");
-}
-
-// UIKit cancels the touch as the menu comes up, and the press holds until the menu ends (willEndForConfiguration:).
-// A touch canceled with no menu up is a touch let go.
-- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    [super touchesCancelled:touches withEvent:event];
-    if (!self.session) [self sendActionsForControlEvents:UIControlEventTouchUpOutside];
-}
-
-@end
-
-
-#pragma mark - the mod's window for Spotify's sheet
-
-// The player's menu is a presentation of UIKit's own from the player, so while it is up nothing else can be
-// presented there: Spotify's sheet, asked for once the menu is up, would be turned down (simulator, iOS 27). It is
-// presented instead in a window of the mod's under the app's, where it lays out and gets its rows unseen. Shown,
-// the window comes up over the app's until the sheet is gone. A touch that lands on nothing of the sheet's goes
-// through it.
-@interface SGRSheetWindow : UIWindow
-@end
-@implementation SGRSheetWindow
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hit = [super hitTest:point withEvent:event];
-    return hit == self || hit == self.rootViewController.viewIfLoaded ? nil : hit;
-}
-@end
-
-static SGRSheetWindow *sg_host;
-
-static SGRSheetWindow *hostWindow(UIWindowScene *scene) {
-    if (!scene) return nil;
-    if (sg_host.windowScene != scene) {
-        sg_host = [[SGRSheetWindow alloc] initWithWindowScene:scene];
-        UIViewController *root = [UIViewController new];
-        root.view.backgroundColor = UIColor.clearColor;
-        sg_host.rootViewController = root;
-        sg_host.backgroundColor = UIColor.clearColor;
-        sg_host.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-    }
-    sg_host.windowLevel = UIWindowLevelNormal - 1;
-    sg_host.hidden = NO;
-    return sg_host;
-}
-
-// The mod's window over the app's while the sheet in it is shown, and back under once it is gone.
-static void lowerWhenEmpty(void) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (sg_host.windowLevel < UIWindowLevelNormal) return;
-        if (sg_host.rootViewController.presentedViewController) {
-            lowerWhenEmpty();
-            return;
-        }
-        sg_host.windowLevel = UIWindowLevelNormal - 1;
-    });
-}
-
-static void raiseHost(UIWindow *window) {
-    if (!window || window != sg_host || sg_host.windowLevel >= UIWindowLevelNormal) return;
-    sg_host.windowLevel = UIWindowLevelNormal + 1;
-    lowerWhenEmpty();
-}
 
 @implementation SGRMenuSession {
     // The sheet's rows in its groups (the mod's header rows, each section, the mod's footer rows), nil until
     // the sheet has them; read once.
     NSArray<NSArray<SGRSheetRow *> *> *_groups;
     __weak UITableView *_table;
-    // Run once the rows are read: More's items, a quick pick waiting for its row.
+    // Run once the rows are read: the menu's deferred rows.
     NSMutableArray<dispatch_block_t> *_whenRead;
-    // A quick pick is waiting for the rows, which keeps the poll going after the menu has gone.
-    BOOL _waiting;
-    // The quick row as the menu shows it, to know whether the rows changed it.
-    NSString *_quickShown;
     NSTimer *_poll;
     CFTimeInterval _openedAt, _askedAt;
     // The menu is asked for while the sheet's presentation is still under way, which UIKit takes only some of
     // the time; if it does not come, it is asked for again once the sheet is up.
     BOOL _early, _wasEarly;
-    // Direct: Spotify's sheet asked for, and when; it did not come; the menu closed with nothing for it to do,
-    // so it goes as it comes; a row picked on it presented something of Spotify's.
-    BOOL _requested, _failed, _dropOnArrival, _rowPresented;
-    CFTimeInterval _requestedAt;
+    // A row picked on the sheet presented something of Spotify's.
+    BOOL _rowPresented;
 }
 
 - (UIViewController *)sheet {
@@ -532,84 +381,15 @@ static void raiseHost(UIWindow *window) {
     });
 }
 
-// Where the time from the ⋯ touch to the menu on screen went, in seconds after the touch (after the takeover for
-// a pinned ⋯).
+// Where the time from the takeover to the menu on screen went, in seconds after the takeover.
 - (void)shown {
     if (self.displayed) return;
     self.displayed = YES;
     if (!_whenRead) _whenRead = [NSMutableArray array];
-    if (self.direct) {
-        SGLog(@"system menu: the player's menu is up %.3f s after the touch down on its ⋯ (Spotify's sheet not asked for yet)",
-              CACurrentMediaTime() - self.touchedAt);
-        // A turn later, so nothing of Spotify's stands in the way of the menu's first frames.
-        dispatch_async(dispatch_get_main_queue(), ^{ [self requestSheet]; });
-        return;
-    }
-    CFTimeInterval now = CACurrentMediaTime(), from = self.touchedAt ?: self.takenAt;
-    SGLog(@"system menu: the menu is up %.2f s after the %@: Spotify's sheet taken over at %.2f, first asked for at %.2f%@, %@",
-          now - from, self.touchedAt ? @"⋯ touch" : @"takeover", self.takenAt - from, _askedAt - from,
+    CFTimeInterval now = CACurrentMediaTime(), from = self.takenAt;
+    SGLog(@"system menu: the menu is up %.2f s after the takeover, first asked for at %.2f%@, %@",
+          now - from, _askedAt - from,
           _wasEarly ? @" while the sheet came up" : @"", _openedAt ? [NSString stringWithFormat:@"the sheet up at %.2f", _openedAt - from] : @"before the sheet was up");
-}
-
-#pragma mark Spotify's sheet, for the player's menu
-
-// Runs Spotify's ⋯ action from code, as the tap the menu kept from it would have: its sheet comes up, is taken
-// for this menu (the presentation hook) and goes into the mod's window.
-- (void)requestSheet {
-    if (!self.direct || self.presented || _requested) return;
-    _requested = YES;
-    _requestedAt = CACurrentMediaTime();
-    sg_requesting = self;
-    sg_requestedAt = _requestedAt;
-    // Speed and pitch's sheet test (and Edit info's) counts the ⋯'s touch, which the menu kept from Spotify's ⋯.
-    SGPlayerMenuMarkPlayers();
-    NSString *how = fireControl(self.spotify);
-    SGLog(@"system menu: Spotify's sheet asked for, %.3f s after the touch down, by %@", _requestedAt - self.touchedAt, how);
-    __weak SGRMenuSession *weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRequestWindow * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        SGRMenuSession *session = weakSelf;
-        if (!session || session.presented) return;
-        if (sg_requesting == session) sg_requesting = nil;
-        session->_failed = YES;
-        SGLog(@"system menu: Spotify's sheet did not come %.0f s after it was asked for", kRequestWindow);
-        session->_waiting = NO;
-        NSArray<dispatch_block_t> *waiting = session->_whenRead;
-        session->_whenRead = [NSMutableArray array];
-        for (dispatch_block_t block in waiting) block();
-    });
-}
-
-// Spotify's sheet, asked for, on its way up from `presenter`: presented in the mod's window instead, unseen.
-- (void)adoptSheet:(UIViewController *)presented from:(UIViewController *)presenter completion:(void (^)(void))completion {
-    self.presented = presented;
-    self.presenter = presenter;
-    self.takenAt = CACurrentMediaTime();
-    objc_setAssociatedObject(presented, &kSessionKey, self, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    sg_hosted = self;
-    SGRSheetWindow *host = hostWindow(presenter.viewIfLoaded.window.windowScene ?: self.anchor.window.windowScene);
-    SGLog(@"system menu: Spotify's sheet (%@) came %.3f s after it was asked for, %.3f s after the touch down; kept in the mod's window",
-          controllersIn(presented), self.takenAt - _requestedAt, self.takenAt - self.touchedAt);
-    UIViewController *root = host.rootViewController;
-    void (^present)(void) = ^{
-        sg_redirecting = YES;
-        [root presentViewController:presented animated:NO completion:^{
-            if (completion) completion();
-            [self sheetArrived];
-        }];
-        sg_redirecting = NO;
-        [self hide];
-    };
-    // An earlier sheet still there (its menu closed while it came) goes first.
-    if (root.presentedViewController) [root dismissViewControllerAnimated:NO completion:present];
-    else present();
-}
-
-- (void)sheetArrived {
-    if (_dropOnArrival && !_waiting) {
-        [self.presented.presentingViewController dismissViewControllerAnimated:NO completion:nil];
-        return;
-    }
-    if (![self readRows]) [self pollRows];
 }
 
 // Something of Spotify's was presented while a row picked on this sheet fired: the row's own sheet.
@@ -619,21 +399,12 @@ static void raiseHost(UIWindow *window) {
 
 #pragma mark the menu
 
-// A page's ⋯: Spotify's rows, waited for. The player's: the quick row, the player's items and More, none of
-// them waited for; More's rows are, when More is opened before the sheet has them.
+// Spotify's rows, waited for.
 - (UIMenu *)menu {
-    if (!self.items) return [UIMenu menuWithChildren:@[[self deferredRows]]];
-    NSMutableArray<UIMenuElement *> *children = [NSMutableArray array];
-    UIMenu *quick = [self quickRow];
-    if (quick) [children addObject:quick];
-    NSArray<UIMenuElement *> *ours = self.items();
-    if (ours.count) [children addObject:inlineGroup(ours)];
-    UIMenu *more = [UIMenu menuWithTitle:@"More" image:[UIImage systemImageNamed:@"ellipsis.circle"] identifier:kMoreMenu options:0 children:@[[self deferredRows]]];
-    [children addObject:inlineGroup(@[more])];
-    return [UIMenu menuWithTitle:@"" image:nil identifier:kTopMenu options:0 children:children];
+    return [UIMenu menuWithChildren:@[[self deferredRows]]];
 }
 
-// The sheet's rows as menu items, but for the quick ones. Uncached: every menu reads the sheet it was opened with.
+// The sheet's rows as menu items. Uncached: every menu reads the sheet it was opened with.
 - (UIDeferredMenuElement *)deferredRows {
     __weak SGRMenuSession *weakSelf = self;
     return [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
@@ -642,21 +413,10 @@ static void raiseHost(UIWindow *window) {
             completion(session ? [session rowElements] : @[]);
             return;
         }
-        // The player's: the rows the last sheet of this kind had, at once, the live ones put in when they come.
-        NSArray<UIMenuElement *> *stored = session.direct ? [session storedElements] : nil;
-        if (stored.count) {
-            completion(stored);
-            return;
-        }
-        if (session.direct) [session requestSheet];
-        if (session->_failed) {
-            completion([session unavailable]);
-            return;
-        }
         SGLog(@"system menu: Spotify's rows asked for before the sheet has them");
         [session->_whenRead addObject:^{
             SGRMenuSession *read = weakSelf;
-            NSArray<UIMenuElement *> *elements = read ? (read->_groups ? [read rowElements] : [read unavailable]) : @[];
+            NSArray<UIMenuElement *> *elements = read ? [read rowElements] : @[];
             completion(elements);
             // UIKit can leave its loading row up although the rows were handed to it: the menu it shows is built
             // again after this one, and its deferred element is never asked (the songs liked by one artist, device
@@ -692,81 +452,10 @@ static void raiseHost(UIWindow *window) {
     NSMutableArray<UIMenuElement *> *groups = [NSMutableArray array];
     for (NSArray<SGRSheetRow *> *group in _groups) {
         NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
-        for (SGRSheetRow *row in group) {
-            if (!row.quick) [actions addObject:[self elementFor:row]];
-        }
+        for (SGRSheetRow *row in group) [actions addObject:[self elementFor:row]];
         if (actions.count) [groups addObject:inlineGroup(actions)];
     }
     return groups;
-}
-
-// Shown when Spotify's sheet never came, so More is not left loading.
-- (NSArray<UIMenuElement *> *)unavailable {
-    UIAction *none = [UIAction actionWithTitle:@"Spotify's options did not load" image:nil identifier:nil handler:^(UIAction *action) {}];
-    none.attributes = UIMenuElementAttributesDisabled;
-    return @[none];
-}
-
-static NSString *storedKey(NSString *kind) {
-    return [NSString stringWithFormat:@"%@.%@", kStoredRowsKey, kind.length ? kind : @"track"];
-}
-
-// The rows the last sheet of this kind had, as stored: title, subtitle, enabled and glyph, but for the quick ones.
-// Picking one waits for the live rows and fires the row of that title (fireTitle).
-- (NSArray<UIMenuElement *> *)storedElements {
-    NSArray<NSArray<NSDictionary *> *> *groups = [NSUserDefaults.standardUserDefaults arrayForKey:storedKey(self.kind)];
-    if (![groups isKindOfClass:NSArray.class]) return nil;
-    __weak SGRMenuSession *weakSelf = self;
-    NSMutableArray<UIMenuElement *> *elements = [NSMutableArray array];
-    for (NSArray<NSDictionary *> *group in groups) {
-        if (![group isKindOfClass:NSArray.class]) continue;
-        NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
-        for (NSDictionary *row in group) {
-            NSString *title = [row isKindOfClass:NSDictionary.class] ? row[@"title"] : nil;
-            if (![title isKindOfClass:NSString.class]) continue;
-            NSData *glyph = row[@"image"];
-            UIImage *image = [glyph isKindOfClass:NSData.class] ? [NSKeyedUnarchiver unarchivedObjectOfClass:UIImage.class fromData:glyph error:nil] : nil;
-            UIAction *action = [UIAction actionWithTitle:title image:image identifier:nil handler:^(UIAction *picked) {
-                weakSelf.pick = ^{ [weakSelf fireTitle:title]; };
-            }];
-            NSString *subtitle = row[@"subtitle"];
-            if ([subtitle isKindOfClass:NSString.class]) action.subtitle = subtitle;
-            if ([row[@"enabled"] isEqual:@NO]) action.attributes = UIMenuElementAttributesDisabled;
-            [actions addObject:action];
-        }
-        if (actions.count) [elements addObject:inlineGroup(actions)];
-    }
-    return elements;
-}
-
-// Keeps a complete read of the rows (all but the quick ones) for the next menu of this kind, when it differs.
-- (void)storeRows {
-    NSMutableArray *groups = [NSMutableArray array];
-    for (NSArray<SGRSheetRow *> *group in _groups) {
-        NSMutableArray *rows = [NSMutableArray array];
-        for (SGRSheetRow *row in group) {
-            if (row.quick || !row.title.length) continue;
-            NSMutableDictionary *stored = [@{@"title": row.title, @"enabled": @(row.enabled)} mutableCopy];
-            if (row.subtitle.length) stored[@"subtitle"] = row.subtitle;
-            NSData *glyph = row.image ? [NSKeyedArchiver archivedDataWithRootObject:row.image requiringSecureCoding:YES error:nil] : nil;
-            if (glyph.length && glyph.length < 32 * 1024) stored[@"image"] = glyph;
-            [rows addObject:stored];
-        }
-        if (rows.count) [groups addObject:rows];
-    }
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    if (!groups.count || [[defaults arrayForKey:storedKey(self.kind)] isEqual:groups]) return;
-    [defaults setObject:groups forKey:storedKey(self.kind)];
-}
-
-// The live rows came while More shows the stored ones or the loading row: More is put right in place.
-- (void)refreshMore {
-    if (!self.direct || !self.displayed || self.ended) return;
-    NSArray<UIMenuElement *> *live = [self rowElements];
-    [self.anchor.contextMenuInteraction updateVisibleMenuWithBlock:^UIMenu *(UIMenu *visible) {
-        if (![visible.identifier isEqualToString:kMoreMenu]) return visible;
-        return [visible menuByReplacingChildren:live];
-    }];
 }
 
 - (UIAction *)actionFor:(SGRSheetRow *)row {
@@ -779,61 +468,6 @@ static NSString *storedKey(NSString *kind) {
     return action;
 }
 
-- (SGRSheetRow *)rowForQuick:(NSString *)quick {
-    for (NSArray<SGRSheetRow *> *group in _groups) {
-        for (SGRSheetRow *row in group) if ([row.quick isEqualToString:quick]) return row;
-    }
-    return nil;
-}
-
-// Share, Add to playlist and Add to queue as a row of three, those this sheet has: once it has its rows, the
-// ones found in them; before, the ones the last sheet of this kind had, or all three.
-- (UIMenu *)quickRow {
-    NSArray<NSString *> *seen = sg_quickSeen[self.kind ?: @""];
-    NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
-    NSMutableString *shown = [NSMutableString string];
-    __weak SGRMenuSession *weakSelf = self;
-    for (NSArray<NSString *> *item in quickItems()) {
-        NSString *quick = item[2];
-        SGRSheetRow *row = [self rowForQuick:quick];
-        if (_groups ? !row : (seen && ![seen containsObject:quick])) continue;
-        UIAction *action = [UIAction actionWithTitle:item[0] image:[UIImage systemImageNamed:item[1]] identifier:nil handler:^(UIAction *picked) {
-            weakSelf.pick = ^{ [weakSelf fireQuick:quick]; };
-        }];
-        if (row && !row.enabled) action.attributes = UIMenuElementAttributesDisabled;
-        [actions addObject:action];
-        [shown appendFormat:@"%@%@; ", quick, row && !row.enabled ? @" (grayed out)" : @""];
-    }
-    _quickShown = shown;
-    if (!actions.count) return nil;
-    UIMenu *row = [UIMenu menuWithTitle:@"" image:nil identifier:kQuickMenu options:UIMenuOptionsDisplayInline children:actions];
-    // Medium, a symbol over a short label: the HIG keeps small, symbols alone, for actions as closely related
-    // as Bold and Italic, and gives medium to three important ones, which these are.
-    row.preferredElementSize = UIMenuElementSizeMedium;
-    return row;
-}
-
-// The rows came in while the menu is up: the quick row is put right if they changed it.
-- (void)refreshQuickRow {
-    if (!self.items || !self.displayed || self.ended) return;
-    NSString *before = _quickShown;
-    UIMenu *quick = [self quickRow];
-    if ([before isEqualToString:_quickShown]) return;
-    SGLog(@"system menu: the quick row is now %@(was %@)", _quickShown.length ? _quickShown : @"empty ", before.length ? before : @"empty");
-    [self.anchor.contextMenuInteraction updateVisibleMenuWithBlock:^UIMenu *(UIMenu *visible) {
-        // Only the top level, never a submenu that happens to be showing.
-        if (![visible.identifier isEqualToString:kTopMenu]) return visible;
-        NSMutableArray<UIMenuElement *> *children = [visible.children mutableCopy];
-        NSUInteger at = [children indexOfObjectPassingTest:^BOOL(UIMenuElement *child, NSUInteger index, BOOL *stop) {
-            return [child isKindOfClass:UIMenu.class] && [((UIMenu *)child).identifier isEqualToString:kQuickMenu];
-        }];
-        if (at != NSNotFound && quick) children[at] = quick;
-        else if (at != NSNotFound) [children removeObjectAtIndex:at];
-        else if (quick) [children insertObject:quick atIndex:0];
-        return [visible menuByReplacingChildren:children];
-    }];
-}
-
 #pragma mark the rows
 
 - (void)pollRows {
@@ -842,7 +476,7 @@ static NSString *storedKey(NSString *kind) {
     // In the common modes, so a scroll through the menu does not hold the rows back.
     _poll = [NSTimer timerWithTimeInterval:kRowsPoll repeats:YES block:^(NSTimer *timer) {
         SGRMenuSession *session = weakSelf;
-        if (!session || (session.ended && !session->_waiting) || [session readRows]) {
+        if (!session || session.ended || [session readRows]) {
             [timer invalidate];
             if (session) session->_poll = nil;
         }
@@ -876,21 +510,17 @@ static NSString *storedKey(NSString *kind) {
     NSArray<SGRSheetRow *> *footer = [self modRows:modRowsIn(table.tableFooterView)];
     if (footer.count) [groups addObject:footer];
     _groups = groups;
-    CFTimeInterval now = CACurrentMediaTime(), from = self.touchedAt ?: self.takenAt;
-    SGLog(@"system menu: %lu of Spotify's rows and %lu of the mod's read in %.0f ms, %.2f s after the %@", (unsigned long)read,
-          (unsigned long)(header.count + footer.count), (now - started) * 1000, now - from, self.touchedAt ? @"⋯ touch" : @"takeover");
-    if (self.items) [self matchQuick];
-    if (self.direct) [self storeRows];
-    // A page's menu: its anchor's menu becomes the rows themselves. UIKit builds the menu it shows again from the
+    CFTimeInterval now = CACurrentMediaTime();
+    SGLog(@"system menu: %lu of Spotify's rows and %lu of the mod's read in %.0f ms, %.2f s after the takeover", (unsigned long)read,
+          (unsigned long)(header.count + footer.count), (now - started) * 1000, now - self.takenAt);
+    // The anchor's menu becomes the rows themselves. UIKit builds the menu it shows again from the
     // anchor's (the one asked for while the sheet came up is never on screen), so the menu comes up whole instead of
     // from its loading row, growing down as the rows come (device, 2026-10-23).
-    if (!self.items && self.anchor && !self.ended) self.anchor.menu = [UIMenu menuWithChildren:[self rowElements]];
+    if (self.anchor && !self.ended) self.anchor.menu = [UIMenu menuWithChildren:[self rowElements]];
 
     NSArray<dispatch_block_t> *waiting = _whenRead;
     _whenRead = [NSMutableArray array];
     for (dispatch_block_t block in waiting) block();
-    [self refreshQuickRow];
-    [self refreshMore];
     return YES;
 }
 
@@ -920,102 +550,6 @@ static NSString *storedKey(NSString *kind) {
         [rows addObject:row];
     }
     return rows;
-}
-
-// Marks Spotify's rows that are quick items, remembers which this kind of sheet has, and says so in the log,
-// once a kind.
-- (void)matchQuick {
-    NSString *kind = self.kind ?: @"";
-    NSMutableArray<NSString *> *found = [NSMutableArray array];
-    NSMutableArray<NSString *> *every = [NSMutableArray array];
-    for (NSArray<SGRSheetRow *> *group in _groups) {
-        for (SGRSheetRow *row in group) {
-            if (!row.path) continue;
-            [every addObject:[NSString stringWithFormat:@"%@ (%@)", row.title, row.identifier ?: @"no id"]];
-            NSString *title = [row.title.lowercaseString stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            for (NSArray<NSString *> *item in quickItems()) {
-                if (!([row.identifier isEqualToString:item[3]] || [title isEqualToString:item[2]]) || [found containsObject:item[2]]) continue;
-                row.quick = item[2];
-                [found addObject:item[2]];
-            }
-        }
-    }
-    if (!sg_quickSeen) sg_quickSeen = [NSMutableDictionary dictionary];
-    sg_quickSeen[kind] = found;
-    static NSMutableSet<NSString *> *logged;
-    if (!logged) logged = [NSMutableSet set];
-    if ([logged containsObject:kind] || logged.count >= 4) return;
-    [logged addObject:kind];
-    SGLog(@"system menu: the rows of a %@ sheet: %@", kind.length ? kind : @"player", [every componentsJoinedByString:@", "]);
-    SGLog(@"system menu: quick items matched by number or title: %@", found.count ? [found componentsJoinedByString:@", "] : @"none");
-}
-
-#pragma mark the pick
-
-// A quick item picked: its row fired, after the rows come in if they are not in yet, for up to kQuickWait;
-// with no such row, or none in time, Spotify's sheet is shown, so the pick is never lost.
-- (void)fireQuick:(NSString *)quick {
-    if (_groups) {
-        [self fireQuickNow:quick];
-        return;
-    }
-    SGLog(@"system menu: %@ picked before the sheet had its rows, waiting up to %.0f s", quick, kQuickWait);
-    _waiting = YES;
-    __weak SGRMenuSession *weakSelf = self;
-    if (!_whenRead) _whenRead = [NSMutableArray array];
-    [_whenRead addObject:^{ [weakSelf fireQuickNow:quick]; }];
-    if (self.direct) [self requestSheet];
-    if (self.presented) [self pollRows];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuickWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        SGRMenuSession *session = weakSelf;
-        if (!session || !session->_waiting) return;
-        session->_waiting = NO;
-        SGLog(@"system menu: the sheet had no rows %.0f s after %@ was picked, Spotify's sheet shown", kQuickWait, quick);
-        [session reveal];
-    });
-}
-
-// A stored row picked: the live row of that title is fired once the rows are in.
-- (void)fireTitle:(NSString *)title {
-    if (!_groups) {
-        SGLog(@"system menu: %@ picked from the stored rows, waiting up to %.0f s for Spotify's", title, kQuickWait);
-        _waiting = YES;
-        __weak SGRMenuSession *weakSelf = self;
-        if (!_whenRead) _whenRead = [NSMutableArray array];
-        [_whenRead addObject:^{ [weakSelf fireTitle:title]; }];
-        [self requestSheet];
-        if (self.presented) [self pollRows];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kQuickWait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            SGRMenuSession *session = weakSelf;
-            if (!session || !session->_waiting) return;
-            session->_waiting = NO;
-            SGLog(@"system menu: the sheet had no rows %.0f s after %@ was picked, Spotify's sheet shown", kQuickWait, title);
-            [session reveal];
-        });
-        return;
-    }
-    _waiting = NO;
-    for (NSArray<SGRSheetRow *> *group in _groups) {
-        for (SGRSheetRow *row in group) {
-            if ([row.title isEqualToString:title]) {
-                [self fire:row];
-                return;
-            }
-        }
-    }
-    SGLog(@"system menu: Spotify's rows no longer have %@, its sheet shown", title);
-    [self reveal];
-}
-
-- (void)fireQuickNow:(NSString *)quick {
-    _waiting = NO;
-    SGRSheetRow *row = [self rowForQuick:quick];
-    if (row) {
-        [self fire:row];
-        return;
-    }
-    SGLog(@"system menu: this sheet has no %@ row, Spotify's sheet shown", quick);
-    [self reveal];
 }
 
 // A row of the sheet's fired, on the sheet still hidden under where the menu was.
@@ -1061,13 +595,6 @@ static NSString *storedKey(NSString *kind) {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *presented = self.presented;
         if (self.revealed) return;
-        // The player's menu with no sheet yet: a pick asks for it and waits for its rows; with no pick, a sheet
-        // still on its way goes as it comes.
-        if (self.direct && !presented) {
-            if (pick) pick();
-            else self->_dropOnArrival = YES;
-            return;
-        }
         if (!presented.presentingViewController) return;
         if (!pick) {
             [presented.presentingViewController dismissViewControllerAnimated:NO completion:nil];
@@ -1098,7 +625,6 @@ static NSString *storedKey(NSString *kind) {
     if (self.revealed || !self.presented) return;
     self.revealed = YES;
     UIView *container = self.container;
-    raiseHost(container.window);
     container.userInteractionEnabled = YES;
     SGRAnimate(SGRMotionFade, ^{ container.alpha = 1; }, nil);
     [self.sheet.viewIfLoaded setNeedsLayout];
@@ -1113,7 +639,7 @@ static SGRMenuSession *sessionFor(UIViewController *controller, BOOL fresh) {
     for (UIViewController *vc = controller; vc; vc = vc.parentViewController) {
         SGRMenuSession *session = objc_getAssociatedObject(vc, &kSessionKey);
         if (!session) continue;
-        if (!fresh || !session.opened || session.direct) return session;
+        if (!fresh || !session.opened) return session;
         SGLog(@"system menu: a ⋯ sheet appears again holding an earlier showing's session (on %@), let go", NSStringFromClass(vc.class));
         objc_setAssociatedObject(vc, &kSessionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -1126,58 +652,6 @@ BOOL SGPlayerMenuReplaced(UIViewController *menu) {
 }
 
 #pragma mark - the ⋯
-
-void SGRSystemMenuWatch(UIView *button, SGRMenuItems items, SGRMenuKind kind) {
-    if (![button isKindOfClass:UIControl.class]) return;
-    SGRMenuFront *front = objc_getAssociatedObject(button, &kFrontKey);
-    if (!front) {
-        front = [SGRMenuFront buttonWithType:UIButtonTypeCustom];
-        front.showsMenuAsPrimaryAction = YES;
-        // UIKit opens a button's menu on touch down only while the button holds one; a finger's touch on a
-        // button with none is taken and opens nothing (phone, and harness/system-menu with a finger's touch,
-        // 2026-10-06; -performPrimaryAction, which the harness tapped with before, opens the menu either way).
-        // This one stands in until the touch down asks for the session's (configurationForMenuAtLocation:).
-        front.menu = [UIMenu menuWithChildren:@[]];
-        front.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-        front.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        front.isAccessibilityElement = YES;
-        front.accessibilityTraits = UIAccessibilityTraitButton;
-        objc_setAssociatedObject(button, &kFrontKey, front, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        SGLog(@"system menu: the player's ⋯ (%@) opens the menu from a button of the mod's over it", NSStringFromClass(button.class));
-    }
-    front.spotify = (UIControl *)button;
-    front.items = items;
-    front.kind = kind;
-    // VoiceOver reaches the mod's button rather than Spotify's ⋯, with the ⋯'s own words, so it opens the menu too.
-    if (button.isAccessibilityElement) {
-        if (button.accessibilityLabel.length) front.accessibilityLabel = button.accessibilityLabel;
-        button.isAccessibilityElement = NO;
-    }
-    if (!front.accessibilityLabel.length) front.accessibilityLabel = @"More";
-    if (front.superview != button) [button addSubview:front];
-    else if (button.subviews.lastObject != front) [button bringSubviewToFront:front];
-    if (!CGRectEqualToRect(front.frame, button.bounds)) front.frame = button.bounds;
-    // Where the mod's button sits in the window next to the ⋯, and what a touch at the ⋯'s middle would reach,
-    // so the phone log shows the placement: once per change of the one over the other, of the ⋯'s size or of
-    // what the touch reaches, not of where the header is (the player's open and close move it every frame).
-    if (!button.window || button.bounds.size.width <= 0) return;
-    CGRect over = [front convertRect:front.bounds toView:nil], under = [button convertRect:button.bounds toView:nil];
-    CGPoint middle = CGPointMake(CGRectGetMidX(under), CGRectGetMidY(under));
-    UIView *hit = [button.window hitTest:middle withEvent:nil];
-    NSString *reaches = hit == front ? @"it" : NSStringFromClass(hit.class);
-    NSString *key = [NSString stringWithFormat:@"%@ %@ %@", NSStringFromCGPoint(CGPointMake(over.origin.x - under.origin.x, over.origin.y - under.origin.y)),
-                     NSStringFromCGSize(over.size), NSStringFromCGSize(under.size)];
-    key = [key stringByAppendingFormat:@" %@", reaches];
-    if (![key isEqualToString:objc_getAssociatedObject(front, &kPlacedKey)]) {
-        objc_setAssociatedObject(front, &kPlacedKey, key, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        SGLog(@"system menu: the mod's ⋯ at %@ over Spotify's at %@ in the window; a touch at the ⋯'s middle reaches %@",
-              NSStringFromCGRect(over), NSStringFromCGRect(under), reaches);
-    }
-}
-
-UIControl *SGRSystemMenuFront(UIView *button) {
-    return objc_getAssociatedObject(button, &kFrontKey);
-}
 
 static SGRMenuAnchor *anchorIn(UIView *host) {
     SGRMenuAnchor *anchor = objc_getAssociatedObject(host, &kAnchorKey);
@@ -1235,7 +709,6 @@ static SGRMenuSession *takeOver(UIViewController *presented, NSString *via) {
         return nil;
     }
     UIView *button = SGRPinnedMoreRecentButton();
-    CFTimeInterval touchedAt = 0;
     if (!button) {
         whyNot(via, recent, @"no page's ⋯ was touched");
         return nil;
@@ -1255,12 +728,11 @@ static SGRMenuSession *takeOver(UIViewController *presented, NSString *via) {
         return nil;
     }
     SGRMenuSession *session = [SGRMenuSession new];
-    session.touchedAt = touchedAt;
     session.takenAt = CACurrentMediaTime();
     session.presented = presented;
     session.anchor = anchorIn(button);
     objc_setAssociatedObject(presented, &kSessionKey, session, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    SGLog(@"system menu: the ⋯ sheet taken over %@ (%@)", via, session.items ? @"the player's" : @"a page's");
+    SGLog(@"system menu: the ⋯ sheet taken over %@", via);
     return session;
 }
 
@@ -1301,36 +773,10 @@ static void openWhenUp(SGRMenuSession *session, UIViewController *sheet, int tri
 
 %hook UIViewController
 - (void)presentViewController:(UIViewController *)presented animated:(BOOL)animated completion:(void (^)(void))completion {
-    if (sg_redirecting) {
-        %orig;
-        return;
-    }
-    UIWindow *in = self.viewIfLoaded.window;
-    // The sheet the player's menu asked Spotify for: into the mod's window, unseen.
-    SGRMenuSession *requesting = sg_requesting;
-    if (requesting && in != sg_host && CACurrentMediaTime() - sg_requestedAt <= kRequestWindow && ![presented isKindOfClass:UIAlertController.class]) {
-        sg_requesting = nil;
-        [requesting adoptSheet:presented from:self completion:completion];
-        return;
-    }
     SGRMenuSession *firing = sg_firing;
     if (firing) {
         SGLog(@"system menu: while a picked row fires, %@ presents %@", NSStringFromClass(self.class), NSStringFromClass(presented.class));
         [firing rowPresented];
-    }
-    // Spotify presenting from its sheet in the mod's window, or from under it, while that sheet is hidden: it goes
-    // up from Spotify's own presenter instead, in Spotify's window, where it can be seen.
-    SGRMenuSession *hosted = sg_hosted;
-    if (in && in == sg_host && hosted && !hosted.revealed && presented != hosted.presented) {
-        UIViewController *from = hosted.presenter;
-        while (from.presentedViewController && !from.presentedViewController.isBeingDismissed) from = from.presentedViewController;
-        if (from) {
-            SGLog(@"system menu: %@ presented from Spotify's hidden sheet goes up from %@ instead", NSStringFromClass(presented.class), NSStringFromClass(from.class));
-            sg_redirecting = YES;
-            [from presentViewController:presented animated:animated completion:completion];
-            sg_redirecting = NO;
-            return;
-        }
     }
     SGRMenuSession *session = takeOver(presented, @"as it is presented");
     if (!session) {
@@ -1363,9 +809,8 @@ static void openWhenUp(SGRMenuSession *session, UIViewController *sheet, int tri
         session = takeOver(sheet, @"as it lays out");
         if (session) openWhenUp(session, sheet, 0);
     }
-    // Until its menu opens: a session that has opened hides its sheet itself, or is an earlier showing's. The
-    // player's sheet stays hidden at every layout until it is shown.
-    if (session && (!session.opened || session.direct) && !session.revealed) [session hide];
+    // Until its menu opens: a session that has opened hides its sheet itself, or is an earlier showing's.
+    if (session && !session.opened && !session.revealed) [session hide];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1373,7 +818,7 @@ static void openWhenUp(SGRMenuSession *session, UIViewController *sheet, int tri
     SGRMenuSession *session = sessionFor((UIViewController *)self, YES);
     if (!session) session = takeOver((UIViewController *)self, @"as it appears");
     if (session && !session.revealed) [session hide];
-    if (session && !session.direct) dispatch_async(dispatch_get_main_queue(), ^{ [session tryEarly]; });
+    if (session) dispatch_async(dispatch_get_main_queue(), ^{ [session tryEarly]; });
 }
 
 - (void)viewDidAppear:(BOOL)animated {

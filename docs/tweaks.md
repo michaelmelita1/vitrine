@@ -238,7 +238,8 @@ Shared:
                   pages' previews to show when nothing plays (SGLastTrack.m), the lock screen widget's flags, and in the
                   more button's menu Speed and pitch: both done to Spotify's audio by Apple's time and pitch unit, put
                   between its mixer and its RemoteIO unit by taking over the connection Spotify makes between them
-                  (SpeedPitchMenu.x, SpeedPitch.x, SGTimePitch.m). Spotify runs a chain per sample rate, so a local
+                  (SpeedPitchMenu.x, SpeedPitch.x, SGTimePitch.m), and the redesign's player page puts the same sliders
+                  in a popover from its ⋯ (SGPlayerShowSpeedPitchPanel). Spotify runs a chain per sample rate, so a local
                   file at another rate can have two RemoteIO units running at once: SpeedPitch.x keeps a record
                   per unit (its own mixer, sample time, largest slice and formats; AudioOutputUnitStop and
                   AudioComponentInstanceDispose rebound too, a disposed unit forgotten after its render in progress)
@@ -258,11 +259,9 @@ Shared:
                   sliders a Reverb slider sets the audio effects' reverb amount (spotifyglass.dsp.reverb.amount), turning
                   the effects and the reverb on with it. The block goes into Spotify's own context menu sheet
                   and is drawn from its own measures, not the Kit's, so it sits there. Tested on the
-                  Mac against harness/pitch/ and in the simulator against harness/speed/ and harness/menu/. Under the
-                  redesign, with the player's background Fluid or Animated, a row under the block switches Animated
-                  artwork at once, through functions the redesign's PlayerMotion.x defines. The redesign shows that
-                  sheet as the system menu (Redesigned/ContextMenu), whose own items stand in for the block, so the
-                  block stays out of it unless the sheet itself is shown (SGPlayerMenuReplaced). Switch to video,
+                  Mac against harness/pitch/ and in the simulator against harness/speed/ and harness/menu/. A sheet
+                  the redesign shows as the system menu (Redesigned/ContextMenu) never gets the block
+                  (SGPlayerMenuReplaced). Switch to video,
                   the chip over the title of a song with a music video, is hidden on request
                   (VideoSwitch.x, spotifyglass.hide.videoSwitch), by its identifier in FloatingElementsUnit.
                   Full screen cover hidden (spotifyglass.hide.fullScreenCover) and Gestures (Shared/Gestures/) were
@@ -532,17 +531,9 @@ Redesigned:
                   list once at launch (NavbarLayout.m's SGRFoldNavbarSplit).
     NowPlayingBar/ Spotify's now playing bar kept unseen and untouchable as the source of the cover the mini player and the
                   player page show (NowPlayingBar.x, SGRNowPlayingCover), and the Mini player page (NowPlayingBarSettings.m)
-    ContextMenu/  the ⋯ of the player and the ⋯ pinned over the playlist, album and artist pages open the system menu,
-                  always (ContextMenu.h). The player's ⋯ is a pull-down button of the mod's over Spotify's: the menu
-                  opens on touch down with the quick row (Spotify's items 9, 19 and 11), the player's items and More,
-                  waiting on nothing of Spotify's (the button holds a stand-in menu from the start, since UIKit opens
-                  a button's menu on touch down only while it holds one, and the session's replaces it as the touch
-                  asks); Spotify's ⋯ action is then run from code and its sheet presented
-                  in a window of the mod's under the app's (the menu, a presentation of UIKit's from the player,
-                  leaves no room for another there), read, and used to run a pick. More shows the last complete set
-                  of rows stored for that kind of track (spotifyglass.redesign.player.menuRows.<kind>), or the
-                  system's loading row the first time, and is put right in place as the live rows come. A page's ⋯
-                  works the other way round: its tap opens Spotify's sheet, presented unanimated in a container hidden
+    ContextMenu/  the ⋯ pinned over the playlist, album and artist pages opens the system menu, always (ContextMenu.h);
+                  the player page's ⋯ is a menu of the mod's own (Player/SystemPlayer.m). A page's ⋯ tap opens
+                  Spotify's sheet, presented unanimated in a container hidden
                   from the presented controller's viewWillAppear: on, and the menu comes from an invisible button
                   inside the ⋯ that takes touches only while it is up, opened with -performPrimaryAction (else
                   UIContextMenuInteraction's private _presentMenuAtLocation:). Spotify's rows, read off the sheet's

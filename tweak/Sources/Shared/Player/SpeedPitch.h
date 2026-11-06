@@ -16,12 +16,9 @@
 // Whether a context menu sheet is the player's ⋯ card: the first to come up within a few seconds of a tap on
 // the player's more button (SpeedPitchMenu.x watches it under either look); decided once per menu.
 BOOL SGPlayerMenuIsPlayers(UIViewController *menu);
-// The next context menu sheet is the player's ⋯ card, as a tap on the ⋯ would make it: for the redesign's ⋯,
-// whose menu runs Spotify's ⋯ action from code (Redesigned/ContextMenu) and keeps the touch from the ⋯.
-void SGPlayerMenuMarkPlayers(void);
 // Whether the sheet is shown as the system menu instead, unseen under it (Redesigned/ContextMenu), whose own
-// items then stand in for the block, which stays out of it. Defined by the redesign; NO under the native look
-// and once the sheet itself is shown.
+// items then stand in for the block, which stays out of it. Defined by the redesign; NO below iOS 26, where it
+// does not run, and once the sheet itself is shown.
 BOOL SGPlayerMenuReplaced(UIViewController *menu);
 // The speed Spotify's sound plays at, 1 when normal.
 double SGPlayerSpeed(void);
@@ -48,11 +45,10 @@ void SGPlayerSetGain(float gain);
 float SGPlayerReverb(void);
 void SGPlayerSetReverb(float amount);
 
-// The redesign's Animated artwork, switched in the same block: whether the player offers the switch (the
-// redesign is running and its background is Fluid, Animated or Visualizer, the three that share a field),
-// whether it is on, and switching it, which applies at once and is stored as the Background choice (off is
-// Fluid, and from the Visualizer changes nothing). Defined by
-// Redesigned/Player/PlayerMotion.x; NO from the first under the native look.
+// The redesign's Animated artwork, switched from the player page's ⋯ (Redesigned/Player/PlayerMenu.m): whether the
+// switch is offered (the redesign is running and its background is Fluid, Animated or Visualizer, the three that
+// share a field), whether it is on, and switching it, which applies at once and is stored as the Background choice
+// (off is Fluid, and from the Visualizer changes nothing). Defined by Redesigned/Player/PlayerMotion.x.
 BOOL SGPlayerMenuOffersAnimatedArtwork(void);
 BOOL SGPlayerMenuAnimatedArtwork(void);
 void SGPlayerMenuSetAnimatedArtwork(BOOL on);

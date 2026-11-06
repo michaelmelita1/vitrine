@@ -1,4 +1,4 @@
-// When a page's scroll minimizes the glass bar and when it brings it back (TabBarMinimize.x), apart from
+// When a page's scroll minimizes the tab bar and when it brings it back (TabBarMinimize.x), apart from
 // UIKit so harness/tabbar/minimize-check.c runs it on the Mac.
 //
 // A scroll down of kSGRMinimizeTravel from where the page last turned minimizes the bar, and a scroll back up

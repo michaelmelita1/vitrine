@@ -1,4 +1,4 @@
-// Native redesign's landscape player (iOS 27.3's): the screen the system tab bar's player page (SystemPlayer.m) turns
+// The redesign's landscape player (iOS 27.3's): the screen the system tab bar's player page (SystemPlayer.m) turns
 // sideways to, laid out as the Music app's iPhone landscape player is from iOS 27.3 (its owner's recordings, 2026-11-05).
 // On the left the track's Animated clip, carried on past its edges mirrored, stretched and blurred as the page's foot is
 // (SystemMotion.m), or without one the square cover inset on a darkened field; on the right a column headed by the title,

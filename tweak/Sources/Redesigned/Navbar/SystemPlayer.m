@@ -1289,7 +1289,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     [_coverHolder addSubview:_cover];
 
     // A long title or artist glides to its end and back, its edge faded, as the redesigned player's title does (Spotify's
-    // own marquee there; the mod's SGMarqueeLabel, the Music app's timing, here and on the glass bar). The two sit in one
+    // own marquee there; the mod's SGMarqueeLabel, the Music app's timing, here). The two sit in one
     // block that a sideways swipe pages through the tracks (titleSwiped:), with the track coming in beside them.
     _titleBlock = [UIView new];
     // Cut at the column's sides through a soft edge, as the mini player's lines are (SystemTabs.x's kTextFade): the block

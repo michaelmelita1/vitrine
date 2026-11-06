@@ -56,13 +56,13 @@ static SGProblem version(void) {
 
 // What this install lacks of the app changes Vitrine's IPA build makes (scripts/pipeline.sh: plist/liquid-glass.plist),
 // as when its .deb is injected by hand, each said as what it costs. Spotify's own plist opting out of the system's glass
-// (9.1.88's) costs the redesign its glass bars. 9.1.90 has no such key, and none is the same as glass on. The Live
+// (9.1.88's) costs the redesign its tab bar's glass. 9.1.90 has no such key, and none is the same as glass on. The Live
 // Activity and Music Haptics keys matter in either look, and their own settings say so too.
 static NSArray<NSString *> *missingAppChanges(void) {
     NSMutableArray<NSString *> *missing = [NSMutableArray array];
     id compatibility = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIDesignRequiresCompatibility"];
     if (SGRedesignAvailable() && SGRedesignedUIStored() && [compatibility isKindOfClass:NSNumber.class] && [compatibility boolValue])
-        [missing addObject:@"the tab bar stays Spotify's own, without its glass"];
+        [missing addObject:@"the tab bar is drawn without its glass"];
     if (!SGLiveActivityAllowedByInstall()) [missing addObject:@"the Live Activity is missing"];
     if (!SGMusicHapticsListedByInstall())
         [missing addObject:@"iOS does not list Spotify for Music Haptics, which stops vibrations in the background"];

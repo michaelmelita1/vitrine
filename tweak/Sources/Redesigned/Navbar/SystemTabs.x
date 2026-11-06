@@ -1,4 +1,4 @@
-// Prototype: the system tab bar. A UITabBarController of the mod's over Spotify's tab area, so UIKit itself minimizes
+// The redesign's tab bar: the system tab bar. A UITabBarController of the mod's over Spotify's tab area, so UIKit itself minimizes
 // the bar on scroll and moves the mini player between its place over the bar and the bar's row, the Music app's way
 // (UITabBarController's tabBarMinimizeBehavior and bottomAccessory, iOS 26). Spotify's tab bar container is no
 // UITabBarController (TabBar.x), so this one stands over it:
@@ -25,23 +25,12 @@
 #import "Redesigned/Artist/Artist.h"
 
 
-BOOL SGRSystemTabsOn(void) {
-    static BOOL on;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        on = SGRedesignedUI();
-    });
-    return on;
-}
-
 #pragma mark - the mini player
 
 static UIViewController *systemTabsController(void);
 static void buildReadyPage(void);
 
 API_AVAILABLE(ios(26.0))
-// TODO (its owner, 2026-11-01, "aim to add at some point"): no like on it yet, so the Mini player page's Hide the like
-// button reaches only the glass bar.
 @interface SGRSystemMiniPlayer : UIView <SGPlayerStateObserver, UIGestureRecognizerDelegate>
 @property (nonatomic, readonly) UIImageView *cover;
 @end
@@ -598,7 +587,7 @@ API_AVAILABLE(ios(26.0))
     clearBackdrops(controller);
 }
 
-// Holding the first tab opens Mod Settings, as on the glass bar (TabBar.x): a little longer than iOS's own press for a
+// Holding the first tab opens Mod Settings, as on the glass bar it replaced: a little longer than iOS's own press for a
 // menu, with a firm tap when it opens.
 // The tab buttons have recognizers of their own: the hold runs beside them, or it never began (the phone's log).
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
@@ -781,19 +770,19 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
         // as each scroll goes (TabBarMinimize.x), and UIKit's, where it stands in, is told never (its owner, 2026-11-01).
         UITabBarMinimizeBehavior minimize = SGEnabled(SGRKeyNavbarMinimize) ? UITabBarMinimizeBehaviorOnScrollDown : UITabBarMinimizeBehaviorNever;
         if (controller.tabBarMinimizeBehavior != minimize) controller.tabBarMinimizeBehavior = minimize;
-        // The redesign's accent on the selected tab, as on the glass bar (its owner, 2026-10-31).
+        // The redesign's accent on the selected tab (its owner, 2026-10-31).
         UIColor *accent = SGRAccent();
         if (![controller.tabBar.tintColor isEqual:accent]) controller.tabBar.tintColor = accent;
         if (![controller.view.tintColor isEqual:accent]) controller.view.tintColor = accent;
 
         // The tabs again only when Spotify's items or their names changed; their glyphs follow in place at every pass.
-        // Icons only on the Tab bar page (SGRKeyNavbarHideLabels, as the glass bar reads it in TabBar.x): each tab without
+        // Icons only on the Tab bar page (SGRKeyNavbarHideLabels): each tab without
         // a name, which UIKit draws as its glyph alone (its owner, 2026-11-01: the system tab bar kept its names). Part of
         // what is compared, so switching it builds the tabs again at the next pass, which the page's SGRRefreshTabBar asks for.
         BOOL namesHidden = SGHidden(SGRKeyNavbarHideLabels);
         NSMutableString *titles = [NSMutableString stringWithString:namesHidden ? @"icons only\n" : @"names\n"];
         for (UIView *source in sources) [titles appendFormat:@"%@\n", SGRTabSourceTitle(source)];
-        // Each tab's outline and filled glyph, as the glass bar draws Spotify's item (TabBar.x): Spotify swaps the item's icon
+        // Each tab's outline and filled glyph, drawn from Spotify's item (TabBar.x): Spotify swaps the item's icon
         // itself between the two as the item becomes active, so the glyph read at a pass is filed as the filled one when the
         // item is active then, else as the outline, and kept by the tab's name. UIKit draws the outline unselected and the
         // filled one selected and under its selection bubble as it slides (its owner, 2026-11-01: the same icon for both left
@@ -823,7 +812,7 @@ void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UI
         }
         if (![sources isEqualToArray:tabs.sources] || ![titles isEqualToString:tabs.titles]) {
             // The last tab, whichever the editor put there, stands on its own at the trailing end as the Music app's Search
-            // does (its owner, 2026-10-31, as the glass bar's trailing circle was): UIKit gives that place to a search tab,
+            // does (its owner, 2026-10-31): UIKit gives that place to a search tab,
             // so the last tab is one, with its own name and glyph in place of the magnifier.
             NSUInteger searchIndex = sources.count > 1 ? sources.count - 1 : NSNotFound;
             NSMutableArray<UITab *> *items = [NSMutableArray array];
@@ -907,7 +896,7 @@ void SGRSystemTabsFollowScroll(UIScrollView *scrollView) {
 #pragma mark - minimizing by the mod's rule
 
 // UIKit's minimize on scroll took several tab switches to start following a page, and brought the bar back only at the
-// top of the list (its owner, 2026-10-31). The page's scroll is judged by the glass bar's rule instead (MinimizeStep.h,
+// top of the list (its owner, 2026-10-31). The page's scroll is judged by the mod's own rule instead (MinimizeStep.h,
 // TabBarMinimize.x: down 24 pt minimizes, back up as much expands, anywhere), and the bar is told. UIKit keeps
 // -[UITabBar _setMinimized:] and -_isMinimized to apps it approves ("This can only be called by an approved app", which
 // crashed Spotify: its owner, 2026-10-31), so the bar's visual provider, which draws it, is told instead
@@ -1026,7 +1015,6 @@ static char kRedirectedKey;
 
 %ctor {
     if (!SGRedesignedUI()) return;
-    if (!SGRSystemTabsOn()) return;
     %init;
 }
 

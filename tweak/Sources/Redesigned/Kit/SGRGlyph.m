@@ -26,7 +26,7 @@ static const CGFloat kMinTouch = 44, kPressAlpha = 0.5, kPressScale = 0.9, kDisa
     return _symbol;
 }
 
-// A glyph without its baseline (Native redesign's player page) is made at its own size: an image left at the default size
+// A glyph without its baseline (the player page) is made at its own size: an image left at the default size
 // reports that size, and the view, centering it by it while drawing it at the configured one, drew it off its middle
 // (its owner's recordings, 2026-11-02). Every other glyph is the plain symbol, as it was.
 - (UIImage *)imageOf:(NSString *)symbol {

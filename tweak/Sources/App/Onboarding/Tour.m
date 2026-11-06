@@ -343,7 +343,7 @@ static BOOL adFree(void) {
     SGLookCard *_redesigned, *_legacy, *_adsCard;
     UISwitch *_ads;
     UIStackView *_column;
-    UIView *_splitTip;   // the redesign's; the lyrics tip's line changes with the look too
+    // The lyrics tip's line changes with the look.
     UILabel *_lyricsTip;
     UIView *_note;
     UIImageView *_noteIcon;
@@ -394,8 +394,7 @@ static BOOL adFree(void) {
     _note.hidden = _redesigned.selected;
     // The ads card stands apart from the look's cards and its note, whichever of those comes last.
     [_column setCustomSpacing:_note.hidden ? 32 : 12 afterView:_legacy];
-    // The tips of the picked look: Split Tabs is the redesign's bar's, and the lyrics preview the redesign's page's.
-    _splitTip.hidden = !_redesigned.selected;
+    // The tips of the picked look: the lyrics preview is the redesign's page's.
     _lyricsTip.text = [(_redesigned.selected ? @"A live preview of the look, the sources in order, and lyrics even where Spotify has none."
                                              : @"The sources in order, and lyrics even where Spotify has none.")
                        stringByAppendingString:@"\nMod Settings > Lyrics"];
@@ -403,9 +402,6 @@ static BOOL adFree(void) {
 
 // What people miss in Mod Settings, as pointers only: the tour has no way into a page but holding Home.
 - (UIView *)tipsView {
-    UIStackView *split = cardRow(@"rectangle.split.2x1", @"Split Tabs",
-                                 @"Any tab, Queue for one, on a bar of its own at the trailing end.\nMod Settings > Tab bar > Split Tabs", nil);
-    _splitTip = split;
     UIStackView *lyrics = cardRow(@"quote.bubble", @"Lyrics", @"", nil);
     // The row's text stack is its last arranged view, the gray line that stack's; updateNote writes the look's.
     _lyricsTip = (UILabel *)((UIStackView *)lyrics.arrangedSubviews.lastObject).arrangedSubviews.lastObject;
@@ -416,7 +412,7 @@ static BOOL adFree(void) {
                                                   @"lock screen. Either look.\nMod Settings > AirPods gestures, Live Activity"
                                                 : @"Nod twice or shake your head to control the music, with a chime. Either look."
                                                   @"\nMod Settings > AirPods gestures", nil);
-    return tipsCard(@[split, lyrics, airPods]);
+    return tipsCard(@[lyrics, airPods]);
 }
 
 - (void)viewDidLoad {

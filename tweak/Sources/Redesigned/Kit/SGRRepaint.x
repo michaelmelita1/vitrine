@@ -1,10 +1,8 @@
-// Keeps the areas the redesign stripped transparent when Spotify repaints them, and learns which views
-// could be the now playing bar's card from the album-color paint.
+// Keeps the areas the redesign stripped transparent when Spotify repaints them.
 #import "Core/SGCore.h"
 #import "SGRRepaint.h"
 
 __weak UIView *sgr_nowPlayingRoot = nil;
-NSHashTable<UIView *> *sgr_nowPlayingPainted = nil;
 __weak UIView *sgr_lyricsPageRoot = nil;
 __weak UIView *sgr_playlistRoot = nil;
 __weak UIView *sgr_albumRoot = nil;
@@ -34,26 +32,7 @@ enum { kInNowPlaying = 1, kInLyrics = 2, kInPage = 4 };
                 if (v == lyrics) inside |= kInLyrics;
                 if (v == playlist || v == album || v == artist) inside |= kInPage;
             }
-            if (inside & kInNowPlaying) {
-                // Its size is judged when the bar picks its card: Spotify can paint a card before it sizes it.
-                if (SGIsVisibleColor(color)) {
-                    // The bar reads the table on main, and Spotify also paints layers off main.
-                    void (^learn)(UIView *) = ^(UIView *painted) {
-                        if (!painted || [sgr_nowPlayingPainted containsObject:painted]) return;
-                        [sgr_nowPlayingPainted addObject:painted];
-                        dispatch_async(dispatch_get_main_queue(), ^{ [nowPlaying.superview setNeedsLayout]; });
-                    };
-                    if (NSThread.isMainThread) {
-                        learn(view);
-                    } else {
-                        __weak UIView *weakView = view;
-                        dispatch_async(dispatch_get_main_queue(), ^{ learn(weakView); });
-                    }
-                }
-                color = NULL;
-            } else if (inside & (kInLyrics | kInPage)) {
-                color = NULL;
-            }
+            if (inside) color = NULL;
         }
     }
     %orig(color);

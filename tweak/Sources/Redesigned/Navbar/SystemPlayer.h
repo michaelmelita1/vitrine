@@ -45,7 +45,7 @@ extern NSNotificationName const SGRPlayerOutputDidChangeNotification;
 // A finger's stay on `control` presses the first SGRGlyphView inside it and lets go as it lifts.
 void SGRPlayerPressGlyphOnTouch(UIView *control);
 // The page's Animated background (SystemMotion.m): a clip and its poster drawn as #192 drew them, playing. PlayerMotion.x's
-// SGRPlayerMotionPreview builds it under Native redesign.
+// SGRPlayerMotionPreview builds it.
 UIView *SGRSystemMotionPreviewOf(NSURL *file, UIImage *poster);
 
 // The page's volume row (SystemVolume.x, Sim Radio's elastic slider), 32 pt high, as wide as it is laid out; and the pans
@@ -66,7 +66,7 @@ void SGRPlayerVolumeRowLetGo(UIControl *row);
 - (void)letGoOfPans;
 @end
 
-// Native redesign's landscape player (SystemLandscape.m), which the page holds while the app is turned: made in the lines'
+// The redesign's landscape player (SystemLandscape.m), which the page holds while the app is turned: made in the lines'
 // view, the queue's or the player's, switched between them, and told the track's lines came in or are none.
 UIViewController *SGRSystemMakeLandscape(BOOL lyrics, BOOL queue);
 void SGRSystemLandscapeSetLyrics(UIViewController *screen, BOOL lyrics, BOOL animated);

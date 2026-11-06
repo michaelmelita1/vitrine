@@ -448,7 +448,7 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
 static const CGFloat kCornerSide = 16;
 
 // The page whose pinned ⋯ was last tapped, and when: what tells the sheet that opens a moment later which
-// page's menu it is. The same trick Shared/Player/SpeedPitchMenu.x plays on the player's more button, but
+// page's menu it is. The same trick once played on the player's more button, but
 // from this side of it, since this button is the redesign's own and knows its own page.
 //
 // Recorded on touch down rather than on touch up: the button's own -sgr_tap is registered first and fires

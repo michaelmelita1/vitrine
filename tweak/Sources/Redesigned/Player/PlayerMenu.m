@@ -1,7 +1,5 @@
 // The player page's ⋯ items of the mod's own (SystemPlayer.m):
 //
-//     Speed, Pitch & Reverb   opens the sliders in a popover from the ⋯ (SGPlayerShowSpeedPitchPanel): speed,
-//                             pitch, reverb and Pitch follows speed, as on Spotify's sheet (issue #14)
 //     Artwork                 Fluid, Visualizer or Animated, while the background is one of the three
 //     Lyrics Source           a song's lyrics from another source than the one the order chose (issue #67), in a
 //                             popover from the ⋯ that asks every source and lists each as it answers
@@ -9,7 +7,6 @@
 // The item says under its name what is not as Spotify plays it, so the menu reads as a settings summary.
 #import "Core/SGCore.h"
 #import "Shared/Player/PlayerState.h"
-#import "Shared/Player/SpeedPitch.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/LyricsSources/LyricsSources.h"
 #import "Settings/SGPageStyle.h"
@@ -20,37 +17,6 @@ static __weak UIView *sg_moreButton;   // the ⋯ the panels come from
 static UIImage *symbol(NSString *name) {
     return [UIImage systemImageNamed:name];
 }
-
-static NSString *speedText(double speed) {
-    NSString *text = [NSString stringWithFormat:@"%.2f", speed];
-    while ([text hasSuffix:@"0"]) text = [text substringToIndex:text.length - 1];
-    if ([text hasSuffix:@"."]) text = [text substringToIndex:text.length - 1];
-    return [text stringByAppendingString:@"×"];
-}
-
-static NSString *semitonesText(float semitones) {
-    if (semitones == 0) return @"Original";
-    return [NSString stringWithFormat:@"%@%.0f %@", semitones > 0 ? @"+" : @"−", fabsf(semitones), fabsf(semitones) == 1 ? @"Semitone" : @"Semitones"];
-}
-
-// While pitch follows a speed that is not normal, the speed sets the pitch and the semitones are not played
-// (SGTimePitch.h), so they stand aside, as on the sheet.
-static BOOL pitchFollowing(void) {
-    return SGPlayerSpeedAllowed() && SGPlayerPitchFollowsSpeed() && SGPlayerSpeed() != 1;
-}
-
-// One item for the three, which says what is not as Spotify plays it, or Normal.
-static UIAction *soundMenu(void) {
-    NSMutableArray<NSString *> *changed = [NSMutableArray array];
-    if (SGPlayerSpeedAllowed() && fabs(SGPlayerSpeed() - 1) >= 0.01) [changed addObject:speedText(SGPlayerSpeed())];
-    if (SGPlayerPitchAvailable() && !pitchFollowing() && SGPlayerPitch() != 0) [changed addObject:semitonesText(SGPlayerPitch())];
-    if (SGPlayerReverb() > 0) [changed addObject:[NSString stringWithFormat:@"Reverb %.0f%%", SGPlayerReverb()]];
-    UIAction *open = [UIAction actionWithTitle:@"Speed, Pitch & Reverb" image:symbol(@"slider.horizontal.3") identifier:nil
-                                       handler:^(UIAction *action) { SGPlayerShowSpeedPitchPanel(sg_moreButton); }];
-    open.subtitle = changed.count ? [changed componentsJoinedByString:@", "] : @"Normal";
-    return open;
-}
-
 
 static NSString *sheetKind(void);
 
@@ -71,7 +37,7 @@ static NSString *timingText(NSArray<SGKaraokeLine *> *lines) {
 @implementation SGRSourceRow
 @end
 
-// The Lyrics Source panel, a popover from the ⋯ like Speed, Pitch & Reverb's: a menu's submenu ran its rows
+// The Lyrics Source panel, a popover from the ⋯: a menu's submenu ran its rows
 // under its own title when scrolled, and could not take a source that answered after it opened. Here the title
 // scrolls with the rows, and each answer fills its row in while the panel is open.
 @interface SGRLyricsSourcePanel : UITableViewController
@@ -209,7 +175,7 @@ static NSString *sheetKind(void) {
 
 NSArray<UIMenuElement *> *SGRPlayerMenuPageItems(UIView *anchor, void (^changed)(void)) {
     sg_moreButton = anchor;
-    NSMutableArray<UIMenuElement *> *items = [NSMutableArray arrayWithObject:soundMenu()];
+    NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
     UIAction *lyrics = lyricsSourceItem();
     if (lyrics) [items addObject:lyrics];
     return items;

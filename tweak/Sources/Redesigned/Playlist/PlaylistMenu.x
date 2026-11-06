@@ -10,7 +10,7 @@
 // ContextMenu_InternalImpl.ContextMenuViewController, a table whose rows come from Swift item factories
 // with no ObjC surface: nothing can be read out of them and nothing can be put between them. What can be
 // set is the table's header or footer view, which is how Speed and pitch has ridden on the player's menu
-// since it shipped (Shared/Player/SpeedPitchMenu.x). So the block goes in the header, above Spotify's own
+// since it shipped. So the block goes in the header, above Spotify's own
 // rows, and is laid out by hand at the table's width.
 //
 // **And why not a menu of the redesign's own instead.** Building the sheet would mean owning its contents:

@@ -3,13 +3,12 @@
 // (SystemLandscape.m). A follower walks each track as it plays (SGMotionFollower) while the background is Animated,
 // so the next track's clip is often in the store before it is asked for; a page asking for a track the follower has
 // no clip for looks it up itself (SGRPlayerMotionPreview). The ⋯ menu switches between Animated and Fluid at once
-// (Shared/Player/SpeedPitch.h). Under Reduce Motion and in Low Power Mode no clip is looked up.
+// (Player.h). Under Reduce Motion and in Low Power Mode no clip is looked up.
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SGLastTrack.h"
-#import "Shared/Player/SpeedPitch.h"
 #import "Player.h"
 #import "SystemPlayer.h"
 
@@ -148,7 +147,7 @@ static BOOL beginTrack(NSString *track) {
     return wanted;
 }
 
-#pragma mark - the ⋯ menu's switch (Shared/Player/SpeedPitch.h)
+#pragma mark - the ⋯ menu's switch (Player.h)
 
 // Fluid, Animated and the Visualizer share the field, so the menu moves between them without a restart. The
 // other backgrounds are a field of another kind, chosen on the Player page (PlayerSettings.m).

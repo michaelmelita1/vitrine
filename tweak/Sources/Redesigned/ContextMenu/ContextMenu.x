@@ -2,7 +2,7 @@
 //
 // The sheet is ContextMenu_InternalImpl.ContextMenuViewController, presented on its own or as the root of
 // ContextMenuNativeNavigationController; its rows are a table sized to its content (Shared/Player/
-// SpeedPitchMenu.x and harness/menu say more), each a ContextMenuTableViewCell whose only ivar is the
+// harness/menu says more), each a ContextMenuTableViewCell whose only ivar is the
 // containedView Spotify draws the row in (nm on 9.1.78). So a row is read off the cell it fills -- its words
 // from its labels, its glyph from its image view or else drawn off the small view at its leading edge -- and
 // picked through the table's own delegate, as a tap on it would be.
@@ -155,7 +155,7 @@ static NSString *fireControl(UIControl *control) {
     __block UIControlEvents events = 0;
     if ([control respondsToSelector:@selector(enumerateEventHandlers:)]) {
         [control enumerateEventHandlers:^(UIAction *action, id target, SEL selector, UIControlEvents handled, BOOL *stop) {
-            // The mod's own watcher of the ⋯ (Shared/Player/SpeedPitchMenu.x) is not Spotify's action.
+            // The mod's own watcher of the ⋯ is not Spotify's action.
             if (!action && [NSStringFromClass([target class]) hasSuffix:@"TapWatcher"]) return;
             events |= handled;
         }];

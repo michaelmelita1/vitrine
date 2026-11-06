@@ -1,4 +1,4 @@
-// Speed and Pitch (SpeedPitchMenu.x draws them), both done on Spotify's audio, under either look, and the
+// Speed and Pitch, both done on Spotify's audio, under either look, and the
 // record of Spotify's outputs that every processor of its sound follows (SpeedPitch.h).
 //
 // Spotify's player takes a speed only for podcasts: for songs its restrictions refuse it (device test,

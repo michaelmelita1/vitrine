@@ -109,3 +109,10 @@ NSArray<UIMenuElement *> *SGRPlayerMenuPageItems(UIView *anchor, void (^changed)
 // The backgrounds the ⋯ switches between at once (Fluid, Animated, Visualizer) as one submenu, the one shown checked and
 // named under it; nil while the background is not one of them. `changed` runs after a switch.
 UIMenu *SGRPlayerMenuArtwork(void (^changed)(void));
+
+// The redesign's Animated artwork, switched from the player page's ⋯ (Redesigned/Player/PlayerMenu.m): whether the
+// switch is offered (the redesign is running and its background is Fluid, Animated or Visualizer, the three that
+// share a field), and switching it, which applies at once and is stored as the Background choice
+// (off is Fluid, and from the Visualizer changes nothing). Defined by Redesigned/Player/PlayerMotion.x.
+BOOL SGPlayerMenuOffersAnimatedArtwork(void);
+void SGPlayerMenuSetAnimatedArtwork(BOOL on);

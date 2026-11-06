@@ -30,7 +30,6 @@
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/AudioEffects/AudioEffects.h"
 #import "Shared/Player/PlayerState.h"
-#import "Shared/Player/SpeedPitch.h"
 #import "Player.h"
 #import "SGRSpectrum.h"
 

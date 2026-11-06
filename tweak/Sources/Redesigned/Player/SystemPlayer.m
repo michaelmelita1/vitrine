@@ -51,7 +51,6 @@
 #import "Shared/Player/SleepTimer.h"
 #import "Shared/Haptics/Haptics.h"
 #import "Settings/SGMarquee.h"
-#import "Shared/Player/SpeedPitch.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Redesigned/Artist/Artist.h"
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
@@ -1206,7 +1205,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     BOOL _titlePast;                           // the swipe is past where letting go skips
     BOOL _episode;                             // an episode or a chapter plays: 15 s skips, the speed in shuffle's place
     BOOL _volumeOff, _shuffleOff, _repeatOff;  // the Player page's Volume off, Hide on the player's Shuffle and Repeat
-    UIButton *_speed;
     SGRGlyphButton *_add;
     id _savedWatch;
     NSString *_savedTrack;
@@ -1349,14 +1347,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     UIPanGestureRecognizer *swipe = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(titleSwiped:)];
     swipe.delegate = self;
     [_titleBlock addGestureRecognizer:swipe];
-    // An episode's speed, where a song's shuffle is, as Spotify's episode player has it; it opens the speed panel the ⋯'s
-    // Speed, Pitch & Reverb opens (Shared/Player/SpeedPitch.h).
-    _speed = [UIButton buttonWithType:UIButtonTypeCustom];
-    _speed.titleLabel.font = SGRMonospacedDigitsFont(SGRFont(UIFontTextStyleSubheadline, UIFontWeightBold, UIContentSizeCategoryLarge));
-    [_speed setTitleColor:SGRPrimary() forState:UIControlStateNormal];
-    _speed.accessibilityLabel = @"Playback speed";
-    _speed.hidden = YES;
-    [_speed addTarget:self action:@selector(speedTapped) forControlEvents:UIControlEventTouchUpInside];
     // The add button beside the title, where Spotify's player has its own (InformationElementsUnit's
     // Components.UI.AddToButton, kept by the redesigned player): the Music app's star, as the landscape player has it,
     // filled once the track is in Liked Songs (its owner, 2026-11-06: the star in place of the tick).
@@ -1501,7 +1491,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     }
     [_stage addSubview:_lines];
 
-    for (UIView *sub in @[_close, _more, _context, _coverHolder, _titleBlock, _speed, _add, _scrubber, _elapsed, _remaining, _shuffle, _previous, _play,
+    for (UIView *sub in @[_close, _more, _context, _coverHolder, _titleBlock, _add, _scrubber, _elapsed, _remaining, _shuffle, _previous, _play,
                           _next, _repeat, _volume, _lyrics, _route, _routeLine, _queue]) {
         [view addSubview:sub];
     }
@@ -1837,8 +1827,6 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _add.center = CGPointMake(addRight - kAddSide / 2, titleMid);
     _more.bounds = CGRectMake(0, 0, kAddSide, kAddSide);
     _more.center = CGPointMake(moreRight - kAddSide / 2, titleMid);
-    _speed.bounds = CGRectMake(0, 0, 56, 44);
-    _speed.center = _shuffle.center;
     _thumb = thumb;
     // The thumbnail is the cover moved and scaled by its transform, so its shadow and corners travel with it; the corners
     // are given back the thumbnail's radius at that scale.
@@ -2354,7 +2342,6 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)tick {
     [self syncLyrics];
-    if (_episode) [self syncEpisode:(isTrack(SGPlayerState().track) ? SGPlayerState().track : nil)];
     if (_scrubber.held) return;
     SPTPlayerState *state = SGPlayerState();
     if (!isTrack(state.track)) {
@@ -2761,7 +2748,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
 // What fades (PlayerLyrics.x's fadingViews): the header, the thumbnail, the title row and every control, or with Keep
 // the title, the controls under the title row alone.
 - (NSArray<UIView *> *)fadingViews {
-    NSMutableArray<UIView *> *views = [NSMutableArray arrayWithArray:@[_scrubber, _elapsed, _remaining, _speed, _previous, _play, _next,
+    NSMutableArray<UIView *> *views = [NSMutableArray arrayWithArray:@[_scrubber, _elapsed, _remaining, _previous, _play, _next,
                                                                        _volume, _lyrics, _route, _routeLine, _queue]];
     // Hidden on the Player page, they stay unseen when the rest comes back.
     if (!_shuffleOff) [views addObject:_shuffle];
@@ -3079,35 +3066,14 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
     [self stepSkip:direction];
 }
 
-- (void)speedTapped {
-    SGPlayerShowSpeedPitchPanel(_speed);
-}
-
-// An episode's speed as the ⋯ menu writes it (PlayerMenu.m's speedText): 1×, 1.5×, 0.75×.
-static NSString *speedLabel(double speed) {
-    NSString *text = [NSString stringWithFormat:@"%.2f", speed];
-    while ([text hasSuffix:@"0"]) text = [text substringToIndex:text.length - 1];
-    if ([text hasSuffix:@"."]) text = [text substringToIndex:text.length - 1];
-    return [text stringByAppendingString:@"×"];
-}
-
-// Episode or song: the skips' glyphs, shuffle and repeat or the speed. An episode or an audiobook's chapter is told by its
+// Episode or song: the skips' glyphs, and shuffle and repeat for a song. An episode or an audiobook's chapter is told by its
 // URI (spotify:episode:…, spotify:chapter:…), as the ⋯ menu tells a podcast's sheet from a song's (PlayerMenu.m's
 // sheetKind).
 - (void)syncEpisode:(SPTPlayerTrack *)track {
     NSArray<NSString *> *parts = [SGURIString(track.URI) componentsSeparatedByString:@":"];
     NSString *kind = parts.count > 2 ? parts[1] : @"";
     BOOL episode = [kind isEqualToString:@"episode"] || [kind isEqualToString:@"chapter"];
-    BOOL speed = episode && SGPlayerSpeedAllowed();
-    NSString *title = speedLabel(SGPlayerSpeed());
-    if (speed && ![[_speed titleForState:UIControlStateNormal] isEqualToString:title]) {
-        [_speed setTitle:title forState:UIControlStateNormal];
-        _speed.accessibilityValue = title;
-    }
-    if (episode == _episode && _shownOnce) {
-        _speed.hidden = !speed;
-        return;
-    }
+    if (episode == _episode && _shownOnce) return;
     _episode = episode;
     BOOL animated = _shownOnce && self.view.window;
     [_previous.glyph setSymbol:episode ? @"gobackward.15" : @"backward.fill" animated:animated];
@@ -3115,7 +3081,6 @@ static NSString *speedLabel(double speed) {
     _previous.accessibilityLabel = episode ? @"Back 15 seconds" : @"Previous";
     _next.accessibilityLabel = episode ? @"Forward 15 seconds" : @"Next";
     _shuffle.hidden = _repeat.hidden = episode;
-    _speed.hidden = !speed;
     [_previous setNeedsLayout];
     [_next setNeedsLayout];
 }

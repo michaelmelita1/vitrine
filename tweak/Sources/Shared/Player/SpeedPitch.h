@@ -47,10 +47,9 @@ void SGPlayerSetReverb(float amount);
 
 // The redesign's Animated artwork, switched from the player page's ⋯ (Redesigned/Player/PlayerMenu.m): whether the
 // switch is offered (the redesign is running and its background is Fluid, Animated or Visualizer, the three that
-// share a field), whether it is on, and switching it, which applies at once and is stored as the Background choice
+// share a field), and switching it, which applies at once and is stored as the Background choice
 // (off is Fluid, and from the Visualizer changes nothing). Defined by Redesigned/Player/PlayerMotion.x.
 BOOL SGPlayerMenuOffersAnimatedArtwork(void);
-BOOL SGPlayerMenuAnimatedArtwork(void);
 void SGPlayerMenuSetAnimatedArtwork(BOOL on);
 // The speed, pitch and reverb sliders and Pitch follows speed, in a popover from `from` (the redesign's ⋯).
 void SGPlayerShowSpeedPitchPanel(UIView *from);

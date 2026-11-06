@@ -8,3 +8,6 @@ UIViewController *SGRMiniPlayerSettingsPage(void);
 // For the mini player and the player page (Redesigned/Navbar/SystemTabs.x, SystemPlayer.m): the cover Spotify's bar
 // shows, nil before it has one.
 UIImage *SGRNowPlayingCover(void);
+// Spotify's bar as NowPlayingBar.x last saw it, unseen: SystemTabs.x stands its tab bar above it, and the player page
+// finds Spotify's Connect holder in it.
+extern __weak UIView *sgr_nowPlayingRoot;

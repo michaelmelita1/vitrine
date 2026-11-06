@@ -20,7 +20,6 @@
 #import "Navbar.h"
 #import "SystemPlayer.h"
 #import "SystemPlayerTransition.h"
-#import "Redesigned/Kit/SGRRepaint.h"
 #import "Settings/SGPage.h"
 #import "Redesigned/Artist/Artist.h"
 

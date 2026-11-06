@@ -49,7 +49,6 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import "Core/SGCore.h"
-#import "Redesigned/Kit/SGRRepaint.h"
 #import "Shared/Player/SleepTimer.h"
 #import "Settings/SGMarquee.h"
 #import "Shared/Player/SpeedPitch.h"

@@ -1,6 +1,6 @@
 // Spotify's now playing bar stays, unseen and untouchable, under the redesign's mini player (Redesigned/Navbar/
 // SystemTabs.x): the mini player and the player page take its cover from it (SGRNowPlayingCover), and SystemTabs.x
-// stands its tab bar just above it. The bar is the root SGRRepaint.x keeps clear (sgr_nowPlayingRoot).
+// stands its tab bar just above it (sgr_nowPlayingRoot). Unseen, its paint is left as Spotify sets it.
 //
 // Tree (trees/home.txt): NowPlayingBarContainerViewController.view 402x56 > NowPlayingBarViewController.view
 //   at {8,0} 386x56 > UIView 386x56 (the painted card) > artwork 40x40 r=4, title stack, progress line.
@@ -8,12 +8,13 @@
 // The same bar class also stands at the top of Spotify's sheets (the DJ request one: Up next, device, play). That one is
 // not the tab bar's and must not become the bar this file tracks.
 #import "Core/SGCore.h"
-#import "Redesigned/Kit/SGRRepaint.h"
 #import "NowPlayingBar.h"
 
 // The artwork on the bar: a 36 to 48 pt square with rounded corners that is not a button, outside Spotify's Jam strip
 // (a "Jam by ..." hosting view of Jam_AttachmentsImpl over the track, whose faces are such squares too).
 static __weak UIView *sg_artwork;
+
+__weak UIView *sgr_nowPlayingRoot = nil;
 
 static BOOL isStrip(UIView *view) {
     if (view.bounds.size.height > 60) return NO;

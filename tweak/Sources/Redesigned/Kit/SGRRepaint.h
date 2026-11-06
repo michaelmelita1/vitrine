@@ -2,7 +2,6 @@
 // set by the part of the redesign that owns it.
 #import <UIKit/UIKit.h>
 
-extern __weak UIView *sgr_nowPlayingRoot;   // Redesigned/NowPlayingBar/NowPlayingBar.x, the bar
 extern __weak UIView *sgr_lyricsPageRoot;   // Redesigned/Lyrics/LyricsPage.x
 // Redesigned/Playlist/PlaylistField.x, the playlist page. Only the base surface Spotify paints the page,
 // its list and its rows with goes clear here: the artwork field is underneath, and the grays of a

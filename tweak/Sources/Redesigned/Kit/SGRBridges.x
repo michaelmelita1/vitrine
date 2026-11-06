@@ -1,9 +1,7 @@
-// The Kit's bridge into Spotify: the now playing artwork. The player's state, its open and close and
-// links are Shared's (Shared/Player/PlayerState.h, Shared/Player/PlayerEvents.h,
-// Shared/Navigation/Links.h). SGRBridges.h names the hook and why it is the one.
+// The Kit's bridge into Spotify: the now playing artwork. The player's state and links are Shared's
+// (Shared/Player/PlayerState.h, Shared/Navigation/Links.h). SGRBridges.h names the hook and why it is the one.
 #import "Core/SGCore.h"
 #import "Shared/LocalFiles/LocalFiles.h"
-#import "Shared/Player/PlayerEvents.h"
 #import "SGRBridges.h"
 #import "SGRedesign.h"
 #import "SGRRestyle.h"
@@ -356,51 +354,6 @@ static SGRBarArtworkWatcher *sg_barWatcher;
 }
 %end
 %end
-
-#pragma mark - the player's open and close
-
-BOOL SGRPlayerIsTransitioning(void) {
-    return SGPlayerTransitionEnds() > 0;
-}
-
-@interface SGRTransitionObservation : NSObject
-@property (nonatomic, strong) NSArray *tokens;
-@end
-
-@implementation SGRTransitionObservation
-- (void)dealloc {
-    for (id token in self.tokens) [NSNotificationCenter.defaultCenter removeObserver:token];
-}
-@end
-
-static char kTransitionKey;
-
-void SGRObservePlayerTransition(id owner, void (^began)(id owner), void (^ended)(id owner)) {
-    if (!owner) return;
-    __weak id weakOwner = owner;
-    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
-    NSMutableArray *tokens = [NSMutableArray array];
-    if (began) {
-        [tokens addObject:[center addObserverForName:SGPlayerTransitionNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            id strongOwner = weakOwner;
-            if (strongOwner) began(strongOwner);
-        }]];
-    }
-    if (ended) {
-        [tokens addObject:[center addObserverForName:SGPlayerTransitionEndedNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            id strongOwner = weakOwner;
-            if (strongOwner) ended(strongOwner);
-        }]];
-    }
-    SGRTransitionObservation *observation = [SGRTransitionObservation new];
-    observation.tokens = tokens;
-    NSMutableArray *kept = objc_getAssociatedObject(owner, &kTransitionKey);
-    if (!kept) {
-        kept = [NSMutableArray array];
-        objc_setAssociatedObject(owner, &kTransitionKey, kept, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    [kept addObject:observation];
-}
 
 %ctor {
     if (!SGRedesignedUI()) return;

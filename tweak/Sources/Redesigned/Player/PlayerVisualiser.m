@@ -29,7 +29,6 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Shared/AudioEffects/AudioEffects.h"
-#import "Shared/Player/PlayerEvents.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Player.h"
@@ -70,7 +69,6 @@ static const CGFloat kFadeFoot = 0.04, kFadeTop = 0.2;
 static const float kSettled = 0.02f;
 // Each band shares this much with either neighbor, three times over, so one loud band is a hill and not a spike.
 static const float kSpread = 0.25f;
-static const NSTimeInterval kTransitionSlack = 0.05;
 
 static NSUInteger sg_readers;
 
@@ -186,7 +184,6 @@ static UIColor *lit(UIColor *color, CGFloat luminance) {
         [center addObserver:self selector:@selector(updateMotionSoon) name:name object:nil];
     }
     [center addObserver:self selector:@selector(artworkChanged) name:SGRNowPlayingArtworkDidChangeNotification object:nil];
-    SGRObservePlayerTransition(self, ^(id owner) { [owner updateMotion]; }, ^(id owner) { [owner updateMotion]; });
     SGAddPlayerStateObserver(self);
     [self artworkChanged];
     [self draw];
@@ -311,17 +308,11 @@ static UIColor *lit(UIColor *color, CGFloat luminance) {
 }
 
 // Moving while it may and there is something to show: the song playing, or the hills still settling after it
-// stopped. While the player animates, it comes back once the animation is expected to be over.
+// stopped.
 - (void)updateMotion {
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(updateMotion) object:nil];
     BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
     BOOL may = self.window && !self.hidden && front && !NSProcessInfo.processInfo.lowPowerModeEnabled;
-    NSTimeInterval wait = SGPlayerTransitionEnds() - CACurrentMediaTime();
-    if (may && (wait > 0 || SGRPlayerIsTransitioning())) {
-        may = NO;
-        // Without an expected end, the transition's ended notification brings it back.
-        if (wait > 0) [self performSelector:@selector(updateMotion) withObject:nil afterDelay:wait + kTransitionSlack inModes:@[NSRunLoopCommonModes]];
-    }
     BOOL playing = !SGPlayerState().isPaused;
     [self setMoving:may && (playing || !self.settled)];
     [self setReading:may && playing];

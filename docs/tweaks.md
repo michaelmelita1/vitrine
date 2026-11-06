@@ -232,13 +232,12 @@ Shared:
     Navigation/   the page transition fix (PageTransition.x), opening a spotify: link (Links.x), and the
                   Add a Tab sheet (AddTabSheet.m) with the icons a tab can wear, Encore's glyphs or SF Symbols
                   (TabIcons.m). The sheet runs in the simulator in harness/addtab/
-    Player/       the player's open and close announced (PlayerEvents.x), what the player is doing read through
+    Player/       what the player is doing read through
                   one hook for every feature that wants it (PlayerState.x), the last track played for the settings
-                  pages' previews to show when nothing plays (SGLastTrack.m), the lock screen widget's flags, and in the
-                  more button's menu Speed and pitch: both done to Spotify's audio by Apple's time and pitch unit, put
-                  between its mixer and its RemoteIO unit by taking over the connection Spotify makes between them
-                  (SpeedPitchMenu.x, SpeedPitch.x, SGTimePitch.m), and the redesign's player page puts the same sliders
-                  in a popover from its ⋯ (SGPlayerShowSpeedPitchPanel). Spotify runs a chain per sample rate, so a local
+                  pages' previews to show when nothing plays (SGLastTrack.m), the lock screen widget's flags, and Speed and
+                  pitch: both done to Spotify's audio by Apple's time and pitch unit, put between its mixer and its
+                  RemoteIO unit by taking over the connection Spotify makes between them (SpeedPitch.x, SGTimePitch.m),
+                  the sliders in a popover from the player page's ⋯ (SpeedPitchMenu.x's SGPlayerShowSpeedPitchPanel). Spotify runs a chain per sample rate, so a local
                   file at another rate can have two RemoteIO units running at once: SpeedPitch.x keeps a record
                   per unit (its own mixer, sample time, largest slice and formats; AudioOutputUnitStop and
                   AudioComponentInstanceDispose rebound too, a disposed unit forgotten after its render in progress)
@@ -568,8 +567,8 @@ Redesigned:
                   page is on screen, Spotify is in front, the page is not opening or closing and Low Power Mode is
                   off, and stops once a paused song's hills have settled. The spectrum is checked on the Mac against
                   harness/visualiser/
-    Lyrics/       the full screen lyrics page on glass with Apple Music style lyrics over it, always on (SGRKaraokeView,
-                  which the player page shows in itself too, Player/SystemPlayer.m, where with Hide the controls set to
+    Lyrics/       Apple Music style lyrics, always on (SGRKaraokeView, which the player page shows in itself,
+                  Player/SystemPlayer.m, where with Hide the controls set to
                   Everything, everything else -- the header row, the thumbnail, the title row and the controls --
                   fades a few seconds after the last touch and the lines take the whole safe area until a tap where
                   the rest was or a scroll back; set

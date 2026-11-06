@@ -612,7 +612,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 }
 
 // Spotify's sheet as it would have been: what the menu falls back to, and what a row that opens a page of
-// the sheet's own leads to. Speed and pitch's block comes back into it (SGPlayerMenuReplaced).
+// the sheet's own leads to.
 // The sheet unseen and out of the way of touches, so one left up for any reason never stands between a finger
 // and the player.
 - (void)hide {
@@ -644,11 +644,6 @@ static SGRMenuSession *sessionFor(UIViewController *controller, BOOL fresh) {
         objc_setAssociatedObject(vc, &kSessionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return nil;
-}
-
-BOOL SGPlayerMenuReplaced(UIViewController *menu) {
-    SGRMenuSession *session = sessionFor(menu, NO);
-    return session && !session.revealed;
 }
 
 #pragma mark - the ⋯

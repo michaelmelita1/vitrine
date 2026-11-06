@@ -13,13 +13,8 @@
 #import <UIKit/UIKit.h>
 #import <AudioToolbox/AudioToolbox.h>
 
-// Whether a context menu sheet is the player's ⋯ card: the first to come up within a few seconds of a tap on
-// the player's more button (SpeedPitchMenu.x watches it under either look); decided once per menu.
+// Whether a context menu sheet is Spotify's player's ⋯ card: never now, the player being the mod's own page.
 BOOL SGPlayerMenuIsPlayers(UIViewController *menu);
-// Whether the sheet is shown as the system menu instead, unseen under it (Redesigned/ContextMenu), whose own
-// items then stand in for the block, which stays out of it. Defined by the redesign; NO below iOS 26, where it
-// does not run, and once the sheet itself is shown.
-BOOL SGPlayerMenuReplaced(UIViewController *menu);
 // The speed Spotify's sound plays at, 1 when normal.
 double SGPlayerSpeed(void);
 // Whether speed can apply: Spotify's output was taken over when it wired it.

@@ -200,7 +200,6 @@ const NSTimeInterval SGRFieldHoldLimit = 1.0;
                                       NSProcessInfoPowerStateDidChangeNotification, UIAccessibilityReduceMotionStatusDidChangeNotification]) {
         [center addObserver:self selector:@selector(updateMotionSoon) name:name object:nil];
     }
-    SGRObservePlayerTransition(self, ^(id owner) { [owner updateMotion]; }, ^(id owner) { [owner updateMotion]; });
 }
 
 - (void)dealloc {
@@ -216,7 +215,7 @@ const NSTimeInterval SGRFieldHoldLimit = 1.0;
     if (!_flow && !_fluidLayer) return;
     // A locked phone keeps the player in its window, so being in front counts as much as being in one.
     BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
-    BOOL may = self.window && front && !SGRPlayerIsTransitioning() && !SGRReduceMotion()
+    BOOL may = self.window && front && !SGRReduceMotion()
             && !NSProcessInfo.processInfo.lowPowerModeEnabled && !_motionHeld;
     _fluidLayer.moving = may && _fluid;
     BOOL moving = may && _flows && !_flow.hidden;

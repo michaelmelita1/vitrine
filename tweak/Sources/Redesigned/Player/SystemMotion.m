@@ -283,7 +283,6 @@ static UIBlurEffect *blurEffect(void) {
         [center addObserver:self selector:@selector(updateMotionSoon) name:name object:nil];
     }
     [center addObserver:self selector:@selector(updateDim) name:UIAccessibilityDarkerSystemColorsStatusDidChangeNotification object:nil];
-    SGRObservePlayerTransition(self, ^(id owner) { [owner updateMotion]; }, ^(id owner) { [owner updateMotion]; });
     SGAddPlayerStateObserver(self);
     return self;
 }
@@ -529,7 +528,7 @@ static CATransform3D flipAbout(CGFloat y, CGFloat stretch) {
 // A locked phone keeps the player in its window, so being in front counts as much as being in one.
 - (void)updateMotion {
     BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
-    BOOL may = self.window && !self.hidden && front && !SGRPlayerIsTransitioning() && !SGRReduceMotion() && !NSProcessInfo.processInfo.lowPowerModeEnabled
+    BOOL may = self.window && !self.hidden && front && !SGRReduceMotion() && !NSProcessInfo.processInfo.lowPowerModeEnabled
         && !SGPlayerState().isPaused;
     if (may) [_player play];
     else [_player pause];

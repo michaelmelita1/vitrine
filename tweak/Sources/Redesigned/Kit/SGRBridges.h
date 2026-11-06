@@ -44,10 +44,3 @@ BOOL SGRNowPlayingArtworkCurrent(void);
 // now playing artwork is, cached by its picture, handed to `done` on the main queue (nil for none). Main thread.
 void SGRTrackPicture(SPTPlayerTrack *track, void (^done)(UIImage *image));
 
-#pragma mark - the player's open and close
-
-// While the full screen player opens or closes (Shared/Player/PlayerEvents.x announces it).
-BOOL SGRPlayerIsTransitioning(void);
-// SGPlayerTransitionNotification and SGPlayerTransitionEndedNotification as blocks, for as long as
-// `owner` lives. The blocks are handed the owner so they need not capture it.
-void SGRObservePlayerTransition(id owner, void (^began)(id owner), void (^ended)(id owner));

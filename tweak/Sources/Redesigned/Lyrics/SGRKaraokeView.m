@@ -18,7 +18,6 @@
 #import "Shared/LyricsSources/LyricsSources.h"
 #import "Shared/LyricsTranslation/LyricsTranslation.h"
 #import "Settings/SGPageStyle.h"
-#import "Shared/Player/PlayerEvents.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Haptics/Haptics.h"
 #import "Redesigned/Kit/SGRGlass.h"
@@ -76,7 +75,6 @@ static const CFTimeInterval kSeekWait = 1.5;
 // to take in and let go when the lyrics come up; a line comes into view about once in three seconds,
 // and a page flung by hand fills in at a few lines a frame.
 static const CGFloat kSightBehind = 0.5, kSightAhead = 0.5, kSightSlack = 0.25;
-static const NSTimeInterval kTransitionSlack = 0.05;   // after the player's animation, before the link is back
 static NSString *const kBlurPath = @"filters.gaussianBlur.inputRadius";
 // Two voices can sing at once, rarely more; past this many, the latest ones wait their turn.
 enum { kMostSung = 6 };
@@ -1424,8 +1422,6 @@ typedef struct {
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(singButtonChanged) name:SGSingButtonDidChangeNotification object:nil];
     [self addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapped:)]];
     [self addGestureRecognizer:[[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(held:)]];
-    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(playerTransitionChanged:) name:SGPlayerTransitionNotification object:nil];
-    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(playerTransitionChanged:) name:SGPlayerTransitionEndedNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(restyle) name:SGRLyricsTextDidChangeNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(restyle) name:SGLyricsRomanisedDidChangeNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(translationsChanged) name:SGLyricsTranslationsDidChangeNotification object:nil];
@@ -1704,9 +1700,7 @@ typedef struct {
     [_link invalidate];
     _link = nil;
     if (!self.window) return;
-    NSTimeInterval wait = SGPlayerTransitionEnds() - CACurrentMediaTime();
-    if (wait <= 0) [self startLink];
-    else [self performSelector:@selector(startLink) withObject:nil afterDelay:wait + kTransitionSlack inModes:@[NSRunLoopCommonModes]];
+    [self startLink];
 }
 
 - (void)startLink {
@@ -1755,10 +1749,6 @@ typedef struct {
     NSInteger ms = _sample ? [self positionMs]
                            : (NSInteger)((state.isPaused ? state.positionAsOfTimestamp : state.position) * 1000) - SGKaraokeDelayMs();
     if (ms != _reported) [self stir];
-}
-
-- (void)playerTransitionChanged:(NSNotification *)note {
-    [self scheduleLink];
 }
 
 // The mask sits in the scroll view's own coordinates, which move with the content as it scrolls, so

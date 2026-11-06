@@ -79,12 +79,6 @@ static SGProblem appChanges(void) {
                  joined(missingAppChanges(), @"and")]];
 }
 
-static SGProblem fellBack(void) {
-    return @[@"The redesign did not start",
-             [NSString stringWithFormat:@"Spotify did not get going with the redesign on iOS %@, so it is back in Legacy and Redesigned UI is off. Mod Settings can turn it on again.",
-                 UIDevice.currentDevice.systemVersion]];
-}
-
 // One problem is the alert's title and message; several are a paragraph each under a count.
 static void tell(NSArray<SGProblem> *list) {
     NSString *title = list.count == 1 ? list[0][0] : [NSString stringWithFormat:@"%lu things to know", (unsigned long)list.count];
@@ -152,7 +146,7 @@ static NSArray<SGProblem> *installProblems(void) {
     return list;
 }
 
-// The rows stay while the install is so; the fall back is said once and is over.
+// The rows stay while the install is so.
 NSArray<SGModRow *> *SGEnvironmentWarningRows(void) {
     NSMutableArray<SGModRow *> *rows = [NSMutableArray array];
     if (SGEeveeSpotifyInjected())
@@ -191,10 +185,9 @@ static void whenClear(NSInteger tries, void (^then)(void)) {
 }
 
 static void tellProblems(void) {
-    // The fall back is news every time; the install's state only when it changed.
+    // The install's state is said only when it changed.
     NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
     NSMutableArray<SGProblem> *list = [NSMutableArray array];
-    if (SGRedesignFellBack()) [list addObject:fellBack()];
     if (![[store stringForKey:kTold] isEqualToString:state()]) {
         [store setObject:state() forKey:kTold];
         [list addObjectsFromArray:installProblems()];

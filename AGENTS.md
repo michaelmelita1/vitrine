@@ -21,10 +21,9 @@ last three were the redesign's until they moved to `Shared/`, so their keys lost
 `Core/SGPrefs.h`'s `SGMigrateKey` carries the old ones over at launch.
 
 **The redesign is built for iOS 26.** It is Liquid Glass, which the system draws from 26 on and no older OS
-can be given. `SGRedesignAvailable()` (`Core/SGUIMode.h`) says whether this OS has it. Below 26 the
-redesign runs only after a warning that it is untested there (`SGKeyRedesignUntested`, stored by
-`SGSetRedesignedUI` in `App/Pages.m`), and a launch with it that hangs (issue #37) is followed by one in
-the native look with both switches off. The native look's floor is iOS 16.1, which is
+can be given. `SGRedesignAvailable()` (`Core/SGUIMode.h`) says whether this OS has it, and the redesign is
+offered only there: below 26 `SGRedesignedUIStored()` is NO whatever the switch says, Redesigned UI's row is not
+shown and a phone gets the native look. The native look's floor is iOS 16.1, which is
 Spotify 9.1.78's own. Vitrine is made for Spotify 9.1.78 and supports 9.1.88 and 9.1.90, the daily test build. The install warning
 leaves all three alone. A new version goes in one of the two lists
 in `App/Onboarding/Onboarding.h` (`SGSpotifySupportedVersions`, `SGSpotifyLikelyWorksVersions`), and the warning's text

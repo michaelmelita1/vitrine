@@ -29,7 +29,7 @@ BOOL SGRSystemTabsOn(void) {
     static BOOL on;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        on = SGNativeRedesign();
+        on = SGRedesignedUI();
     });
     return on;
 }

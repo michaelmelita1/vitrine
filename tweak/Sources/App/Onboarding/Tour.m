@@ -363,7 +363,7 @@ static BOOL adFree(void) {
     return self;
 }
 
-// Under the cards: what the picked look leaves out, or below iOS 26 what the redesign risks there.
+// Under the cards: what the picked look leaves out.
 - (UIView *)noteView {
     _noteIcon = SGSymbolView(@"info.circle.fill", 15, UIImageSymbolWeightSemibold, 22);
     _noteText = [UILabel new];
@@ -387,21 +387,11 @@ static BOOL adFree(void) {
     return note;
 }
 
-// The redesign is the look Vitrine is built around, so picking it needs no note on iOS 26. Legacy is
-// told what it goes without; below 26 the redesign is told it is untested, with the way to report it.
+// The redesign is the look Vitrine is built around, so picking it needs no note. Legacy is told what it goes without.
 - (void)updateNote {
-    BOOL untested = _redesigned.selected && !SGRedesignAvailable();
-    if (untested) {
-        _noteIcon.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
-        _noteIcon.tintColor = UIColor.systemYellowColor;
-        _noteText.text = SGRedesignUntestedWarning();
-    } else {
-        _noteIcon.image = [UIImage systemImageNamed:@"info.circle.fill"];
-        _noteIcon.tintColor = SGGrey();
-        _noteText.text = @"Apple Music style lyrics, the redesigned player and the glass tab bar come with the redesign only.";
-    }
-    _report.hidden = !untested || !SGRepoURL;
-    _note.hidden = _redesigned.selected && !untested;
+    _noteText.text = @"Apple Music style lyrics, the player page and iOS's own tab bar come with the redesign only.";
+    _report.hidden = YES;
+    _note.hidden = _redesigned.selected;
     // The ads card stands apart from the look's cards and its note, whichever of those comes last.
     [_column setCustomSpacing:_note.hidden ? 32 : 12 afterView:_legacy];
     // The tips of the picked look: Split Tabs is the redesign's bar's, and the lyrics preview the redesign's page's.
@@ -446,16 +436,17 @@ static BOOL adFree(void) {
     heading.textColor = UIColor.whiteColor;
     heading.numberOfLines = 0;
 
-    NSString *redesign = glass ? @"Looks like Apple Music. Better lyrics, Live Activity."
-                               : [NSString stringWithFormat:@"Looks like Apple Music. Untested on iOS %@.", UIDevice.currentDevice.systemVersion];
+    NSString *redesign = glass ? @"Looks like Apple Music. Better lyrics, Live Activity." : @"Looks like Apple Music. Needs iOS 26.";
     _redesigned = [[SGLookCard alloc] initWithSymbol:@"sparkles" title:@"Redesigned" subtitle:redesign];
     _legacy = [[SGLookCard alloc] initWithSymbol:@"slider.horizontal.3" title:@"Legacy" subtitle:@"More options, still looks like Spotify."];
     for (SGLookCard *card in @[_redesigned, _legacy]) [card addTarget:self action:@selector(picked:) forControlEvents:UIControlEventTouchUpInside];
-    // The first launch offers the redesign where it is at home; below iOS 26 it waits to be asked for.
+    // The first launch offers the redesign; below iOS 26 it cannot be picked (Core/SGUIMode.h).
     // The tour again from the Mod page shows the stored look.
     BOOL redesigned = SGFlag(SGKeyOnboardingSeen, NO) ? SGRedesignedUIStored() : glass;
     _redesigned.selected = redesigned;
     _legacy.selected = !redesigned;
+    _redesigned.enabled = glass;
+    if (!glass) _redesigned.alpha = 0.4;
     _note = [self noteView];
 
     // Spotify without its ads: one switch for Hide ads, Hide upsells and Spoof Premium. Off leaves each as it
@@ -571,6 +562,7 @@ static BOOL adFree(void) {
 }
 
 - (void)picked:(SGLookCard *)card {
+    if (card == _redesigned && !SGRedesignAvailable()) return;
     _redesigned.selected = card == _redesigned;
     _legacy.selected = card == _legacy;
     [UIView animateWithDuration:0.25 animations:^{
@@ -600,8 +592,6 @@ static BOOL adFree(void) {
     _primary.configuration = config;
 }
 
-// Below iOS 26 the note above the button has said what the redesign risks there, so picking it and
-// going on is the warning accepted (SGSetRedesignedUI stores that).
 - (void)finish {
     SGSetEnabled(SGKeyOnboardingSeen, YES);
     SGSetRedesignedUI(_redesigned.selected);

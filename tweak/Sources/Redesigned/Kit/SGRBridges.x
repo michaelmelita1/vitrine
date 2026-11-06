@@ -213,12 +213,12 @@ static BOOL publishLocalCover(void) {
 
 // The next track's full picture fetched into the session's store once while this one plays, so a skip finds it there
 // in a few milliseconds rather than tenths of a second, and no screen's small picture stands in meanwhile (its owner,
-// 2026-11-02: a skip felt slow while the page waited for the cover). Native redesign's alone, and not in Low Power Mode.
+// 2026-11-02: a skip felt slow while the page waited for the cover). Not in Low Power Mode.
 // After the playing track's own fetch has started, and looked at once per next track.
 static NSString *sg_aheadKey, *sg_aheadURI;
 
 static void fetchAhead(void) {
-    if (!SGNativeRedesign() || NSProcessInfo.processInfo.lowPowerModeEnabled) return;
+    if (NSProcessInfo.processInfo.lowPowerModeEnabled) return;
     SPTPlayerState *state = SGPlayerState();
     id future = [state respondsToSelector:@selector(future)] ? state.future : nil;
     id next = [future isKindOfClass:NSArray.class] ? [(NSArray *)future firstObject] : nil;

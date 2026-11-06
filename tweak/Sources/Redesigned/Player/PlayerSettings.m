@@ -365,7 +365,7 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         nil];
     // Native redesign draws its own player page and mini player: Follow the cover, Spotify's icons and the glass bar's Mini
     // player section are not theirs, and its mini player's rows are on a page of their own (App/Pages.m).
-    if (SGNativeRedesignStored()) {
+    if (SGRedesignedUIStored()) {
         // One section for what the page's controls show, each switch on to show its control (its owner, 2026-11-02): Hide
         // on the player's Shuffle, Repeat and Switch to video turned round, on the same keys.
         [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),

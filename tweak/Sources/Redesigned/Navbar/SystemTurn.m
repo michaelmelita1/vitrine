@@ -173,7 +173,7 @@ void SGRSystemTurnBack(void) {
 
 // The unlock as Spotify starts, so its first screens turn too, not only once the player page has been up.
 __attribute__((constructor)) static void unlockAtLaunch(void) {
-    if (!SGNativeRedesign()) return;
+    if (!SGRedesignedUI()) return;
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:nil
                                                 usingBlock:^(NSNotification *note) {
         dispatch_async(dispatch_get_main_queue(), ^{

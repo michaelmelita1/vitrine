@@ -72,7 +72,7 @@ UIViewController *SGRNavbarEditorPage(void);     // the tab editor alone, for th
 
 // Native redesign's tab bar (SystemTabs.x). A UITabBarController over Spotify's tab area, its tabs Spotify's own and
 // the mod's mini player in its bottomAccessory, so UIKit minimizes the bar and moves the mini player into its row as the
-// Music app does. On with Native redesign (Core/SGUIMode.h's SGNativeRedesign), read once at launch.
+// Music app does. On whenever the redesign is (Core/SGUIMode.h), read once at launch.
 BOOL SGRSystemTabsOn(void);
 // A sideways swipe on the system tab bar's mini player pages to the next or previous track (SystemTabs.x). On until
 // switched off on the Mini player page, read at each swipe.

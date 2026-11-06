@@ -68,19 +68,15 @@ void SGRSystemVolumeSliderSet(UISlider *slider);
 - (void)letGoOfPans;
 @end
 
-// Native redesign's landscape player (SystemLandscape.m): made in the lines' view or the player's, switched between them,
-// told the track's lines came in or are none, and asked where its cover stands and where one flying in lands (YES when
-// the cover is what shows, NO while the clip stands in its place).
+// Native redesign's landscape player (SystemLandscape.m), which the page holds while the app is turned: made in the lines'
+// view, the queue's or the player's, switched between them, and told the track's lines came in or are none.
 UIViewController *SGRSystemMakeLandscape(BOOL lyrics, BOOL queue);
 void SGRSystemLandscapeSetLyrics(UIViewController *screen, BOOL lyrics, BOOL animated);
 // The queue up in the landscape player or not, as the page's is.
 void SGRSystemLandscapeSetQueue(UIViewController *screen, BOOL queue, BOOL animated);
 // What the landscape player shows: its lyrics, its queue, or neither (its player view).
 void SGRSystemLandscapeShowing(UIViewController *screen, BOOL *lyrics, BOOL *queue);
-// The screen turning in: its clip held on the frame it has and the screen drawn once, flat, until it has.
-void SGRSystemLandscapeSetTurning(UIViewController *screen, BOOL turning);
 void SGRSystemLandscapeLinesChanged(UIViewController *screen);
-BOOL SGRSystemLandscapeTurnCover(UIViewController *screen, UIImageView **cover, CGRect *target);
 
 // The page's control button, shared with the landscape player (SystemLandscape.m): its press, play and pause's turn,
 // the skips' step and the lit disc.
@@ -128,14 +124,10 @@ void SGRSystemCycleRepeat(void);
 // landscape player's lyrics button's.
 UIImageView *SGRSystemCutDisc(NSString *symbol);
 
-// The page's turn onto the landscape player and back (SystemTurn.m): its own window and animation. The page says when it
-// is up (nil as it goes, which takes the screen down at once), whether its lyrics are, and hands over its cover, the
-// view to hide while a copy flies, with the image in it (nil while it shows none).
+// The app's landscape (SystemTurn.m): the whole app turning with the phone, and the page's landscape player reached from
+// the page. The page says when it is up (nil as it goes), whether its lyrics or queue are, and which landscape player it
+// holds.
 @protocol SGRSystemTurnPage
-- (UIView *)landscapeTurnCover:(UIImage **)image;
-// The landscape player is going: the page shows what it showed (lyrics, the queue or neither), at once, before the turn
-// back draws the page.
-- (void)landscapeLeftShowingLyrics:(BOOL)lyrics queue:(BOOL)queue;
 // The page's ⋯ items for the landscape player's ⋯: their sheets and popovers from `anchor` and `presenter`, and
 // `changed` run after the ⋯ switches the background.
 - (NSArray<UIMenuElement *> *)landscapeMenuItemsFrom:(UIView *)anchor presenter:(UIViewController *)presenter changed:(void (^)(void))changed;
@@ -148,12 +140,5 @@ void SGRSystemTurnSetQueue(BOOL open);
 // The landscape player the page holds while the app is turned, or nil.
 void SGRSystemTurnSetEmbedded(UIViewController *screen);
 void SGRSystemTurnLinesChanged(void);
-// Shown or put away by hand, as the phone turning does (the harness).
-void SGRSystemTurnShow(BOOL show);
-// For the landscape player: which way its window may face, the scene's turn as it comes, and Exit Full Screen (back to
-// portrait, shut until the phone has stood upright).
-UIInterfaceOrientationMask SGRSystemTurnMask(UIViewController *screen);
-void SGRSystemTurnWillTransition(UIViewController *screen, CGSize size, id<UIViewControllerTransitionCoordinator> coordinator);
+// Exit Full Screen: back to portrait, held there until the phone has stood upright.
 void SGRSystemTurnBack(void);
-// The landscape player swiped down: it goes at once and the player page closes under it, the phone left turned.
-void SGRSystemTurnClose(void);

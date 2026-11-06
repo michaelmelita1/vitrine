@@ -82,7 +82,6 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated;
 - (void)setQueueMode:(BOOL)queue animated:(BOOL)animated;
 - (void)showingLyrics:(BOOL *)lyrics queue:(BOOL *)queue;
-- (void)setTurning:(BOOL)turning;
 - (void)updateBare:(BOOL)mayGoBare;
 @end
 
@@ -129,7 +128,6 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     SGRSystemControlButton *_shuffle, *_repeat;   // either side of the transport, as the page's
     BOOL _shuffleOff, _repeatOff;                 // the Player page's Hide on the player, read at each open
     UIView *_optionBadge;                          // shuffle or repeat on the queue button, as the page has it
-    BOOL _turning;                // turning in: the clip held, the screen drawn flat (SGRSystemLandscapeSetTurning)
     UIView *_head;                // the title row (title, artist, ★, ⋯), which the queue's scroll pushes out
     UIView *_titleBlock;          // the title and artist, which a sideways swipe pages through the tracks, as the page's
     CAGradientLayer *_titleFade;
@@ -141,17 +139,11 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     NSUInteger _dragReturn;       // the latest let go, so an earlier one's delayed return does not bring the foot back
     BOOL _pausedShown;
     UIView *_route;
-    CGRect _turnTarget;              // where the cover flies to as the screen turns in: the cover's, or the clip's
     NSTimer *_tick;
     BOOL _lyricsMode;
     id _savedWatch;
     NSString *_savedTrack;
     BOOL _saved;
-}
-
-// Portrait once the screen is on its way out, or the scene could not turn back while it fades.
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return SGRSystemTurnMask(self);
 }
 
 - (BOOL)prefersStatusBarHidden {
@@ -484,16 +476,8 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     else swap();
 }
 
-- (void)setTurning:(BOOL)turning {
-    if (turning == _turning) return;
-    _turning = turning;
-    self.view.layer.rasterizationScale = UIScreen.mainScreen.scale;
-    self.view.layer.shouldRasterize = turning;
-    [self syncClipPlaying];
-}
-
 - (void)syncClipPlaying {
-    if (_clipPlayer && self.view.window && !_turning && !SGPlayerState().isPaused) [_clipPlayer play];
+    if (_clipPlayer && self.view.window && !SGPlayerState().isPaused) [_clipPlayer play];
     else [_clipPlayer pause];
 }
 
@@ -620,9 +604,6 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     _cover.center = CGPointMake(CGRectGetMidX(coverRect), CGRectGetMidY(coverRect));
     _cover.alpha = _clipped ? 0 : 1;
     _fieldDim.alpha = _clipped ? 0 : 1;
-    // With the clip up, the cover flies to the middle of the clip's sharp part, as tall as the screen, and melts into it.
-    CGFloat clipMid = (clipLeft + clipRight) / 2, clipSide = MIN(H, clipWidth);
-    _turnTarget = _clipped ? CGRectMake(round(clipMid - clipSide / 2), round((H - clipSide) / 2), clipSide, clipSide) : _cover.frame;
     (void)coverRect;
 
     // The column's head: the title and the artist, ★ and ⋯, higher in the lines' view.
@@ -1030,18 +1011,6 @@ static NSString *landscapeTime(double seconds) {
     [self syncClipPlaying];
 }
 
-// The turn is SystemTurn.m's, which draws it.
-- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
-    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    SGRSystemTurnWillTransition(self, size, coordinator);
-}
-
-- (BOOL)turnCover:(UIImageView **)cover target:(CGRect *)target {
-    *cover = _cover;
-    *target = _turnTarget;
-    return !_clipped && _cover.image != nil;
-}
-
 - (void)artworkChanged {
     NSString *identity = nil;
     UIImage *art = SGRNowPlayingArtwork(NULL, &identity);
@@ -1284,11 +1253,4 @@ void SGRSystemLandscapeLinesChanged(UIViewController *screen) {
     if ([screen isKindOfClass:SGRSystemLandscapeController.class]) [(SGRSystemLandscapeController *)screen updateBare:YES];
 }
 
-BOOL SGRSystemLandscapeTurnCover(UIViewController *screen, UIImageView **cover, CGRect *target) {
-    if (![screen isKindOfClass:SGRSystemLandscapeController.class]) return NO;
-    return [(SGRSystemLandscapeController *)screen turnCover:cover target:target];
-}
 
-void SGRSystemLandscapeSetTurning(UIViewController *screen, BOOL turning) {
-    if ([screen isKindOfClass:SGRSystemLandscapeController.class]) [(SGRSystemLandscapeController *)screen setTurning:turning];
-}

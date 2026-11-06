@@ -98,11 +98,14 @@ void SGRSystemLandscapeLinesChanged(UIViewController *screen);
 - (void)setLit:(BOOL)lit plain:(UIColor *)plain animated:(BOOL)animated;
 @end
 
-// For the landscape player's queue: what the track plays from, for the queue's note, and a move in it handed back to
-// Spotify (`done` runs a moment later, to show what Spotify kept).
+// For the landscape player's queue: what the track plays from, for the queue's note; what a queue was made from (the
+// playing track's URI, then each track to come's); and a move in it handed back to Spotify only while Spotify's queue is
+// still `shown`, in the same order. `handed` gets the new order's key; `done` runs a moment later either way, to show
+// what Spotify kept.
 @class SPTPlayerState;
 NSString *SGRSystemContextTitle(SPTPlayerState *state);
-void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void));
+NSArray<NSString *> *SGRSystemQueueKey(NSArray *next);
+void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void (^handed)(NSArray<NSString *> *key), void (^done)(void));
 // Shuffle on or off, and repeat through off, the playlist or album, the track, as the page's buttons do; the landscape
 // player's queue chips run them too.
 void SGRSystemToggleShuffle(void);
@@ -113,9 +116,10 @@ UIView *SGRSystemMakeOptionBadge(UIView *button);
 void SGRSystemShowOptionBadge(UIView *badge, NSString *symbol, BOOL animated);
 // Which to show: shuffle first (its owner, 2026-11-06), then repeat (repeat.1 for the track), each only when hidden.
 NSString *SGRSystemOptionBadgeSymbol(SPTPlayerState *state, BOOL shuffleHidden, BOOL repeatHidden);
-// Back `steps` tracks, to one of the queue's History: from the playing track's start, one back at a time, each once the
-// last has landed.
-void SGRSystemStepBack(NSInteger steps);
+// Back to `track`, one of the queue's History `steps` tracks behind the playing one: straight to it through Spotify's
+// skip back to a track, else one back at a time from the playing track's start, each once the last has landed.
+@class SPTPlayerTrack;
+void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps);
 void SGRSystemCycleRepeat(void);
 
 // A light disc with `symbol` cut out of it, hidden until shown: the page's lyrics and queue buttons' lit state, and the

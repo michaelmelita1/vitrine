@@ -1433,7 +1433,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView.onRepeat = ^{ [weakSelf cycleRepeat]; };
     _queueView.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
     _queueView.onHeadPush = ^(CGFloat push) { [weakSelf pushHead:push]; };
-    _queueView.onPickPast = ^(NSInteger steps) { SGRSystemStepBack(steps); };
+    _queueView.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) { SGRSystemStepBack(track, steps); };
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
@@ -1541,15 +1541,22 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         [screen didMoveToParentViewController:self];
         _landscapeScreen = screen;
         SGRSystemTurnSetEmbedded(screen);
+        __weak typeof(self) weakSelf = self;
+        void (^hold)(void) = ^{
+            typeof(self) page = weakSelf;
+            if (page && page->_landscapeScreen == screen) [page holdUnderLandscape:YES];
+        };
         if (coordinator) {
             screen.view.alpha = 0;
-            [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) { screen.view.alpha = 1; } completion:nil];
-        }
+            [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) { screen.view.alpha = 1; }
+                                         completion:^(id<UIViewControllerTransitionCoordinatorContext> context) { hold(); }];
+        } else hold();
     } else if (!sideways && screen) {
         BOOL lyrics = NO, queue = NO;
         SGRSystemLandscapeShowing(screen, &lyrics, &queue);
         _landscapeScreen = nil;
         SGRSystemTurnSetEmbedded(nil);
+        [self holdUnderLandscape:NO];
         [self landscapeLeftShowingLyrics:lyrics queue:queue];
         void (^remove)(void) = ^{
             [screen willMoveToParentViewController:nil];
@@ -1573,12 +1580,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self paintAccent];
-    [_timer invalidate];
+    [self startTicking];
     __weak typeof(self) weakSelf = self;
-    _timer = [NSTimer timerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer) { [weakSelf tick]; }];
-    _timer.tolerance = 0.05;   // lets iOS fold the ticks into other wakes
-    [NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
-    [self tick];
     [self syncRouteLine];
     SGRSystemTurnSetLyrics(_lyricsOpen);
     SGRSystemTurnSetQueue(_queueOpen);
@@ -1593,6 +1596,29 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         typeof(self) page = weakSelf;
         if (page && page->_openCount == open) [page openLanded];
     });
+}
+
+// None while the landscape player covers the page: it keeps its own times.
+- (void)startTicking {
+    [_timer invalidate];
+    _timer = nil;
+    if (_landscapeScreen) return;
+    __weak typeof(self) weakSelf = self;
+    _timer = [NSTimer timerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *timer) { [weakSelf tick]; }];
+    _timer.tolerance = 0.05;   // lets iOS fold the ticks into other wakes
+    [NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
+    [self tick];
+}
+
+// Under the landscape player the page is out of sight: its clip, hills, colours and timer stop until it is back, and
+// start again as the landscape player begins to leave.
+- (void)holdUnderLandscape:(BOOL)held {
+    _motion.hidden = _visualiser.hidden = held;
+    [self syncFieldHeld];
+    if (held) {
+        [_timer invalidate];
+        _timer = nil;
+    } else if (self.view.window) [self startTicking];
 }
 
 // The open has landed (kTouchesAfter in, or viewDidAppear:): the bars' touches are let in.
@@ -2058,6 +2084,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         } else if (!_visualiser) {
             _visualiser = SGRPlayerVisualiserPreview();
             _visualiser.userInteractionEnabled = NO;
+            _visualiser.hidden = _landscapeScreen != nil;
             _visualiser.frame = self.view.bounds;
             [self.view insertSubview:_visualiser aboveSubview:_field];
             [self fadeIn:_visualiser animated:animated];
@@ -2107,6 +2134,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     _motionTrack = clip ? track : nil;
     if (clip) {
         clip.userInteractionEnabled = NO;
+        clip.hidden = _landscapeScreen != nil;
         clip.frame = self.view.bounds;
         [self.view insertSubview:clip aboveSubview:_field];
         [self fadeIn:clip animated:animated];
@@ -2151,7 +2179,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 }
 
 - (void)syncFieldHeld {
-    BOOL held = !SGPlayerState() || SGPlayerState().isPaused || _motion != nil || _visualiser != nil;
+    BOOL held = !SGPlayerState() || SGPlayerState().isPaused || _motion != nil || _visualiser != nil || _landscapeScreen != nil;
     if (_field.motionHeld != held) _field.motionHeld = held;
 }
 
@@ -2501,19 +2529,27 @@ NSString *SGRSystemContextTitle(SPTPlayerState *state) {
     return contextTitle(state, isTrack(state.track) ? state.track : nil);
 }
 
-// The landscape player's queue (SystemLandscape.m) hands a move back the same way, checked against Spotify's queue as it
-// is now: the same track playing and the same tracks to come, in any order, so only a move goes back.
-void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
+NSArray<NSString *> *SGRSystemQueueKey(NSArray *next) {
+    return queueKey(next);
+}
+
+// A track moved or taken out in a queue (the page's or the landscape player's): Spotify's queue fetched again, and only if
+// it is still the one the queue showed (`shown`: the same track playing and the same tracks to come, in the same order),
+// its tracks to come in the new order handed back (setQueue:). The track can change during a drag or a swipe, and a queue
+// from before it played a track again or skipped one (the review, 2026-11-04); then nothing goes back. `handed` gets the
+// new order's key, for the next move to be checked against; `done` runs a moment later either way, to show what Spotify
+// kept.
+void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void (^handed)(NSArray<NSString *> *key), void (^done)(void)) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
-    if (![player respondsToSelector:@selector(fetchQueue:on:)] || ![player respondsToSelector:@selector(setQueue:)]) return;
-    NSArray *moved = [queueKey(upcoming) sortedArrayUsingSelector:@selector(compare:)];
+    if (!shown || ![player respondsToSelector:@selector(fetchQueue:on:)] || ![player respondsToSelector:@selector(setQueue:)]) return;
     [player fetchQueue:^(id queue) {
         NSArray *next = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
-        if ([next isKindOfClass:NSArray.class] && [[queueKey(next) sortedArrayUsingSelector:@selector(compare:)] isEqualToArray:moved]
-            && [queue respondsToSelector:@selector(setNextTracks:)]) {
+        if ([next isKindOfClass:NSArray.class] && [queueKey(next) isEqualToArray:shown] && [queue respondsToSelector:@selector(setNextTracks:)]) {
+            // Spotify's own object: its tracks go back as they were if the hand-back throws.
             @try {
                 [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
                 [player setQueue:queue];
+                if (handed) handed(queueKey(upcoming));
             } @catch (NSException *e) {
                 @try { [(id<SPTPlayerQueue>)queue setNextTracks:next]; } @catch (NSException *again) {}
             }
@@ -2522,36 +2558,17 @@ void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
     } on:dispatch_get_main_queue()];
 }
 
-// A track moved or taken out in the page's queue: Spotify's queue fetched again, and only if it is still the one the
-// page showed (the same track playing and the same tracks to come), its tracks to come in the new order handed back
-// (setQueue:). The track can change during a drag or a swipe, and a queue from before it played a track again or
-// skipped one (the review, 2026-11-04); then nothing goes back and the page shows Spotify's queue instead.
 - (void)handQueueBack:(NSArray *)upcoming {
-    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
-    NSArray<NSString *> *shown = _spotifyQueueKey;
-    if (!shown || ![player respondsToSelector:@selector(fetchQueue:on:)] || ![player respondsToSelector:@selector(setQueue:)]) return;
     __weak typeof(self) weakSelf = self;
-    [player fetchQueue:^(id queue) {
+    SGRSystemHandQueueBack(_spotifyQueueKey, upcoming, ^(NSArray<NSString *> *key) {
+        // The next change, before the fetch below, is checked against this one.
         typeof(self) me = weakSelf;
-        if (!me) return;
-        NSArray *next = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
-        if ([next isKindOfClass:NSArray.class] && [queueKey(next) isEqualToArray:shown] && [queue respondsToSelector:@selector(setNextTracks:)]) {
-            // Spotify's own object: its tracks go back as they were if the hand-back throws.
-            @try {
-                [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
-                [player setQueue:queue];
-                // The next change, before the fetch below, is checked against this one.
-                me->_spotifyQueueKey = queueKey(upcoming);
-            } @catch (NSException *e) {
-                @try { [(id<SPTPlayerQueue>)queue setNextTracks:next]; } @catch (NSException *again) {}
-            }
-        }
-        // Fetched again a moment later, so the page shows what Spotify kept.
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            typeof(self) again = weakSelf;
-            if (again && again->_queueOpen) [again refreshQueue];
-        });
-    } on:dispatch_get_main_queue()];
+        if (me) me->_spotifyQueueKey = key;
+    }, ^{
+        // Fetched again, so the page shows what Spotify kept.
+        typeof(self) me = weakSelf;
+        if (me && me->_queueOpen) [me refreshQueue];
+    });
 }
 
 // The queue shown from the state at once, then from Spotify's whole queue as it comes (its owner, 2026-11-02: the
@@ -3096,30 +3113,48 @@ void SGRSystemCycleRepeat(void) {
     }
 }
 
-static void stepBackFrom(NSString *from, NSInteger steps, NSInteger waited) {
-    SPTPlayerState *state = SGPlayerState();
-    NSString *now = SGURIString(state.track.URI) ?: @"";
+// Without Spotify's skip back to a track, one back at a time, each once the last has landed: told by how many tracks
+// lie behind the playing one (the queue's prevTracks), not by its URI, which History can hold twice. Two seconds at most
+// for each.
+static void stepBackOne(NSUInteger behind, NSInteger steps);
+
+static void stepBackWait(NSUInteger target, NSInteger left, NSInteger waited) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
-    if (!player) return;
-    // Not landed yet: looked at again shortly, for two seconds at most.
-    if ([now isEqualToString:from]) {
-        if (waited >= 20) return;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ stepBackFrom(from, steps, waited + 1); });
-        return;
-    }
-    if (steps <= 0) return;
-    [player skipToPreviousTrackWithOptions:nil];
-    stepBackFrom(now, steps - 1, 0);
+    if (!player || waited >= 20) return;
+    [player fetchQueue:^(id queue) {
+        NSArray *past = [queue respondsToSelector:@selector(prevTracks)] ? [(id<SPTPlayerQueue>)queue prevTracks] : nil;
+        if (![past isKindOfClass:NSArray.class]) return;
+        if (past.count > target) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                stepBackWait(target, left, waited + 1);
+            });
+        } else if (left > 0) stepBackOne(past.count, left);
+    } on:dispatch_get_main_queue()];
 }
 
-void SGRSystemStepBack(NSInteger steps) {
+static void stepBackOne(NSUInteger behind, NSInteger steps) {
+    if (steps <= 0 || behind == 0) return;
+    [(id<SPTPlayer>)SGPlayer() skipToPreviousTrackWithOptions:nil];
+    stepBackWait(behind - 1, steps - 1, 0);
+}
+
+void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     if (!player || steps <= 0) return;
-    // From the start, or the first back only restarts a track under way.
+    // Straight to the track, as the skip ahead to one of the tracks to come (skipToNextTrackWithOptions:track:): nothing
+    // between plays, and a track History holds twice is the one picked.
+    SEL toTrack = @selector(skipToPreviousTrackWithOptions:track:);
+    if (track && [player respondsToSelector:toTrack]) {
+        ((id (*)(id, SEL, id, id))objc_msgSend)(player, toTrack, nil, track);
+        return;
+    }
+    // Without it, back one at a time from the playing track's start, or the first back only restarts a track under way.
     [player seekTo:0];
-    NSString *from = SGURIString(SGPlayerState().track.URI) ?: @"";
-    [player skipToPreviousTrackWithOptions:nil];
-    stepBackFrom(from, steps - 1, 0);
+    [player fetchQueue:^(id queue) {
+        NSArray *past = [queue respondsToSelector:@selector(prevTracks)] ? [(id<SPTPlayerQueue>)queue prevTracks] : nil;
+        if (![past isKindOfClass:NSArray.class] || past.count < (NSUInteger)steps) return;
+        stepBackOne(past.count, steps);
+    } on:dispatch_get_main_queue()];
 }
 
 UIView *SGRSystemMakeOptionBadge(UIView *button) {

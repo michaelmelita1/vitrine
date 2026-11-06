@@ -12,7 +12,6 @@
 #import "Shared/Player/PlayerSettings.h"
 #import "Shared/Sing/Sing.h"
 #import "Shared/LiveActivity/LiveActivity.h"
-#import "Shared/Lossless/SGLossless.h"
 #import "Redesigned/Lyrics/LyricsText.h"
 #import "Redesigned/Lyrics/LyricsLook.h"
 #import "Redesigned/Navbar/Navbar.h"
@@ -73,13 +72,6 @@ UIViewController *SGPlayerSettingsPage(void) {
     // (Redesigned/Player/SystemTurn.m; its owner, 2026-11-06).
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObjects:SGSection(nil, pages),
         SGSection(nil, @[SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)]), nil];
-
-    [sections addObject:SGNotedSection(@"Lossless", @[
-        SGOptionRow(@"Lossless files", @"Your own FLACs in place of Spotify's stream", SGKeyLossless),
-    ], @"Put FLAC or ALAC files in Files › Spotify › Lossless. A file plays when its title and length match the song "
-       @"and its sound matches what Spotify plays, from about 4 s after the song starts or you seek. Spotify still "
-       @"streams its own copy, at its lowest quality while the next song has a file. Karaoke and speeds other than "
-       @"1x keep Spotify's sound. Applies after you restart Spotify.")];
 
     // The page leads with a card of the player and the background's control, then its own rows.
     return SGRPlayerSettingsPage(sections);

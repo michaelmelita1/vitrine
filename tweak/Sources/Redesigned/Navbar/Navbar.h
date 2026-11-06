@@ -15,7 +15,6 @@
 // one of Spotify's, by the label under its icon. No list at all is Spotify's order, all shown.
 #import <UIKit/UIKit.h>
 
-#define SGRKeyNavbar @"spotifyglass.redesign.navbar"
 // Icons only on the tab bar. Off unless set; applies as soon as the bar lays out again.
 #define SGRKeyNavbarHideLabels @"spotifyglass.redesign.navbar.hideLabels"
 
@@ -41,7 +40,8 @@ NSURL *SGRNavbarTabURL(NSString *uri);
 
 // Navbar.x, called from the tab bar's layout passes in TabBar.x.
 void SGRComposeTabBar(UIView *tabBar);
-void SGRLogTabBarRow(UIView *tabBar);
+// The tabs as composed, in the bar's order, the hidden ones left out; nil before the first pass.
+NSArray<UIView *> *SGRNavbarOrder(UIView *tabBar);
 // Lays the bar out again after the Navbar page changes something, so it does not wait for a touch.
 void SGRRefreshTabBar(void);
 // The tab of the mod's own whose page is on screen, which the tab bar shows selected; nil when none is.
@@ -53,8 +53,6 @@ UIView *SGRNavbarLitTab(void);
 
 // A tab's glyph drawn white, filled when `active` (TabBar.x), for the Tab bar page.
 UIImage *SGRNavbarGlyph(NSDictionary *entry, BOOL active);
-// Lets a laid out bar's titles shrink a little before UIKit cuts them short (TabBar.x), for the Tab bar page's preview.
-void SGRShrinkTabTitles(UIView *bar);
 
 UIViewController *SGRNavbarSettingsPage(void);   // the tab editor, in Mod Settings
 

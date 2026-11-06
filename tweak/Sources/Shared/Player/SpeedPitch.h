@@ -69,20 +69,6 @@ typedef double (*SGPlayerHeldLead)(void);
 typedef double (*SGPlayerLeadOf)(SPTPlayerState *state);
 void SGPlayerSetLeadReaders(SGPlayerHeldLead held, SGPlayerLeadOf of);
 
-// Experimental source selector, before the existing stage. Registered callback code must live for the
-// process lifetime. Called after each successful, non-silent native mixer pull on the music output only.
-// The native mixer is still drained exactly once. data is planar Float32 in the client format; replace
-// a complete span or leave it untouched. No allocation, file I/O, Objective-C or waits here.
-// sourceFrame is an output-local counter, not track position. The caller must prove a recording/frame
-// anchor before enabling replacement. No production caller currently does so.
-typedef void (*SGPlayerSourceSelector)(AudioUnit output, uint64_t epoch, double sourceFrame,
-                                      double sampleRate, UInt32 frames, AudioBufferList *data);
-void SGPlayerSetSourceSelector(SGPlayerSourceSelector selector);
-uint64_t SGPlayerSourceEpoch(void);
-// Any thread, including render. Invalidate on every seek/skip/recording occurrence/policy cancellation.
-// Audio-output lifecycle changes also invalidate internally. An already admitted render may finish.
-void SGPlayerInvalidateSource(void);
-
 // The music's output: of the RemoteIO units Spotify runs at once (a chain per sample rate, and voice search's),
 // the one that carries every processor of its sound (speed and pitch, Sing's stage, the audio effects, Music
 // Haptics), NULL until Spotify connects or starts one. Any thread; the render thread compares it with a render

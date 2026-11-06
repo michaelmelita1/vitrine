@@ -2286,10 +2286,9 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
                      animations:^{ self->_coverHolder.transform = transform; } completion:nil];
 }
 
-// The title, play and pause, and previous and next in the open lyrics' and queue's see-through white, or white (Match the
-// lyrics button on the Player page, SGRKeyPlayerSoftControls, its owner, 2026-11-02).
+// The title, play and pause, and previous and next in white.
 - (void)paintAccent {
-    UIColor *ink = SGHidden(SGRKeyPlayerSoftControls) ? [UIColor colorWithWhite:1 alpha:kQueueBubbleWhite] : SGRPrimary();
+    UIColor *ink = SGRPrimary();
     _title.textColor = _besideTitle.textColor = ink;
     for (SGRSystemControlButton *button in @[_previous, _play, _next]) button.glyph.tintColor = ink;
 }

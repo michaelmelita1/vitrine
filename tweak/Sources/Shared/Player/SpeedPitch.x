@@ -68,7 +68,6 @@
 #import "PlayerState.h"
 #import "SpeedPitch.h"
 #import "SGTimePitch.h"
-#import "Shared/Lossless/SGAnchor.h"
 
 // The unit stays in this long after speed and pitch both came back to normal.
 static const double kOffAfter = 1.5;
@@ -100,9 +99,6 @@ typedef struct {
     UInt32 sourceBus;
     atomic_bool taken;
     atomic_uint chunk;
-    #if SG_DRIVER
-    SGAnchorRing anchor;
-    #endif
     Float64 sourceTime;                      // its render thread only
     // Spotify's side (input scope, element 0), which the callback fills, and the hardware's (output scope),
     // which render notifies get.
@@ -127,15 +123,6 @@ static _Atomic(SGTimePitch *) sg_pull, sg_inPlace;
 static atomic_bool sg_engaged;
 static pthread_mutex_t sg_buildLock = PTHREAD_MUTEX_INITIALIZER;
 static _Atomic(SGPlayerStage) sg_stage;
-static _Atomic(SGPlayerSourceSelector) sg_sourceSelector;
-static atomic_uint_fast64_t sg_sourceEpoch = 1;
-
-uint64_t SGPlayerSourceEpoch(void) { return atomic_load(&sg_sourceEpoch); }
-void SGPlayerInvalidateSource(void) { atomic_fetch_add(&sg_sourceEpoch, 1); }
-void SGPlayerSetSourceSelector(SGPlayerSourceSelector selector) {
-    SGPlayerInvalidateSource();
-    atomic_store(&sg_sourceSelector, selector);
-}
 
 static double sg_secondsPerTick;
 static OSStatus (*sg_setProperty)(AudioUnit, AudioUnitPropertyID, AudioUnitScope, AudioUnitElement, const void *, UInt32);
@@ -250,22 +237,11 @@ static OSStatus pullSource(Output *output, AudioUnit source, const AudioTimeStam
         time.mSampleTime = output->sourceTime;
         time.mFlags |= kAudioTimeStampSampleTimeValid;
         AudioUnitRenderActionFlags flags = 0;
-        uint64_t epoch = SGPlayerSourceEpoch();
-        double sourceFrame = output->sourceTime;
         #if SG_DRIVER
         uint64_t anchorHost = mach_absolute_time();
         #endif
         OSStatus status = AudioUnitRender(source, &flags, &time, output->sourceBus, count, target);
         output->sourceTime += count;
-        // This counter advances through silent/error pulls, whereas the recording may not. Once a
-        // native stall occurs, a future playback owner must establish a fresh recording/frame anchor.
-        // Conservatively invalidate even natural silence; never resume an external cursor by guessing.
-        BOOL observesSource = atomic_load(&sg_sourceSelector) != NULL;
-        #if SG_DRIVER
-        observesSource = YES;
-        #endif
-        if ((status != noErr || (flags & kAudioUnitRenderAction_OutputIsSilence))
-            && observesSource && output == music()) SGPlayerInvalidateSource();
         #if SG_DRIVER
         if (output == music()) {
             // Silent as flagged, or as heard: every sample of the first channel under -80 dBFS.
@@ -273,22 +249,6 @@ static OSStatus pullSource(Output *output, AudioUnit source, const AudioTimeStam
             const float *samples = target->mBuffers[0].mData;
             for (UInt32 i = 0; quiet && i < count; i++) if (fabsf(samples[i]) > 1e-4f) quiet = false;
             noteSilence((flags & kAudioUnitRenderAction_OutputIsSilence) || status != noErr || quiet, count, rateOf(&output->client), anchorHost);
-        }
-        if (output == music()) {
-            double rate = rateOf(&output->client);
-            // About ten samples per second at the current speed. Sing's refill may burst.
-            double speed = MAX(0.25, loadFloat(&sg_speedBits));
-            unsigned every = (unsigned)MAX(1, round(rate * speed / (10.0 * count)));
-            SGAnchorRing *ring = &output->anchor;
-            if (++ring->pulls >= every || ring->lastEpoch != epoch) {
-                SGAnchorSample sample = {sourceFrame, rate, anchorHost, epoch,
-                    (uint64_t)(uintptr_t)atomic_load(&output->unit), count, status,
-                    (flags & kAudioUnitRenderAction_OutputIsSilence) != 0};
-                if (SGAnchorPush(ring, sample)) {
-                    ring->pulls = 0;
-                    ring->lastEpoch = epoch;
-                }
-            }
         }
         #endif
         if (status != noErr) return status;
@@ -307,20 +267,6 @@ static OSStatus pullSource(Output *output, AudioUnit source, const AudioTimeStam
         } else if (output == music()) {
             double rate = rateOf(&output->client);
             if (rate > 0) atomic_fetch_add_explicit(&sg_playedMicros, (uint64_t)(count * 1e6 / rate), memory_order_relaxed);
-        }
-        SGPlayerSourceSelector selector = atomic_load(&sg_sourceSelector);
-        if (selector && output == music()) {
-            // Keep output ownership based on Spotify's original samples, not the replacement's sound.
-            BOOL audible = NO;
-            for (UInt32 b = 0; !audible && b < target->mNumberBuffers; ++b) {
-                const float *samples = target->mBuffers[b].mData;
-                for (UInt32 i = 0; samples && i < target->mBuffers[b].mDataByteSize / sizeof(float); ++i) {
-                    if (fabsf(samples[i]) > 1e-4f) { audible = YES; break; }
-                }
-            }
-            if (audible) atomic_store_explicit(&output->loudAt, mach_absolute_time(), memory_order_relaxed);
-            if (!(flags & kAudioUnitRenderAction_OutputIsSilence))
-                selector(atomic_load(&output->unit), epoch, sourceFrame, rateOf(&output->client), count, target);
         }
         done += count;
     }
@@ -527,8 +473,7 @@ static OSStatus rendered(void *refCon, AudioUnitRenderActionFlags *flags, const 
                          UInt32 frames, AudioBufferList *data) {
     if (!(*flags & kAudioUnitRenderAction_PostRender) || bus != 0 || !data || !data->mNumberBuffers || !frames) return noErr;
     Output *output = refCon;
-    BOOL sourceMetered = atomic_load(&sg_sourceSelector) && atomic_load(&output->taken) && output == music();
-    if (!sourceMetered && hasSound(&output->hardware, *flags, data)) atomic_store_explicit(&output->loudAt, mach_absolute_time(), memory_order_relaxed);
+    if (hasSound(&output->hardware, *flags, data)) atomic_store_explicit(&output->loudAt, mach_absolute_time(), memory_order_relaxed);
     if (output != music()) return noErr;
     applyGain(&output->hardware, flags, frames, data);
     if (atomic_load(&output->taken) || !atomic_load(&sg_engaged)) return noErr;
@@ -710,7 +655,6 @@ static void reselect(BOOL always, NSString *why) {
         SGLog(@"audio: the processors move from %@ to %@%@", describe(previous), describe(next), why ? [@", " stringByAppendingString:why] : @"");
     }
     if (next != previous || always) {
-        SGPlayerInvalidateSource();
         tellWatchers();
         applyToFormat();
     }
@@ -729,7 +673,6 @@ static void formatChanged(void *refCon, AudioUnit unit, AudioUnitPropertyID prop
     if (scope != kAudioUnitScope_Input && scope != kAudioUnitScope_Output) return;
     // Off the thread setting it: settling may set the unit's connection, which is not done from inside its own listener.
     Output *output = refCon;
-    if (output == music()) SGPlayerInvalidateSource();
     dispatch_async(sg_outputsQueue, ^{
         pthread_mutex_lock(&sg_outputsLock);
         if (atomic_load(&output->unit) == unit) {
@@ -752,7 +695,6 @@ static void sourceChanged(AudioUnit unit) {
         Output *output = &sg_outputs[i];
         AudioUnit outputUnit = atomic_load(&output->unit);
         if (!outputUnit || atomic_load(&output->source) != unit) continue;
-        if (output == music()) SGPlayerInvalidateSource();
         dispatch_async(sg_outputsQueue, ^{
             pthread_mutex_lock(&sg_outputsLock);
             AudioStreamBasicDescription client, hardware;
@@ -770,17 +712,11 @@ static OSStatus setProperty(AudioUnit unit, AudioUnitPropertyID property, AudioU
                             const void *data, UInt32 size) {
     if (property != kAudioUnitProperty_MakeConnection || scope != kAudioUnitScope_Input || element != 0 || !data
         || size < sizeof(AudioUnitConnection) || !isRemoteIO(unit)) {
-        // Invalidate before applying a format change: Core Audio's listener may arrive later. Even
-        // setting the same format conservatively invalidates a prepared source's negotiated contract.
-        Output *current = music();
-        if (property == kAudioUnitProperty_StreamFormat && current
-            && (unit == atomic_load(&current->unit) || unit == atomic_load(&current->source))) SGPlayerInvalidateSource();
         OSStatus status = sg_setProperty(unit, property, scope, element, data, size);
         if (status == noErr && (property == kAudioUnitProperty_StreamFormat || property == kAudioUnitProperty_MaximumFramesPerSlice)) sourceChanged(unit);
         return status;
     }
     const AudioUnitConnection *connection = data;
-    SGPlayerInvalidateSource();
     pthread_mutex_lock(&sg_outputsLock);
     Output *output = outputFor(unit);
     if (!output) {
@@ -875,7 +811,6 @@ static OSStatus startOutput(AudioUnit unit) {
 static OSStatus (*sg_stopOutput)(AudioUnit unit);
 
 static OSStatus stopOutput(AudioUnit unit) {
-    if (unit == SGPlayerMusicOutput()) SGPlayerInvalidateSource();
     OSStatus status = sg_stopOutput(unit);
     pthread_mutex_lock(&sg_outputsLock);
     Output *output = outputOf(unit);
@@ -893,7 +828,6 @@ static OSStatus (*sg_dispose)(AudioComponentInstance unit);
 // Every output fed by the unit loses it, and the unit's own output is forgotten, before it goes; renders in
 // progress end first.
 static OSStatus disposeUnit(AudioComponentInstance unit) {
-    SGPlayerInvalidateSource();
     pthread_mutex_lock(&sg_outputsLock);
     BOOL changed = NO;
     for (int i = 0; i < kMaxOutputs; i++) {
@@ -1335,27 +1269,3 @@ BOOL SGPlayerWatchMusicOutput(SGPlayerOutputWatcher watcher) {
     });
 }
 
-#if SG_DRIVER
-bool SGPlayerAnchorRead(SGAnchorSample *latest, unsigned *dropped) {
-    bool found = false;
-    *dropped = 0;
-    for (unsigned i = 0; i < kMaxOutputs; ++i) {
-        SGAnchorSample sample;
-        while (SGAnchorPop(&sg_outputs[i].anchor, &sample)) {
-            if (!found || sample.host >= latest->host) *latest = sample;
-            found = true;
-        }
-        *dropped += atomic_load_explicit(&sg_outputs[i].anchor.dropped, memory_order_relaxed);
-    }
-    return found;
-}
-
-double SGPlayerAnchorLatency(bool *engaged) {
-    pthread_mutex_lock(&sg_buildLock);
-    *engaged = atomic_load(&sg_engaged);
-    SGTimePitch *unit = atomic_load(tapped() ? &sg_pull : &sg_inPlace);
-    double latency = *engaged && unit ? SGTimePitchLatency(unit) : 0;
-    pthread_mutex_unlock(&sg_buildLock);
-    return latency;
-}
-#endif

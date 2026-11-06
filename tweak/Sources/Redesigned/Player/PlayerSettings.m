@@ -367,11 +367,9 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
     [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
                                                       SGShownRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle),
                                                       SGShownRow(@"Repeat", nil, SGRKeyPlayerHideRepeat),
-                                                      SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch),
-                                                      SGOptionRow(@"Match the lyrics button", @"The title, play and pause, and skip", SGRKeyPlayerSoftControls)],
+                                                      SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch)],
         @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
-        @"Shuffle and Repeat switched off move into the queue's row. "
-        @"Match the lyrics button draws the song's title, play and pause, and skip buttons in the see-through white of the lyrics and queue buttons while they're open.")];
+        @"Shuffle and Repeat switched off move into the queue's row.")];
     [sections addObjectsFromArray:more];
     // Fluid, Animated and Visualizer share the field (PlayerMotion.x reads the choice on every track); Still and Colors
     // are a field of another kind.

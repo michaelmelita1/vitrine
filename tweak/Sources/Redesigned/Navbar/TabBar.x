@@ -17,6 +17,9 @@ static __weak UIView *sg_stockBar;
 
 // The items the bar shows, left to right as Navbar/Navbar.x placed them.
 static NSArray<UIView *> *tabItems(UIView *tabBar) {
+    // The order Navbar.x composed; Spotify's row as it stands until it has.
+    NSArray<UIView *> *composed = SGRNavbarOrder(tabBar);
+    if (composed.count) return composed;
     NSMutableArray<UIView *> *items = [NSMutableArray array];
     for (UIView *item in SGRowIn(tabBar).arrangedSubviews) {
         if (!item.hidden && item.bounds.size.width >= 20) [items addObject:item];
@@ -274,15 +277,6 @@ void SGRForwardTabTap(UIView *source) {
     forwardTap(source);
 }
 
-// A name too long for its tab (one of the user's own) shrinks a little before UIKit cuts it short, to 8 pt from 10.
-void SGRShrinkTabTitles(UIView *bar) {
-    SGForEachView(bar, ^(UIView *v) {
-        if (![v isKindOfClass:UILabel.class] || ((UILabel *)v).adjustsFontSizeToFitWidth) return;
-        ((UILabel *)v).adjustsFontSizeToFitWidth = YES;
-        ((UILabel *)v).minimumScaleFactor = 0.8;
-    });
-}
-
 static UIViewController *containerOf(UIView *stockBar) {
     Class containerClass = NSClassFromString(@"_TtC23NavigationUI_TabBarImpl19TabBarContainerImpl");
     for (UIResponder *r = stockBar.nextResponder; r; r = r.nextResponder) {
@@ -339,7 +333,6 @@ static BOOL sg_itemsLaidOut;
     sg_passBar = outer;
     sg_itemsLaidOut = outerLaidOut;
     syncBar(bar);
-    SGRLogTabBarRow(bar);
 }
 %end
 
@@ -354,7 +347,6 @@ static void itemDidLayOut(UIView *item) {
     }
     SGRComposeTabBar(bar);
     syncBar(bar);
-    SGRLogTabBarRow(bar);
 }
 
 %hook _TtC23NavigationUI_TabBarImpl21TabBarItemElementView

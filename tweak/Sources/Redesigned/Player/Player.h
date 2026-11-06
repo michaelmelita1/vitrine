@@ -62,9 +62,6 @@ SGModRow *SGRLyricsHideRow(void);
 
 // A volume slider under the controls, the system's: this iPhone's, or the Connect device's. On until switched off.
 #define SGRKeyPlayerVolume @"spotifyglass.redesign.player.volume"
-// The title, play and pause, and previous and next in the open lyrics button's see-through white instead of white (its
-// owner, 2026-11-02). Off until switched on, read each time the page shows.
-#define SGRKeyPlayerSoftControls @"spotifyglass.redesign.navbar.player.softControls"
 // Shuffle and repeat left out of the controls, each on its own switch (shown as Shuffle and Repeat under Controls).
 #define SGRKeyPlayerHideShuffle @"spotifyglass.redesign.player.hideShuffle"
 #define SGRKeyPlayerHideRepeat @"spotifyglass.redesign.player.hideRepeat"

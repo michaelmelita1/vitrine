@@ -957,14 +957,6 @@ static NSDictionary<NSString *, SGCommand> *commands(void) {
                     return @{@"speed" : @(SGPlayerSpeed())};
                 });
             },
-            // A local lossless file in place of Spotify's sound for the same recording: lossless anchor --path P,
-            // lossless check, lossless stop. Runs off main: matching takes a few seconds.
-            @"lossless" : ^NSDictionary *(NSDictionary *p) {
-                NSString *error;
-                NSDictionary *result = SGLosslessProbe(p[@"arg"] ?: @"check", p, &error);
-                if (!result) fail(@"%@", error);
-                return result;
-            },
             // Spotify's Automix and Crossfade settings: automix [--automix 1] [--crossfade 1] [--ms 5000].
             @"automix" : ^NSDictionary *(NSDictionary *p) {
                 NSString *error;

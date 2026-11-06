@@ -3,8 +3,6 @@
 // without a restart.
 #import "Core/SGCore.h"
 #import "Shared/AutoMix/AutoMix.h"
-#import "Shared/Lossless/LosslessQuality.h"
-#import "Shared/Lossless/SGLossless.h"
 #import "SpotifyPrefs.h"
 
 static __weak SPTPreferences *sg_preferences, *sg_loaded;
@@ -24,8 +22,6 @@ static void reconcileWhenLoaded(void) {
         return;
     }
     SGLog(@"spotify prefs: the user's settings are in");
-    // Lowered when Spotify last quit, and lossless is off now: nothing else would put it back.
-    if (!SGHidden(SGKeyLossless)) SGLosslessLowerQuality(NO);
     SGAutoMixReconcile();
 }
 

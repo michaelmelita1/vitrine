@@ -82,197 +82,15 @@ static NSMutableDictionary *editedEntry(NSDictionary *entry, NSDictionary *edite
     return now;
 }
 
-#pragma mark - the preview
-
-// Spotify's own tabs in Spotify's order, as entries, all shown: what the bar has with Custom tab bar off.
-static NSArray<NSDictionary *> *stockEntries(void) {
-    NSMutableArray<NSDictionary *> *entries = [NSMutableArray array];
-    for (NSString *ident in SGRNavbarStock()) [entries addObject:@{SGRNavbarID: ident, SGRNavbarTitle: ident}];
-    return entries;
-}
+#pragma mark - glyphs
 
 static UIImage *glyphFor(NSDictionary *entry, BOOL active) {
     return SGRNavbarGlyph(entry, active) ?: [UIImage systemImageNamed:@"square.dashed"];
 }
 
-static UITabBar *previewBar(void) {
-    UITabBar *bar = [UITabBar new];
-    // Dark whatever the system is, as the tab bar is.
-    bar.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-    bar.userInteractionEnabled = NO;
-    bar.tintColor = SGRAccent();
-    return bar;
-}
-
-// The bar as it will look, drawn by a system UITabBar, from the list as it stands on the page: the shown tabs in
-// order, the first selected, names under the glyphs unless Icons only is picked. It takes no touches.
-@interface SGRTabBarPreview : UIView
-- (void)showEntries:(NSArray<NSDictionary *> *)entries;
-@end
-
-@implementation SGRTabBarPreview {
-    UITabBar *_main;
-}
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    if (!(self = [super initWithFrame:frame])) return nil;
-    _main = previewBar();
-    [self addSubview:_main];
-    self.isAccessibilityElement = YES;
-    self.accessibilityLabel = @"Tab bar preview";
-    return self;
-}
-
-static NSArray<UITabBarItem *> *itemsFor(NSArray<NSDictionary *> *entries, BOOL names) {
-    NSMutableArray<UITabBarItem *> *items = [NSMutableArray array];
-    for (NSDictionary *entry in entries) {
-        UITabBarItem *item = [[UITabBarItem alloc] initWithTitle:names ? entry[SGRNavbarTitle] : nil image:glyphFor(entry, NO) tag:(NSInteger)items.count];
-        item.selectedImage = glyphFor(entry, YES);
-        [items addObject:item];
-    }
-    return items;
-}
-
-// What Navbar.x composes from the same list: with nothing left shown, Spotify's own tabs come back.
-- (void)showEntries:(NSArray<NSDictionary *> *)entries {
-    BOOL custom = SGEnabled(SGRKeyNavbar), names = !SGHidden(SGRKeyNavbarHideLabels);
-    NSMutableArray<NSDictionary *> *shown = [NSMutableArray array];
-    if (custom) for (NSDictionary *entry in entries) if (![entry[SGRNavbarHidden] boolValue]) [shown addObject:entry];
-    if (!shown.count) [shown addObjectsFromArray:stockEntries()];
-    [_main setItems:itemsFor(shown, names) animated:NO];
-    _main.selectedItem = _main.items.firstObject;
-    self.accessibilityValue = [[shown valueForKey:SGRNavbarTitle] componentsJoinedByString:@", "];
-    [self setNeedsLayout];
-}
-
-- (CGSize)sizeThatFits:(CGSize)size {
-    return CGSizeMake(size.width, [_main sizeThatFits:CGSizeMake(size.width, 49)].height);
-}
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    _main.frame = self.bounds;
-    [_main layoutIfNeeded];
-    SGRShrinkTabTitles(_main);
-}
-
-@end
-
-#pragma mark - the labels' cards
-
-// One of the two ways the bar can label its tabs, as a picture of the bar's first three tabs with or without
-// their names, the choice's name under it and a check circle under that.
-@interface SGRLabelCard : UIControl
-@property (nonatomic, readonly) BOOL names;
-- (instancetype)initWithTitle:(NSString *)title names:(BOOL)names;
-- (void)showEntries:(NSArray<NSDictionary *> *)entries;
-@end
-
-@implementation SGRLabelCard {
-    UIView *_picture;
-    NSMutableArray<UIImageView *> *_glyphs;
-    NSMutableArray<UIView *> *_bars;   // a gray bar under each glyph stands for its name
-    UILabel *_title;
-    UIImageView *_check;
-}
-
-static const CGFloat kPictureHeight = 76;
-
-- (instancetype)initWithTitle:(NSString *)title names:(BOOL)names {
-    if (!(self = [super initWithFrame:CGRectZero])) return nil;
-    _names = names;
-    _picture = [UIView new];
-    _picture.backgroundColor = SGCardBackground();
-    _picture.layer.cornerRadius = 18;
-    _picture.layer.cornerCurve = kCACornerCurveContinuous;
-    _picture.userInteractionEnabled = NO;
-    [self addSubview:_picture];
-    _glyphs = [NSMutableArray array];
-    _bars = [NSMutableArray array];
-    for (NSUInteger i = 0; i < 3; i++) {
-        UIImageView *glyph = [UIImageView new];
-        glyph.contentMode = UIViewContentModeScaleAspectFit;
-        glyph.tintColor = UIColor.whiteColor;
-        [_picture addSubview:glyph];
-        [_glyphs addObject:glyph];
-        UIView *bar = [UIView new];
-        bar.backgroundColor = SGGrey();
-        bar.layer.cornerRadius = 2;
-        bar.hidden = !names;
-        [_picture addSubview:bar];
-        [_bars addObject:bar];
-    }
-    _title = [UILabel new];
-    _title.text = title;
-    _title.font = SGSubtitleFont();
-    _title.textColor = UIColor.whiteColor;
-    _title.textAlignment = NSTextAlignmentCenter;
-    _title.adjustsFontSizeToFitWidth = YES;
-    _title.minimumScaleFactor = 0.8;
-    [self addSubview:_title];
-    _check = [UIImageView new];
-    _check.contentMode = UIViewContentModeCenter;
-    [self addSubview:_check];
-    self.isAccessibilityElement = YES;
-    self.accessibilityLabel = title;
-    return self;
-}
-
-- (void)showEntries:(NSArray<NSDictionary *> *)entries {
-    for (NSUInteger i = 0; i < 3; i++) {
-        NSDictionary *entry = i < entries.count ? entries[i] : nil;
-        _glyphs[i].image = entry ? [glyphFor(entry, NO) imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : nil;
-        _bars[i].alpha = entry ? 1 : 0;
-    }
-}
-
-- (void)setSelected:(BOOL)selected {
-    [super setSelected:selected];
-    _picture.layer.borderWidth = selected ? 2 : 0;
-    _picture.layer.borderColor = SGRAccent().CGColor;
-    UIImageSymbolConfiguration *size = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightRegular];
-    _check.image = [UIImage systemImageNamed:selected ? @"checkmark.circle.fill" : @"circle" withConfiguration:size];
-    _check.tintColor = selected ? SGRAccent() : SGGrey();
-    self.accessibilityTraits = UIAccessibilityTraitButton | (selected ? UIAccessibilityTraitSelected : 0);
-}
-
-- (void)setHighlighted:(BOOL)highlighted {
-    [super setHighlighted:highlighted];
-    _picture.alpha = highlighted ? 0.6 : 1;
-}
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    CGFloat width = self.bounds.size.width;
-    _picture.frame = CGRectMake(0, 0, width, kPictureHeight);
-    CGFloat slot = (width - 16) / 3, glyphTop = _names ? 18 : 26;
-    for (NSUInteger i = 0; i < 3; i++) {
-        CGFloat x = 8 + i * slot;
-        _glyphs[i].frame = CGRectMake(x + (slot - 24) / 2, glyphTop, 24, 24);
-        _bars[i].frame = CGRectMake(x + (slot - 20) / 2, glyphTop + 32, 20, 4);
-    }
-    _title.font = SGSubtitleFont();
-    _title.numberOfLines = [SGRLabelCard titleLines];
-    CGFloat titleHeight = _title.numberOfLines * ceil(_title.font.lineHeight);
-    _title.frame = CGRectMake(0, kPictureHeight + 8, width, titleHeight);
-    _check.frame = CGRectMake((width - 44) / 2, CGRectGetMaxY(_title.frame) - 6, 44, 44);
-}
-
-// The name takes a second line at the accessibility sizes, where half the row is too narrow for it.
-+ (NSInteger)titleLines {
-    return SGAccessibilityTextSize() ? 2 : 1;
-}
-
-+ (CGFloat)height {
-    return kPictureHeight + 8 + [self titleLines] * ceil(SGSubtitleFont().lineHeight) - 6 + 44;
-}
-
-@end
-
 #pragma mark - the page
 
 typedef NS_ENUM(NSInteger, SGRNavbarSection) {
-    SGRNavbarSectionSwitch,
     SGRNavbarSectionLabels,
     SGRNavbarSectionTabs,
     SGRNavbarSectionLinks,   // Add a tab, Use Spotify's tabs
@@ -292,22 +110,7 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 }
 @end
 
-// The labels' cell: clear, so it drops the inset-grouped corner mask that clipped the cards' outer corners.
-@interface SGRUnclippedCell : UITableViewCell
-@end
-
-@implementation SGRUnclippedCell
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    self.layer.cornerRadius = 0;
-    self.layer.masksToBounds = NO;
-    self.contentView.clipsToBounds = NO;
-}
-
-@end
-
-// The tab editor: a preview of the bar, how it labels its tabs, the tabs in the order the bar shows them
+// The tab editor: Icons only, the tabs in the order the bar shows them
 // (the circle shows or hides one, the handle drags it, a tap on one of the mod's own opens it in the Add a
 // Tab sheet to edit or remove), then adding one and going back to Spotify's tabs.
 // Spotify's own tabs are named by their label and drawn by Spotify, so they can be hidden but not renamed,
@@ -317,9 +120,6 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 
 @implementation SGRNavbarPage {
     NSMutableArray<NSMutableDictionary *> *_entries;
-    SGRTabBarPreview *_preview;
-    UIView *_header;
-    SGRLabelCard *_withNames, *_iconsOnly;
 }
 
 - (instancetype)init {
@@ -332,15 +132,7 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
     [super viewDidLoad];
     self.tableView.allowsSelectionDuringEditing = YES;
     self.tableView.editing = YES;
-    _preview = [SGRTabBarPreview new];
-    _header = [UIView new];
-    [_header addSubview:_preview];
-    self.tableView.tableHeaderView = _header;
-    _withNames = [[SGRLabelCard alloc] initWithTitle:@"Icons and names" names:YES];
-    _iconsOnly = [[SGRLabelCard alloc] initWithTitle:@"Icons only" names:NO];
-    for (SGRLabelCard *card in @[_withNames, _iconsOnly]) [card addTarget:self action:@selector(labelsPicked:) forControlEvents:UIControlEventTouchUpInside];
     _entries = navbarEntries();
-    [self showChoices];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -348,46 +140,19 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
     [self reload];
 }
 
-- (void)viewWillLayoutSubviews {
-    [super viewWillLayoutSubviews];
-    UITableView *table = self.tableView;
-    CGFloat width = table.bounds.size.width;
-    CGFloat height = [_preview sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height;
-    _preview.frame = CGRectMake(0, 8, width, height);
-    CGSize size = CGSizeMake(width, CGRectGetMaxY(_preview.frame) + 8);
-    if (CGSizeEqualToSize(_header.bounds.size, size)) return;
-    _header.frame = (CGRect){CGPointZero, size};
-    table.tableHeaderView = _header;
-}
-
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     SGInsetForBars(self.tableView);
 }
 
-// The preview and the cards, from the list as it stands.
-- (void)showChoices {
-    [_preview showEntries:_entries];
-    NSMutableArray<NSDictionary *> *shown = [NSMutableArray array];
-    for (NSDictionary *entry in _entries) if (![entry[SGRNavbarHidden] boolValue]) [shown addObject:entry];
-    BOOL names = !SGHidden(SGRKeyNavbarHideLabels);
-    for (SGRLabelCard *card in @[_withNames, _iconsOnly]) {
-        [card showEntries:shown.count ? shown : (NSArray *)_entries];
-        card.selected = card.names == names;
-    }
-    [self.view setNeedsLayout];
-}
-
 - (void)reload {
     _entries = navbarEntries();
     [self.tableView reloadData];
-    [self showChoices];
 }
 
 - (void)save {
     SGRSetNavbarLayout(_entries);
     SGRRefreshTabBar();
-    [self showChoices];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)table {
@@ -404,8 +169,6 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 }
 
 - (NSString *)footerFor:(NSInteger)section {
-    if (section == SGRNavbarSectionSwitch && !SGEnabled(SGRKeyNavbar))
-        return @"Off, the bar shows Spotify's own tabs in Spotify's order. Your list is kept for when it is on again.";
     if (section == SGRNavbarSectionTabs)
         return @"Drag a tab to move it. Tap one you added to rename it or change its icon, or one of Spotify's to hide it.";
     return nil;
@@ -428,32 +191,6 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 - (CGFloat)tableView:(UITableView *)table heightForFooterInSection:(NSInteger)section {
     NSString *text = [self footerFor:section];
     return text ? SGSectionFooterHeight(table, text) : CGFLOAT_MIN;
-}
-
-- (CGFloat)tableView:(UITableView *)table heightForRowAtIndexPath:(NSIndexPath *)path {
-    return path.section == SGRNavbarSectionLabels ? [SGRLabelCard height] : UITableViewAutomaticDimension;
-}
-
-- (UITableViewCell *)labelsCell:(UITableView *)table {
-    UITableViewCell *cell = [table dequeueReusableCellWithIdentifier:@"labels"] ?: [[SGRUnclippedCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"labels"];
-    cell.contentConfiguration = nil;
-    cell.backgroundColor = UIColor.clearColor;
-    cell.backgroundConfiguration = [UIBackgroundConfiguration clearConfiguration];
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
-    if (_withNames.superview != cell.contentView) {
-        UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[_withNames, _iconsOnly]];
-        row.distribution = UIStackViewDistributionFillEqually;
-        row.spacing = 12;
-        row.translatesAutoresizingMaskIntoConstraints = NO;
-        [cell.contentView addSubview:row];
-        [NSLayoutConstraint activateConstraints:@[
-            [row.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor],
-            [row.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor],
-            [row.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor],
-            [row.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor],
-        ]];
-    }
-    return cell;
 }
 
 - (UITableViewCell *)tabCell:(UITableView *)table at:(NSIndexPath *)path {
@@ -490,19 +227,20 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)table cellForRowAtIndexPath:(NSIndexPath *)path {
-    if (path.section == SGRNavbarSectionLabels) return [self labelsCell:table];
+    if (path.section == SGRNavbarSectionLabels) {
+        UITableViewCell *cell = SGDequeueCell(table, @"labels");
+        SGFillCell(cell, @"Icons only", @"No names under the tabs", nil, nil);
+        UISwitch *toggle = [UISwitch new];
+        toggle.onTintColor = SGGreen();
+        toggle.on = SGHidden(SGRKeyNavbarHideLabels);
+        [toggle addTarget:self action:@selector(labelsToggled:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return cell;
+    }
     if (path.section == SGRNavbarSectionTabs) return [self tabCell:table at:path];
     UITableViewCell *cell = SGDequeueCell(table, @"navbar");
     switch (path.section) {
-        case SGRNavbarSectionSwitch: {
-            SGFillCell(cell, @"Custom tab bar", @"Your order, hidden tabs and tabs you add", nil, nil);
-            UISwitch *toggle = [UISwitch new];
-            toggle.onTintColor = SGGreen();
-            toggle.on = SGEnabled(SGRKeyNavbar);
-            [toggle addTarget:self action:@selector(customToggled:) forControlEvents:UIControlEventValueChanged];
-            cell.accessoryView = toggle;
-            break;
-        }
         default:
             // Links in the accent color, as the system's own actions in a list are.
             SGFillCell(cell, path.row == 0 ? @"Add a tab" : @"Use Spotify's tabs", nil, SGRAccent(), nil);
@@ -606,21 +344,9 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
     });
 }
 
-- (void)labelsPicked:(SGRLabelCard *)card {
-    if (card.selected) return;
-    SGSetEnabled(SGRKeyNavbarHideLabels, !card.names);
-    [[UISelectionFeedbackGenerator new] selectionChanged];
+- (void)labelsToggled:(UISwitch *)toggle {
+    SGSetEnabled(SGRKeyNavbarHideLabels, toggle.on);
     SGRRefreshTabBar();
-    [self showChoices];
-}
-
-- (void)customToggled:(UISwitch *)toggle {
-    SGSetEnabled(SGRKeyNavbar, toggle.on);
-    SGRRefreshTabBar();
-    [self showChoices];
-    [UIView performWithoutAnimation:^{
-        [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:SGRNavbarSectionSwitch] withRowAnimation:UITableViewRowAnimationNone];
-    }];
 }
 
 - (void)reset {

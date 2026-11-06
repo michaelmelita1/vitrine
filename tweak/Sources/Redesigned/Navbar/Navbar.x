@@ -5,11 +5,10 @@
 // the left, not by asking the item what it is: moved in the stack, an item takes the tap of
 // whatever used to stand there. So the stack's own order is left exactly as Spotify built it.
 //
-// The row is split into equal slots instead, and each item is given the frame of its slot after
-// the stack's own pass: hit testing goes by frame, so the touch follows the icon, while Spotify
-// still counts its items off in the order it put them in. Items of the mod's own go on the end of
-// the stack, past that count, and take a slot with the rest. A tap on one goes through Spotify's
-// link dispatcher, the same route the app takes for a link it opens itself, so any URI works.
+// The composed order is kept beside the row instead (SGRNavbarOrder), and the system tab bar, which draws the tabs and
+// passes each tap to its item, reads it from there; Spotify's own bar stays hidden under it. Items of the mod's own go
+// on the end of the stack, past what Spotify counts. A tap on one goes through Spotify's link dispatcher, the same
+// route the app takes for a link it opens itself, so any URI works.
 //
 // The page that link pushes is the tab's: the tab bar lights the tab while that page is on its stack and
 // the stack is on screen, and a second tap goes back to the page rather than opening the link again, the
@@ -36,8 +35,6 @@ static CGRect sg_iconBox = {{0, kIconTop}, {kIconSize, kIconSize}};
 static CGRect sg_labelBox = {{0, kLabelTop}, {0, kLabelHeight}};
 
 static __weak UIView *sg_navbarRoot;
-// The bar's row of items, given its frames by placeRow after each of its own passes.
-static __weak UIStackView *sg_row;
 static UIFont *sg_tabFont;
 // Spotify's own tabs in Spotify's order, from the first layout pass of this launch, before
 // anything below has moved them.
@@ -212,23 +209,22 @@ void SGRComposeTabBar(UIView *tabBar) {
     NSMutableSet<NSString *> *placed = [NSMutableSet set];
     NSMutableSet<NSString *> *keep = [NSMutableSet set];
 
-    if (SGEnabled(SGRKeyNavbar)) {
-        for (NSDictionary *entry in SGRNavbarLayout()) {
-            NSString *ident = entry[SGRNavbarID];
-            if (![ident isKindOfClass:NSString.class] || [placed containsObject:ident]) continue;
-            [placed addObject:ident];
-            BOOL hidden = [entry[SGRNavbarHidden] boolValue];
-            if (entry[SGRNavbarURI]) {
-                if (hidden) continue;
-                SGRTabItemView *item = custom[ident];
-                if (item) [item applyEntry:entry];
-                else custom[ident] = item = [[SGRTabItemView alloc] initWithEntry:entry];
-                [keep addObject:ident];
-                [wanted addObject:item];
-            } else if (stockViews[ident]) {
-                stockViews[ident].hidden = hidden;
-                [wanted addObject:stockViews[ident]];
-            }
+    // The saved list, which with nothing saved is Spotify's own order, all shown (Use Spotify's tabs goes back to it).
+    for (NSDictionary *entry in SGRNavbarLayout()) {
+        NSString *ident = entry[SGRNavbarID];
+        if (![ident isKindOfClass:NSString.class] || [placed containsObject:ident]) continue;
+        [placed addObject:ident];
+        BOOL hidden = [entry[SGRNavbarHidden] boolValue];
+        if (entry[SGRNavbarURI]) {
+            if (hidden) continue;
+            SGRTabItemView *item = custom[ident];
+            if (item) [item applyEntry:entry];
+            else custom[ident] = item = [[SGRTabItemView alloc] initWithEntry:entry];
+            [keep addObject:ident];
+            [wanted addObject:item];
+        } else if (stockViews[ident]) {
+            stockViews[ident].hidden = hidden;
+            [wanted addObject:stockViews[ident]];
         }
     }
     // Tabs of Spotify's the list does not name — or named before Spotify had built them — keep
@@ -260,93 +256,15 @@ void SGRComposeTabBar(UIView *tabBar) {
         if (item.hidden || item.superview != stack) continue;
         [order addObject:item];
     }
-    sg_row = stack;
     if (![order isEqualToArray:objc_getAssociatedObject(stack, &kOrderKey)]) {
         objc_setAssociatedObject(stack, &kOrderKey, order, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [stack setNeedsLayout];
     }
 }
 
-// Spotify placed the icon and the label for the width it measured (trees/test5.txt: x 28 in a
-// 134pt slot, the center of the 80pt it had with five tabs) and lays the item out no further
-// once the slot changes. Assigning the centers back sends them through the hooks below, which look no further
-// up for the slot than the deepest of these views sits in one (3 in Spotify's items: trees, 2026-10).
-static NSUInteger sg_slotDepth;
-static void centreContents(UIView *item) {
-    SGForEachView(item, ^(UIView *v) {
-        if (![v isKindOfClass:%c(SPTEncoreIconView)] && ![v isKindOfClass:%c(SPTEncoreLabel)]) return;
-        NSUInteger depth = 1;
-        for (UIView *up = v.superview; up && up != item; up = up.superview) depth++;
-        if (depth > sg_slotDepth) sg_slotDepth = depth;
-        v.center = v.center;
-    });
+NSArray<UIView *> *SGRNavbarOrder(UIView *tabBar) {
+    UIStackView *stack = SGRowIn(tabBar);
+    return stack ? objc_getAssociatedObject(stack, &kOrderKey) : nil;
 }
-
-// Equal slots across the bar, in the order composed above. The frames go on
-// after the stack's own pass, so Spotify's own widths never decide whether a fifth item fits.
-static void placeRow(UIStackView *stack) {
-    NSArray<UIView *> *order = objc_getAssociatedObject(stack, &kOrderKey);
-    UIView *bar = sg_navbarRoot;
-    if (!order.count || !bar) return;
-    CGFloat width = bar.bounds.size.width / order.count;
-    CGFloat height = stack.bounds.size.height;
-    [order enumerateObjectsUsingBlock:^(UIView *item, NSUInteger i, BOOL *stop) {
-        CGFloat left = i * width;
-        CGFloat x = [bar convertPoint:CGPointMake(left, 0) toView:stack].x;
-        CGRect frame = CGRectMake(x, 0, width, height);
-        if (!CGAffineTransformIsIdentity(item.transform)) item.transform = CGAffineTransformIdentity;
-        if (!CGRectEqualToRect(item.frame, frame)) item.frame = frame;
-        centreContents(item);
-    }];
-}
-
-%hook UIStackView
-- (void)layoutSubviews {
-    %orig;
-    if ((UIStackView *)self == sg_row) placeRow((UIStackView *)self);
-}
-%end
-
-// Spotify's element layout places the icon and the label from the width it measured, not from
-// the slot above (trees/test5.txt: x 38 in a 134pt element in a 126pt slot), and a view placed by
-// its parent gets no layout pass of its own. So the placement itself is bent: on the bar, whatever
-// x Spotify sets, the view lands centered on its slot.
-static CGFloat slotCentreX(UIView *view) {
-    UIStackView *row = sg_row;
-    if (!row) return NAN;
-    UIView *slot = nil;
-    // No depth seen yet means no row centred yet: the walk goes all the way up.
-    NSUInteger steps = 0, limit = sg_slotDepth ? sg_slotDepth : NSUIntegerMax;
-    for (UIView *v = view; v.superview && steps++ <= limit; v = v.superview) if (v.superview == row) { slot = v; break; }
-    if (!slot) return NAN;
-    return [slot convertPoint:CGPointMake(CGRectGetMidX(slot.bounds), 0) toView:view.superview].x;
-}
-
-%hook SPTEncoreIconView
-- (void)setFrame:(CGRect)frame {
-    CGFloat centre = slotCentreX((UIView *)self);
-    if (!isnan(centre)) frame.origin.x = centre - frame.size.width / 2;
-    %orig(frame);
-}
-- (void)setCenter:(CGPoint)center {
-    CGFloat centre = slotCentreX((UIView *)self);
-    if (!isnan(centre)) center.x = centre;
-    %orig(center);
-}
-%end
-
-%hook SPTEncoreLabel
-- (void)setFrame:(CGRect)frame {
-    CGFloat centre = slotCentreX((UIView *)self);
-    if (!isnan(centre)) frame.origin.x = centre - frame.size.width / 2;
-    %orig(frame);
-}
-- (void)setCenter:(CGPoint)center {
-    CGFloat centre = slotCentreX((UIView *)self);
-    if (!isnan(centre)) center.x = centre;
-    %orig(center);
-}
-%end
 
 UIView *SGRNavbarLitTab(void) {
     if (tabPageShowing()) return sg_pageTab;
@@ -385,81 +303,6 @@ void SGRRefreshTabBar(void) {
     [sg_navbarRoot setNeedsLayout];
 }
 
-// What the row settled on, logged whenever it changes: `make log` then says whether the items fit,
-// what is holding their width, and in what order the bar ended up.
-void SGRLogTabBarRow(UIView *tabBar) {
-    // The row SGRComposeTabBar found in this bar on the same pass, just before.
-    UIStackView *stack = sg_row;
-    if (!stack) return;
-    // The line is written out only when a frame, an item, the stack's settings or the boxes read off them changed. shortcut: items
-    // past the 16th are not compared, raise it if a bar ever holds more.
-    struct {
-        CGRect bar, stack, icon, label;
-        NSInteger axis, distribution, alignment;
-        CGFloat spacing;
-        NSUInteger count;
-        struct { const void *item; CGRect frame; BOOL hidden; } items[16];
-    } key;
-    memset(&key, 0, sizeof key);   // padding too, for memcmp
-    key.bar = tabBar.frame;
-    key.stack = stack.frame;
-    key.icon = sg_iconBox;
-    key.label = sg_labelBox;
-    key.axis = stack.axis;
-    key.distribution = stack.distribution;
-    key.alignment = stack.alignment;
-    key.spacing = stack.spacing;
-    for (UIView *item in stack.arrangedSubviews) {
-        NSUInteger i = key.count++;
-        if (i >= 16) continue;
-        key.items[i].item = (__bridge const void *)item;
-        key.items[i].frame = item.frame;
-        key.items[i].hidden = item.hidden;
-    }
-    static typeof(key) lastKey;
-    if (!memcmp(&key, &lastKey, sizeof key)) return;
-    memcpy(&lastKey, &key, sizeof key);
-    NSMutableString *out = [NSMutableString stringWithFormat:@"row in %@ %@, icon %@ label %@, stack %@ axis %ld dist %ld align %ld spacing %.1f autolayout %d",
-                            NSStringFromClass(tabBar.class), NSStringFromCGRect(tabBar.frame),
-                            NSStringFromCGRect(sg_iconBox), NSStringFromCGRect(sg_labelBox), NSStringFromCGRect(stack.frame),
-                            (long)stack.axis, (long)stack.distribution, (long)stack.alignment, stack.spacing,
-                            !stack.translatesAutoresizingMaskIntoConstraints];
-    NSUInteger index = 0;
-    for (UIView *item in stack.arrangedSubviews) {
-        [out appendFormat:@"\n  %lu %@ %@%@ autolayout %d", (unsigned long)index++, NSStringFromClass(item.class),
-             NSStringFromCGRect(item.frame), item.hidden ? @" hidden" : @"",
-             !item.translatesAutoresizingMaskIntoConstraints];
-        for (NSLayoutConstraint *c in item.constraints) {
-            if (c.firstAttribute == NSLayoutAttributeWidth || c.secondAttribute == NSLayoutAttributeWidth) [out appendFormat:@"\n    %@", c];
-        }
-    }
-    for (NSLayoutConstraint *c in stack.constraints) [out appendFormat:@"\n  own %@", c];
-    for (NSLayoutConstraint *c in stack.superview.constraints) {
-        if (c.firstItem == stack || c.secondItem == stack) [out appendFormat:@"\n  held %@", c];
-    }
-    static NSString *last;
-    if ([out isEqualToString:last]) return;
-    last = [out copy];
-    SGLogLong(@"navbar", out);
-}
-
-// Whether Spotify reads its own item list through this ObjC bridge decides whether the bar can be
-// composed at the model level, where the order, the taps and the widths would all follow by
-// themselves, instead of by moving views about. Silence in the log says it cannot.
-%hook _TtC28NavigationUI_TabBarItemsImpl29TabBarItemsNavigationListImpl
-- (NSArray *)items {
-    NSArray *items = %orig;
-    NSMutableString *out = [NSMutableString stringWithFormat:@"list read, %lu items", (unsigned long)items.count];
-    for (id item in items) [out appendFormat:@"\n  %@ · %@", [item valueForKey:@"title"], [item valueForKey:@"viewURI"]];
-    static NSString *last;
-    if (![out isEqualToString:last]) {
-        last = [out copy];
-        SGLogLong(@"navbar", out);
-    }
-    return items;
-}
-%end
-
 %ctor {
     if (!SGRedesignedUI()) return;
     SGRFoldNavbarSplit();
@@ -467,8 +310,5 @@ void SGRLogTabBarRow(UIView *tabBar) {
     SGRequireClasses(@[
         @"SPNavigationController",
         @"SPTEncoreIcon",
-        @"SPTEncoreIconView",
-        @"SPTEncoreLabel",
-        @"_TtC28NavigationUI_TabBarItemsImpl29TabBarItemsNavigationListImpl",
     ]);
 }

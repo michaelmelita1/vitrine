@@ -307,9 +307,9 @@ Shared:
                   is on, one log line per track change (the probe) gives the current and next track's automix.* and md_*
                   metadata and the settings
     SpotifyPrefs/ Spotify's preferences object, the one Settings > Playback writes, captured as Spotify makes it at
-                  launch, for Lossless's streaming quality and AutoMix. Its user's settings read 0 until they are read
+                  launch, for AutoMix. Its user's settings read 0 until they are read
                   in, about 3 s into a launch, so SGSpotifyPreferences is nil until the playback speed (a percent, never
-                  0) is set; then what Lossless and AutoMix left to do is done
+                  0) is set; then what AutoMix left to do is done
     Sing/         Karaoke (Sing in the code and its keys), a song's vocals turned down while it plays (Sing.h lists
                   its files): the voice model Voice model chooses (spotifyglass.sing.model, read live: Best quality,
                   the default, is Mel-Band RoFormer, MIT, exported by Vitrine for the Neural Engine and palettized to
@@ -542,7 +542,7 @@ Redesigned:
                   0.6 s and 1.2 s), the Kit fetches the next track's cover ahead (SGRBridges.x), and a track found to
                   have no clip shows Fluid at once (SGRPlayerMotionNoneFor). Its settings: the Player page's one Controls
                   section (Volume, and Shuffle, Repeat and Switch to video as switches that show them, on
-                  the hide keys, with Match the lyrics button). The redesigned Spotify player once in its place is gone,
+                  the hide keys). The redesigned Spotify player once in its place is gone,
                   with its Follow the cover, Spotify's icons and Gestures rows.
                   Beside the page, what it takes from the folder: the background chosen on the Player page and
                   the page itself, led by a card of the player (PlayerSettings.m); hold either side of the cover to play
@@ -690,28 +690,6 @@ change shows after Spotify restarts; the tab editor on the Navbar page is the ex
 out again, as are Vibrations
 and Live Activity. The root page in `App/ModSettings.x` links the Appearance page and the page of each part of Spotify.
 
-## Lossless
-
-Off unless `spotifyglass.lossless` is set; there is no settings row yet. A FLAC or ALAC file in Spotify's
-Documents/Lossless folder (Files app › Spotify › Lossless) plays in place of Spotify's sound for the same recording.
-
-- **Which file:** the folder's index (`.index.plist`, track URI to file name), else a file whose title tag (or
-  name) is the track's title and whose length is within 2 s. Artists are not compared. A file goes in the index
-  once its sound matched (`SGLosslessStore.m`).
-- **Where in the file:** at each track start, seek and resume, 4 s of Spotify's output are matched against the
-  file near Spotify's position: first on a mono copy at 1/16 of the rate, then exactly on a full-rate window. A
-  normalized correlation under 0.8 is another recording or master, and Spotify's sound stays. The file plays
-  from that frame at the gain that matches Spotify's loudness (`SGLosslessEngine.m`).
-- **Playback:** a static 2^19-frame ring that a worker thread fills ahead of where Spotify plays. A block the
-  ring does not hold yet keeps Spotify's sound. The swap is in Shared/Player's source selector, before Sing.
-- **Data:** Spotify still downloads and decodes its own copy, and it downloads a song as it starts. So while
-  the next song in its queue has a file, Spotify's quality is set to low, and the user's value comes back
-  afterwards, also at the next launch (`LosslessQuality.x`).
-- **Not yet:** Karaoke and speeds other than 1 keep Spotify's sound; the first 4 s after each start, seek or
-  resume are Spotify's; a silent block drops the anchor until the next try. Sources that download files are a
-  design only: [Lossless sources](lossless-sources.md), [addons](lossless-addons.md),
-  [playback investigation](lossless-playback.md), [prototype history](lossless-prototype.md).
-
 ## Make targets
 
     make build      # out/vitrine-<version>.ipa with FLEX in it
@@ -816,7 +794,7 @@ page, opens the lock screen widget's page, titled Lock screen: Widget (the line 
 its translation in the line's place,
 and Spotify's like and dislike buttons' flag, locked off while the star is on) then Artwork (Off, Moving artwork, Lyrics,
 Every song or Moving artwork with lyrics, the lyrics' style, Still or Animated, Switch with the star, the sources and Low Data Mode; below iOS 26
-one row saying why not). Spotify's podcast, audiobook and artwork flags stay in All flags. Player: the Mini player page and Blocked artists (with the count on the row), then Landscape and Lossless; the page
+one row saying why not). Spotify's podcast, audiobook and artwork flags stay in All flags. Player: the Mini player page and Blocked artists (with the count on the row), then Landscape; the page
 leads with a card of the player (Redesigned/Player/
 PlayerSettings.m): the background chosen edge to edge, and over its foot the cover, title, artist and progress;
 for Animated while the player has no clip, the card looks the playing track's up itself while it is on screen
@@ -831,7 +809,7 @@ radius at 1.25 px a step on the 128 px cover), Saturation (0-250 %) and Brightne
 light that the luminance ceiling for the player's text, 0.07 or 0.04 with Increase Contrast, still caps); the
 card and the player follow each step at once through SGRFluidSettingsDidChangeNotification, the last three by
 blurring the cover again off the main thread, and Animated and Visualizer's Fluid with them,
-then Controls (Volume, Shuffle, Repeat, Switch to video and Match the lyrics button), with Mini player a page of its own (Apple
+then Controls (Volume, Shuffle, Repeat, and Switch to video), with Mini player a page of its own (Apple
 Music style, Swipe to skip and Buttons), checked in the simulator against harness/player/ (`settings`). Vibrations, a page of its own under either
 look opened from the main page (the row reads out which of the two are on), leads with a preview (Shared/Haptics/SGVibrationsPreview.m): rings of dots that a tap sends a crest across, out
 from the middle in the accent color, higher and further the stronger the Strength, while the first of Controls and
@@ -892,10 +870,8 @@ name under their icon, so they can be hidden but never removed, and switching th
 starts the order over. A tab of the mod's own opens its link through Spotify's link dispatcher. On the tab bar it
 lights up while the page it opened is up, and a second tap goes back to that page. The page
 (Redesigned/Navbar/NavbarSettings.m) leads
-with a preview of the bar, drawn by a system UITabBar from the list as it stands, and changing with every
-change on the page; then Custom tab
-bar (off, the bar is Spotify's own tabs in Spotify's order, the list kept); two picture cards for the labels,
-Icons and names or Icons only (the bar's names hidden, applying straight away); the tabs, each with a
+with Icons only (the bar's names hidden, applying straight away); then the tabs, which start as Spotify's own in
+Spotify's order and always apply, each with a
 check circle that shows or hides it, its glyph (TabBar.x draws Spotify's own off their items on the bar) and
 the drag handle, a tap on a tab of the mod's own opening the Add a Tab sheet as Edit Tab, with Save and Remove
 Tab; and Add a tab and Use Spotify's tabs. Spotify's own tabs keep their names and icons. Checked

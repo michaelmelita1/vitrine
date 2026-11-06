@@ -15,7 +15,7 @@ picked between (`Native/`, Spotify's own screens with the mod's tweaks on them) 
 are gone.
 
 Anything that doesn't draw on Spotify's screens is `Shared/`: ads, privacy, lyrics sources, blocked artists,
-flags, Vibrations, Speed and pitch, Sing, Lossless, AirPods gestures and the Live Activity. Some of those
+flags, Vibrations, Speed and pitch, Sing, AirPods gestures and the Live Activity. Some of those
 were the redesign's until they moved to `Shared/`, so their keys lost the `.redesign.` and `Core/SGPrefs.h`'s
 `SGMigrateKey` carries the old ones over at launch.
 
@@ -52,13 +52,6 @@ Rules:
   is on takes effect at the next launch.
 
 ## Working on it
-
-- Lossless (`Shared/Lossless/`, `SGLossless.h`; off unless `spotifyglass.lossless` is set): a local FLAC or ALAC of
-  the same recording plays in place of Spotify's sound. The anchor comes from cross-correlating 4 s of Spotify's
-  output with the file, never from Spotify's position reports, and every seek, skip, pause or route change drops it
-  (`SGSourceEvents.x`). Spotify still streams its own copy, so the switch lowers its quality only while the next song
-  has a file. Sources (providers, downloads) are a design only: `docs/lossless-sources.md`. Do not take Sing's
-  `SGPlayerSetStage` slot. After audio edits, run the handoff harness (`harness/lossless/handoff-build.sh`).
 
 - Build: `make install` (signs and pushes to the phone), `make quick` (a tweak-only change, in seconds), `make release` (IPA only). Tweak only:
   `env -u MAKELEVEL gmake -C tweak clean package`.

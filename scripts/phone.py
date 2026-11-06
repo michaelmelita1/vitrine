@@ -17,7 +17,6 @@
     scripts/phone.py speed 1.5                         # playback speed, 1 when normal
     scripts/phone.py sing 1                            # Karaoke on (0 off)
     scripts/phone.py landscape 1                       # the redesign's landscape lyrics up (0 down), no turn needed
-    scripts/phone.py lossless anchor --path P | lossless check | lossless stop   # a local FLAC in place of Spotify's sound
     scripts/phone.py tab 0 | tab Search
     scripts/phone.py settings.open
     scripts/phone.py settings.page "Appearance"
@@ -74,7 +73,7 @@ def token():
         sys.exit(f"no PHONE_TOKEN and no token in {LOG}: run once over the cable, or read it from the app's log")
     return found[-1]
 # The argument a command takes without a flag.
-POSITIONAL = {"type": "text", "menu.pick": "title", "seek": "seconds", "speed": "arg", "sing": "arg", "lossless": "arg", "tab": "arg", "settings.page": "title"}
+POSITIONAL = {"type": "text", "menu.pick": "title", "seek": "seconds", "speed": "arg", "sing": "arg", "tab": "arg", "settings.page": "title"}
 
 
 def port_open():

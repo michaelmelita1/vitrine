@@ -83,7 +83,7 @@ static SGProblem appChanges(void) {
 static SGProblem lookNeedsIOS26(void) {
     return @[@"Vitrine's look needs iOS 26",
              [NSString stringWithFormat:@"The redesign is built on iOS 26's Liquid Glass, so on iOS %@ Spotify keeps its own look. "
-                 @"What does not draw on Spotify's screens still works: ads and privacy, lyrics sources, Karaoke, Lossless, "
+                 @"What does not draw on Spotify's screens still works: ads and privacy, lyrics sources, Karaoke, "
                  @"AirPods gestures, the Live Activity and the rest of Mod Settings.", UIDevice.currentDevice.systemVersion]];
 }
 

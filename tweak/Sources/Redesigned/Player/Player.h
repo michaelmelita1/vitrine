@@ -17,7 +17,7 @@
 //     PlayerMotion.x           Animated artwork: the Canvas or Apple Music's animated cover, looked up for the page
 //     PlayerVisualiser.m       the Visualizer background: a calm spectrum of the song in the cover's colors, read
 //                              through SGRSpectrum.m from the audio effects' tap on Spotify's output
-//     PlayerMenu.m             the ⋯'s Speed, Pitch & Reverb, Artwork and Lyrics Source
+//     PlayerMenu.m             the ⋯'s Artwork submenu
 //     PlayerSettings.m         the Player page in Mod Settings, led by a showcase of the player
 //
 // Threading: main thread only.
@@ -103,9 +103,6 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more);
 
 #pragma mark - the ⋯ menu (PlayerMenu.m)
 
-// The player's own items that need nothing of Spotify's player: Speed, Pitch & Reverb and Lyrics Source, their popovers
-// coming from `anchor`, built afresh each call.
-NSArray<UIMenuElement *> *SGRPlayerMenuPageItems(UIView *anchor, void (^changed)(void));
 // The backgrounds the ⋯ switches between at once (Fluid, Animated, Visualizer) as one submenu, the one shown checked and
 // named under it; nil while the background is not one of them. `changed` runs after a switch.
 UIMenu *SGRPlayerMenuArtwork(void (^changed)(void));

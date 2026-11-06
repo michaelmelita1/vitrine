@@ -1355,6 +1355,7 @@ typedef struct {
     NSArray<SGKaraokeLine *> *_translating;   // the lines a translator is translating, nil while it is not
     SGRSingButton *_sing;   // across from _extras
     CGFloat _builtWidth, _placedHeight;
+    CGFloat _placedScreenTop;   // where the view's top was on screen at the last layout, NAN before one
     BOOL _showing;
     CAGradientLayer *_fade;
     SGRCreditLabel *_credit;
@@ -1380,6 +1381,7 @@ typedef struct {
     self = [super initWithFrame:frame];
     if (!self) return nil;
     self.hidden = YES;
+    _placedScreenTop = NAN;
     _focus = _openBreak = -1;
     _margin = kMargin;
     [self takeLook];
@@ -1775,9 +1777,16 @@ typedef struct {
         SGRShowGlass(SGRGlassInside(_extrasBox, &kExtrasGlassKey, kExtrasSide), !_extrasHidden);
     }
     [self clearBottomRow];
+    // While the lines are scrolled by hand, the page's controls going or coming back move this view on screen (the lines
+    // alone and back): the anchor moves the other way by as much, so the lines stay under the finger rather than jump
+    // with the view (its owner, 2026-11-06: "the lyrics move up and down when hiding and unhiding").
+    CGFloat screenTop = self.window ? [self convertPoint:CGPointZero toView:nil].y : NAN;
+    BOOL moved = _browsing && !isnan(screenTop) && !isnan(_placedScreenTop) && fabs(screenTop - _placedScreenTop) > 0.5;
+    if (moved) _browseAnchor -= screenTop - _placedScreenTop;
+    _placedScreenTop = screenTop;
     if (_lines && self.bounds.size.width != _builtWidth) {
         [self rebuild];
-    } else if (_tops && self.bounds.size.height != _placedHeight) {
+    } else if (_tops && (self.bounds.size.height != _placedHeight || moved)) {
         // A new height moves the anchor (the player's lines going alone and back): the stack is placed for it
         // here, inside whatever animation resized the page, so the sung line rides along with it rather than
         // springing to the new anchor at the next line, and the band the height opens is filled in.

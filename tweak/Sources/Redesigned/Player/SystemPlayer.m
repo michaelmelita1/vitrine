@@ -23,8 +23,8 @@
 // and its thirteen more arguments) need a factory nothing of the mod's holds, spotify:context-menu is a URI kind with
 // fixed subpages (audio settings, DJ feedback...) rather than a menu for a track, and the now playing bar has no menu.
 // So the ⋯ opens a system menu of what is proven without Spotify's player: Liked Songs (the collection platform, as the
-// add button), share, the album and the artist, then the player's own Speed, Pitch & Reverb and Lyrics Source
-// (Player.h's SGRPlayerMenuPageItems). Spotify's own rows (add to playlist, the queue, radio...) are not in it.
+// add button), share, the album and the artist, the player's own Artwork and Sleep Timer, and the artist's concerts.
+// Spotify's own rows (add to playlist, the queue, radio...) are not in it.
 //
 // While the lines play, the rest of the page gives way to them as the redesigned Spotify player once had them do (its
 // owner, 2026-11-01): a scroll on through the lines, or kRest without a touch while the song plays, fades the
@@ -1783,6 +1783,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGFloat stageTop = CGRectGetMaxY(thumb) + 8;
     CGRect stage = CGRectMake(0, stageTop, width, MAX(0, scrubberY - 8 - stageTop));
     _stage.frame = _alone ? [self aloneStageFrom:stage] : stage;
+    // Laid out again when only the stage moved, so a scroll by hand keeps its lines where they are (SGRKaraokeView.m).
+    [_lines setNeedsLayout];
     _lyricsNote.frame = CGRectInset(_stage.bounds, kMargin, 0);
     _lyricsSpinner.frame = _stage.bounds;
     // While a track is moved the queue runs down to the foot of the screen, the controls away (setQueueDragging:).
@@ -1885,7 +1887,8 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     return [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:children];
 }
 
-// The ⋯: Share, Go to Album and Go to Artist in the row at the top; the Artwork submenu and the sleep timer; then More, with Speed, Pitch & Reverb, Lyrics Source and the artist's concerts (its owner, 2026-11-06). Before (its
+// The ⋯: Share, Go to Album and Go to Artist in the row at the top; the Artwork submenu and the sleep timer; then the
+// artist's concerts (its owner, 2026-11-06). Before (its
 // owner's screenshots and picks, 2026-11-02). Spotify's player is not behind the page, so its sheet's rows are not
 // read here. Add to Playlist, Add to Queue, Start a Jam, SongDNA and Song credits come from that sheet alone: its links
 // are refused and its mini player has no menu to read (the phone's log, 2026-11-02), so they are left out for now.
@@ -1947,15 +1950,13 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [own addObject:[self sleepTimerMenu]];
     [menu addObject:inlineGroup(own)];
 
-    // More: Speed, Pitch & Reverb and Lyrics Source (the player's page items), then the artist's concerts.
-    NSMutableArray<UIMenuElement *> *more = [SGRPlayerMenuPageItems(anchor, changed) mutableCopy];
+    // The artist's concerts, in the menu itself (its owner, 2026-11-06: no More submenu).
     if (artist) {
         // Spotify's concerts page of an artist ("spotify:artist:%s%cconcerts" in the 9.1.90 binary).
         NSString *concerts = [artistURI stringByAppendingString:@":concerts"];
-        [more addObject:[UIAction actionWithTitle:@"Go to Artist Concerts" image:[UIImage systemImageNamed:@"ticket"] identifier:nil
-                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:concerts landscape:landscape]; }]];
+        [menu addObject:inlineGroup(@[[UIAction actionWithTitle:@"Go to Artist Concerts" image:[UIImage systemImageNamed:@"ticket"] identifier:nil
+                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:concerts landscape:landscape]; }]])];
     }
-    if (more.count) [menu addObject:[UIMenu menuWithTitle:@"More" image:[UIImage systemImageNamed:@"ellipsis.circle"] identifier:nil options:0 children:more]];
     return menu;
 }
 

@@ -692,6 +692,8 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     }
     _stage.frame = CGRectMake(left - 24, linesTop, width + 48, linesBottom - linesTop);
     _lyrics.frame = _stage.bounds;
+    // Laid out again when only the column moved, so a scroll by hand keeps its lines where they are (SGRKaraokeView.m).
+    [_lyrics setNeedsLayout];
     // The queue runs down behind the foot to the screen's, its last track resting just above the foot (the portrait
     // page's way), so a lift that puts the foot away resizes nothing and the list never jumps.
     // It starts at the head's top, the head's room above its chips, which its scroll pushes up into as the Music app's

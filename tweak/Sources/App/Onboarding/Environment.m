@@ -178,11 +178,10 @@ static NSString *state(void) {
 
 static void whenClear(NSInteger tries, void (^then)(void)) {
     UIViewController *top = SGTopController();
-    // The tour, What's new and the signing sheet own the screen first; an alert presented from one of
-    // them lands nowhere, so this one waits its turn. It also waits for the app to be in front, so it is
+    // The signing sheet owns the screen first; an alert presented from it lands nowhere, so this one waits its turn. It also waits for the app to be in front, so it is
     // not shown, and counted as told, to someone who sent Spotify away in its first seconds.
     BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
-    if (!front || !top || SGOnboardingShowing() || [top isKindOfClass:UIAlertController.class]) {
+    if (!front || !top || [top isKindOfClass:UIAlertController.class]) {
         if (tries <= 0) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kRetry * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             whenClear(tries - 1, then);

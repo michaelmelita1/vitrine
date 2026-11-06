@@ -270,7 +270,7 @@ SGModRow *SGLinkRow(NSString *title, NSString *subtitle, NSString *url) {
     return SGActionRow(title, subtitle, ^{ SGOpenURL(url); });
 }
 
-// A value on the right and a tap: the Updates row reads its status out of About/Update.m every tick,
+// A value on the right and a tap: the row reads its value again every tick,
 // and a tap asks the site again instead of waiting for the six hour cache to lapse.
 SGModRow *SGStatActionRow(NSString *title, NSString *subtitle, NSString *(^value)(void), void (^action)(void)) {
     SGModRow *row = [SGModRow new];

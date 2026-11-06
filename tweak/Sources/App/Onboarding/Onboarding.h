@@ -1,26 +1,5 @@
-// Onboarding: a welcome page over Home the first time this build runs, in glass: Vitrine's logo landing,
-// then what the look is (or, below iOS 26, that it needs 26), a No ads switch that
-// turns Hide ads, Hide upsells and Spoof Premium on together (off leaves them alone), pointers to what people
-// miss in Mod Settings (Lyrics), and a line on holding
-// Home for Mod Settings. Those switches are read at launch, so turning them on ends the welcome in a restart. After an update instead, a What's new sheet lists what the version brought. The Mod page
-// offers both again.
+// The install's environment (Environment.m) and the Spotify versions Vitrine knows.
 #import <UIKit/UIKit.h>
-
-#define SGKeyOnboardingSeen @"spotifyglass.onboarding.seen"
-// The version whose What's new was last shown, or skipped because the tour came first.
-#define SGKeyWhatsNewSeen @"spotifyglass.whatsnew.seen"
-
-// Presents the tour over the top of the app; does nothing while it is already up.
-void SGShowOnboarding(void);
-// The tour or What's new holds the screen; other sheets wait for it (App/About).
-BOOL SGOnboardingShowing(void);
-
-// WhatsNew.m: this build's section of CHANGELOG.md, read through App/About/Update.m's parser; empty for a
-// build with no section of its own, which then has no sheet and no row.
-@class SGUpdateChange;
-NSArray<SGUpdateChange *> *SGWhatsNewChanges(void);
-void SGShowWhatsNew(void);
-BOOL SGWhatsNewShowing(void);
 
 // Environment.m: what about the install can work against the mod. Said once per install state, a few
 // seconds after Spotify comes up and behind the tour, What's new and the signing sheet, and kept as
@@ -37,6 +16,3 @@ BOOL SGWhatsNewShowing(void);
 NSString *SGSpotifyVersion(void);
 NSArray<SGModRow *> *SGEnvironmentWarningRows(void);
 void SGCheckEnvironmentOnce(void);
-
-// The tour's prominent glass button, also What's new's Continue.
-UIButton *SGOnboardingButton(NSString *title);

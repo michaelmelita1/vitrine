@@ -51,8 +51,7 @@ static SGModRow *withSymbol(SGModRow *row, NSString *symbol) {
     return row;
 }
 
-// Which build this is, whether GitHub has a newer release, and where to reach the mod: without these
-// rows a build that is already installed has no way of telling its user that anything moved on.
+// Which build this is and where the mod lives.
 UIViewController *SGAboutPage(void) {
     SGModRow *reset = withSymbol(SGActionRow(@"Reset all settings", nil, ^{ confirmReset(); }), @"trash");
     reset.color = SGRed();
@@ -61,22 +60,12 @@ UIViewController *SGAboutPage(void) {
     NSString *spotify = SGSpotifyVersion();
     if ([SGSpotifyLikelyWorksVersions containsObject:spotify]) spotify = [spotify stringByAppendingString:@", likely works"];
     else if (![SGSpotifySupportedVersions containsObject:spotify]) spotify = [NSString stringWithFormat:@"%@, made for %@", spotify, SGSpotifyMadeFor];
-    // The row reads out where the build stands and opens the changelog of everything newer than it.
-    SGModRow *updates = SGPageRow(@"Updates", ^UIViewController *{ return SGUpdatePage(); });
-    updates.value = ^NSString *{ return SGUpdateStatus(); };
-    // A release build can opt into betas; a beta build starts opted in. Either way a check follows at
-    // once, since the stored list only holds what counted at the last one.
-    SGModRow *betas = SGSwitchRow(@"Include betas", @"Offer test builds ahead of each release", SGKeyUpdateBetas);
-    betas.defaultOn = SGBuildIsBeta();
-    betas.changed = ^(BOOL on) { SGCheckForUpdate(YES); };
     NSMutableArray<SGModRow *> *links = [NSMutableArray array];
     if (SGRepoURL) [links addObject:withSymbol(SGLinkRow(@"GitHub", nil, SGRepoURL), @"chevron.left.forwardslash.chevron.right")];
     [links addObjectsFromArray:@[
         withSymbol(SGPageRow(@"Licenses", ^UIViewController *{ return SGLicensesPage(); }), @"doc.text"),
-        withSymbol(SGActionRow(@"Welcome tour", nil, ^{ SGShowOnboarding(); }), @"map"),
     ]];
-    if (SGWhatsNewChanges().count) [links insertObject:withSymbol(SGActionRow(@"What's New", nil, ^{ SGShowWhatsNew(); }), @"sparkles") atIndex:links.count - 1];
-    NSMutableArray<SGModRow *> *build = [NSMutableArray arrayWithObjects:updates, betas,
+    NSMutableArray<SGModRow *> *build = [NSMutableArray arrayWithObjects:
         SGStatRow(@"Version", ^NSString *{ return SGVersionWithBuild(); }),
         SGStatRow(@"Spotify", ^NSString *{ return spotify; }), nil];
     SGModRow *signedUntil = SGSigningExpiryRow();

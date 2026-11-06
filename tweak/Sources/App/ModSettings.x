@@ -41,8 +41,6 @@ static SGModRow *pageRow(NSString *title, NSString *symbol, UIColor *color, UIVi
 }
 
 static UIViewController *modSettingsPage(void) {
-    // Opening the page is the only thing that asks; the cache keeps it to once every six hours.
-    SGCheckForUpdate(NO);
     NSMutableArray<SGModSection *> *sections = [NSMutableArray array];
     // A build the lock screen cannot open leads the page, above the tweaks: it is the one thing here
     // that no switch can put right, and it is worth reading before anything else.
@@ -297,5 +295,4 @@ static void attachDrawerRow(UICollectionView *list) {
     SGRequireClasses(@[@"_TtC21Settings_PlatformImpl26SettingsListViewController", @"_TtC23SideDrawer_ListPageImpl18ListViewController"]);
     SGRegisterPages();
     SGCheckSigningOnce();
-    SGWatchForUpdates();
 }

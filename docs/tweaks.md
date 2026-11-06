@@ -15,7 +15,7 @@
     tweak/Sources/Shared/       what draws on no Spotify screen, on any iOS, see Layers below
     tweak/Sources/Redesigned/   the redesign, the one look, running on iOS 26 and later
     tweak/Sources/App/          what brings the layers together: Mod Settings' root and composed pages, the Mod page,
-                                backup and signing, the welcome tour
+                                backup and signing
     tweak/Sources/Diagnostics/  screen dumps, the tree server, the phone driver and the main thread hang sampler of FLEX builds
     extension/AppGroups/        a dylib loaded by Spotify and its widget, Siri and notification extensions that moves
                                 Spotify's App Groups and its extension-credentials keychain group into groups the
@@ -603,22 +603,9 @@ App:
 
     ModSettings.x  the root page and the rows that open it from Spotify's settings and the side drawer
     Pages.m        the Appearance, Player and Lyrics pages, and the Tab bar page
-    About/         the update check against the repo's GitHub Releases, the Updates page it fills (the state, and
-                   the changelog of every release newer than the build, a line per commit), betas counted only
-                   while Mod > Include betas is on (unset, on for a beta build), and the sheet a newer
-                   release brings up on its own a few seconds after Spotify opens, once per release; backup, the
-                   signing warning, the date the provisioning profile runs out (on the Mod page, and at the top of
-                   Mod Settings for a free Apple ID's week) and the Mod page with the reset
-    Onboarding/    the welcome page over Home on the first launch, opening on the logo in glass, with a line on the look
-                   (below iOS 26, that it needs 26) and a No ads switch that sets Hide ads, Hide upsells and Spoof Premium
-                   together (off leaves each as it is; on ends the tour in a restart, as all are read at launch), and under "Easy to miss"
-                   a card of pointers, each what it is and where in Mod Settings:
-                   Lyrics (sources, lyrics for every track, the live preview) and AirPods
-                   gestures with the Live Activity (iOS 17 on);
-                   on the first launch of a new version instead, What's new (WhatsNew.m), this version's section of
-                   CHANGELOG.md, which scripts/whats-new.sh writes into a gitignored header at each make (a section
-                   that came over from upstream is left out, so a build without its own has no sheet). The Mod
-                   page offers both again. Environment.m says once per install state, a few seconds in, when
+    About/         backup, the signing warning, the date the provisioning profile runs out (on the Mod page, and at
+                   the top of Mod Settings for a free Apple ID's week) and the Mod page with the reset
+    Onboarding/    Environment.m says once per install state, a few seconds in, when
                    EeveeSpotify is injected too (a dyld image named so, or its settings page's Swift class) or Spotify is not the version the mod is
                    supports (SGSpotifySupportedVersions in Onboarding.h: 9.1.78, which it is made for, 9.1.88 and 9.1.90) or likely works on (SGSpotifyLikelyWorksVersions, empty now), and when a redesign below iOS 26 did not start, and when the install lacks the app
                    changes the IPA build makes, as with a .deb injected by hand: Spotify's own glass opt-out set (9.1.88's
@@ -793,11 +780,8 @@ applying as it changes; the row reads out Off, On or how many effects are on. Th
 an Ad and upsell flags page under them, every switch there forcing a flag Spotify ships on to off;
 Spoof Premium; Block telemetry; Clean shared links; then what the ad
 blocking and the telemetry blocking have stopped). Last, All flags, Spotify's remote-config flags with a search field and an
-Auto / Off / On control per flag (a text field for the number and text ones), and Mod: Updates
-(the row reads out where the build stands and opens the changelog of everything newer than it, read
-from the releases Release Please cuts, with Check now, the release to get, all the releases and Tell
-me when one is out, the sheet a newer release brings up a few seconds after Spotify opens), the
-build and Spotify's version, the site and the repo, What's New and the welcome tour again, Clear Keychain and Reset all
+Auto / Off / On control per flag (a text field for the number and text ones), and Mod: the
+build and Spotify's version, the repo, Clear Keychain and Reset all
 settings. A flag switch on a page forces that one flag and off leaves Spotify's own value, so the All
 flags page is where a flag goes back to Auto. Spotify ships its newer design behind several flags at
 once, and the redesign is built on it (the glass navigation bar, the new player slider, the sheet style

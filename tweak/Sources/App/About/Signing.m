@@ -14,7 +14,6 @@
 
 
 static NSString *const kWarned = @"spotifyglass.signing.warned";
-static BOOL sg_fixPending;
 
 // SecTaskCopyValueForEntitlement is not in the iOS SDK, so it is resolved at runtime like the rest
 // of the private API the mod uses. A build that cannot read its own entitlement stays quiet.
@@ -102,9 +101,7 @@ void SGCheckSigningOnce(void) {
                                                                   usingBlock:^(NSNotification *note) {
         [NSNotificationCenter.defaultCenter removeObserver:token];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // The welcome tour has the screen; it shows the fix when it goes.
-            if (SGOnboardingShowing()) sg_fixPending = YES;
-            else showFix();
+            showFix();
         });
     }];
 }
@@ -165,8 +162,3 @@ SGModRow *SGSigningExpiryRow(void) {
     return row;
 }
 
-void SGShowSigningFixIfPending(void) {
-    if (!sg_fixPending) return;
-    sg_fixPending = NO;
-    showFix();
-}

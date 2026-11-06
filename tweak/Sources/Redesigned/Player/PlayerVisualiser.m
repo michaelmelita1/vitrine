@@ -194,6 +194,7 @@ static UIColor *lit(UIColor *color, CGFloat luminance) {
 }
 
 - (void)dealloc {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(updateMotion) object:nil];
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [_link invalidate];
     if (_reading) needReader(NO);

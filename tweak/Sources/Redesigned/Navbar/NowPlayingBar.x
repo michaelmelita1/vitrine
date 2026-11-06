@@ -8,7 +8,7 @@
 // The same bar class also stands at the top of Spotify's sheets (the DJ request one: Up next, device, play). That one is
 // not the tab bar's and must not become the bar this file tracks.
 #import "Core/SGCore.h"
-#import "NowPlayingBar.h"
+#import "Navbar.h"
 
 // The artwork on the bar: a 36 to 48 pt square with rounded corners that is not a button, outside Spotify's Jam strip
 // (a "Jam by ..." hosting view of Jam_AttachmentsImpl over the track, whose faces are such squares too).

@@ -1,6 +1,17 @@
-// The redesign's navbar: the system tab bar (SystemTabs.x) over Spotify's own, which it mirrors (TabBar.x), composed
-// from its own list (Navbar.x, NavbarLayout.m): an ordered list of
-// entries, each a dictionary. An entry with a URI is a tab of the mod's own; one without names
+// The redesign's tab bar and mini player: iOS's own tab bar over Spotify's, which it mirrors, with the mod's mini player
+// in it. The player page the mini player opens is Redesigned/Player/ (SystemPlayer.h).
+//
+//     SystemTabs.x         the UITabBarController over Spotify's tab area, the mini player as its bottomAccessory, and
+//                          sheets presented from under the player page sent over it
+//     TabBar.x             Spotify's own bar, unseen, read for its tabs at each of its passes
+//     Navbar.x             the tabs composed from the redesign's own list, Spotify's and the mod's own
+//     NavbarLayout.m       that list as stored
+//     NavbarSettings.m     the Tab bar page: the tab editor
+//     TabBarMinimize.x     the bar minimized and brought back by a page's scroll (MinimizeStep.h's rule)
+//     NowPlayingBar.x      Spotify's now playing bar, unseen, the source of the cover
+//     MiniPlayerSettings.m the Mini player page
+//
+// The list is ordered entries, each a dictionary. An entry with a URI is a tab of the mod's own; one without names
 // one of Spotify's, by the label under its icon. No list at all is Spotify's order, all shown.
 #import <UIKit/UIKit.h>
 
@@ -73,6 +84,15 @@ NSArray<NSString *> *SGRMiniPlayerButtons(void);
 void SGRSetMiniPlayerButtons(NSArray<NSString *> *keys);
 // Lays the system tab bar's mini player out again, for a setting of the Mini player page that changed; nothing without it.
 void SGRRefreshMiniPlayer(void);
+// The mini player's settings, a page of the redesign's Player page (App/Pages.m): Apple Music style, Swipe to skip and
+// the buttons beside play (MiniPlayerSettings.m).
+UIViewController *SGRMiniPlayerSettingsPage(void);
+
+// Spotify's now playing bar, kept unseen under the mini player (NowPlayingBar.x): the cover it shows, for the mini player
+// and the player page, nil before it has one; and the bar as last seen, which SystemTabs.x stands its tab bar above and in
+// which the player page finds Spotify's Connect holder.
+UIImage *SGRNowPlayingCover(void);
+extern __weak UIView *sgr_nowPlayingRoot;
 // TabBar.x hands it Spotify's tab items and the one on screen at each of Spotify's bar passes.
 void SGRSystemTabsSync(UIViewController *container, UIView *stockBar, NSArray<UIView *> *sources, UIView *active);
 // TabBarMinimize.x hands it the page's scroll view as it scrolls, for UIKit's minimize on scroll.

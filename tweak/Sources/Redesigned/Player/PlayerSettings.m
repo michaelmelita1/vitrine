@@ -1,5 +1,5 @@
 // The redesign's Player page in Mod Settings (App/Pages.m opens it in place of the native look's), for the player
-// page (Redesigned/Navbar/SystemPlayer.m).
+// page (SystemPlayer.m).
 //
 // It leads with a card of the player as the now playing track shows on it: the background chosen on the
 // page edge to edge, and over its foot the cover, the title and the artist (gliding when too long) and how

@@ -3,7 +3,7 @@
 // closed by the zoom every time. So the player is drawn here from the player's state, the Music app's layout from top
 // to bottom: the cover blurred behind everything, a close button, the cover, the title and artist, the progress, the
 // controls, the volume and a row of lyrics, AirPlay and the queue. The queue and Spotify's Connect sheet open over the
-// page, which stays: Spotify presents them from its own controllers under the page, and SystemTabs.x sends those
+// page, which stays: Spotify presents them from its own controllers under the page, and Navbar/SystemTabs.x sends those
 // presentations to the page instead (its owner, 2026-11-01; closing the page first left Connect opening nothing).
 //
 // The lyrics glyph trades the cover for the redesign's Apple Music style lines (Redesigned/Lyrics/SGRKaraokeView.h), as
@@ -55,8 +55,8 @@
 #import "Redesigned/Artist/Artist.h"
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
 #import "Redesigned/Lyrics/SGRSingButton.h"
-#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
-#import "Redesigned/Player/Player.h"
+#import "Redesigned/Navbar/Navbar.h"
+#import "Player.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Shared/Navigation/Links.h"
@@ -149,10 +149,10 @@ static const CGFloat kHeaderSide = 16, kHeaderDrop = 2, kSkipShare = 0.25, kSkip
 static const double kEpisodeSkip = 15;
 // With the volume row off, the controls' middle above the bottom row's: they close up into its room.
 static const CGFloat kControlsAboveRowAlone = 72;
-// The title's swipe pages to the track before or after as the mini player's does (SystemTabs.x's kSwipeDistance,
+// The title's swipe pages to the track before or after as the mini player's does (Navbar/SystemTabs.x's kSwipeDistance,
 // kSwipeSpeed and kPageGap): far enough as a share of the text's width, or fast enough, and the gap between pages.
 static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitlePageGap = 24;
-// The soft edge at each side of the title's column, the mini player's (SystemTabs.x's kTextFade).
+// The soft edge at each side of the title's column, the mini player's (Navbar/SystemTabs.x's kTextFade).
 static const CGFloat kTitleFade = 14;
 // The lines on their own: the controls fade after this long without a touch, and the lines keep this far from the safe
 // area's ends (PlayerLyrics.x's kRest and kLyricsBottom).
@@ -938,7 +938,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 // player's footer's: the tap recognizer on Spotify's Connect holder is sent the tap a finger would have
 // made, as Spotify opens its sheet from that recognizer rather than from its button's actions (the phone's log,
 // 2026-10-30). The page has no Spotify footer, so that holder is the now playing bar's, which under the system tab bar
-// is at alpha 0 and takes no touches (NowPlayingBar.x), and can be missing altogether: the bar tucks its Connect item
+// is at alpha 0 and takes no touches (Navbar/NowPlayingBar.x), and can be missing altogether: the bar tucks its Connect item
 // away (hidden) when it goes to the tab bar's row, and has none while Spotify shows no device button. A hold on the
 // AirPlay glyph did not open Connect on the phone (its owner, 2026-11-01), which is why the link comes first now and
 // each way says in the log why it was or was not taken. `how` says which way was taken, or why none was.
@@ -1290,7 +1290,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // own marquee there; the mod's SGMarqueeLabel, the Music app's timing, here). The two sit in one
     // block that a sideways swipe pages through the tracks (titleSwiped:), with the track coming in beside them.
     _titleBlock = [UIView new];
-    // Cut at the column's sides through a soft edge, as the mini player's lines are (SystemTabs.x's kTextFade): the block
+    // Cut at the column's sides through a soft edge, as the mini player's lines are (Navbar/SystemTabs.x's kTextFade): the block
     // reaches kTitleFade past the text on either side, so at rest the fade lies over nothing.
     _titleBlock.clipsToBounds = YES;
     _titleFade = [CAGradientLayer layer];
@@ -1396,7 +1396,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _lyrics.enabled = NO;
     _lyrics.onTap = ^{ [weakSelf toggleLyrics]; };
     _route = [[SGRSystemRouteButton alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
-    // Spotify's sheet goes up over the page (SystemTabs.x sends a presentation from under the page to the page), so the
+    // Spotify's sheet goes up over the page (Navbar/SystemTabs.x sends a presentation from under the page to the page), so the
     // page stays where it is.
     _route.onHold = ^{
         NSString *how = nil;
@@ -1614,7 +1614,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // A swipe close let go back ends the close too: a tap on the mini player waiting on it (SystemTabs.x's opened) is let
+    // A swipe close let go back ends the close too: a tap on the mini player waiting on it (Navbar/SystemTabs.x's opened) is let
     // go, rather than left waiting to open the page at the next close.
     [self.transitionCoordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         if (context.isCancelled) [NSNotificationCenter.defaultCenter postNotificationName:SGRSystemPlayerPageDidCloseNotification object:nil];
@@ -1649,14 +1649,14 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
-    // The close is over: a tap on the mini player during it opens the page now (SystemTabs.x's opened). A turn later, so
+    // The close is over: a tap on the mini player during it opens the page now (Navbar/SystemTabs.x's opened). A turn later, so
     // UIKit has finished with this presentation.
     dispatch_async(dispatch_get_main_queue(), ^{
         [NSNotificationCenter.defaultCenter postNotificationName:SGRSystemPlayerPageDidCloseNotification object:nil];
     });
     [_timer invalidate];
     _timer = nil;
-    // The page goes only by closing (a new one is made for each open: SystemTabs.x), so this is where it was left.
+    // The page goes only by closing (a new one is made for each open: Navbar/SystemTabs.x), so this is where it was left.
     sgr_lyricsLeftOpen = _lyricsOpen;
 }
 
@@ -2815,7 +2815,7 @@ void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
 }
 
 // The title's swipe is sideways only: a drag that starts more down than across is never its, so UIKit's swipe close
-// takes it, as the mini player's swipe leaves its taps (SystemTabs.x's gestureRecognizerShouldBegin:).
+// takes it, as the mini player's swipe leaves its taps (Navbar/SystemTabs.x's gestureRecognizerShouldBegin:).
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
     if (recognizer.view != _titleBlock || ![recognizer isKindOfClass:UIPanGestureRecognizer.class]) return YES;
     CGPoint velocity = [(UIPanGestureRecognizer *)recognizer velocityInView:_titleBlock];
@@ -2832,7 +2832,7 @@ void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
 }
 
 // Moved sideways the title and artist go with the finger and the next or previous track's come in beside them, as the
-// mini player's lines do (SystemTabs.x's swiped:): far or fast enough it settles on that track and skips to it, short of
+// mini player's lines do (Navbar/SystemTabs.x's swiped:): far or fast enough it settles on that track and skips to it, short of
 // that it springs back. Left is the next track, right the one before, episodes the same.
 - (void)titleSwiped:(UIPanGestureRecognizer *)swipe {
     CGFloat step = _titleBlock.bounds.size.width - 2 * kTitleFade + kTitlePageGap, x = [swipe translationInView:_titleBlock].x;

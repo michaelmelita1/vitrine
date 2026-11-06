@@ -1,11 +1,11 @@
-// Whether the playing track has lyrics for the player page (Redesigned/Navbar/SystemPlayer.m, SystemLandscape.m), and
+// Whether the playing track has lyrics for the player page (SystemPlayer.m, SystemLandscape.m), and
 // the Lyrics page's choice of what fades while they play alone. The landscape player is told as the lines come in and
 // as a track's grace ends without them (SGRSystemTurnLinesChanged): it has no timer of its own to look again by.
 #import "Core/SGCore.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
 #import "Player.h"
-#import "Redesigned/Navbar/SystemPlayer.h"
+#import "SystemPlayer.h"
 
 // A track that changes while the lines are up has this long to bring its own before it counts as having none. A
 // look for them still running then is waited out, since a local file's sources are asked one after another, up to

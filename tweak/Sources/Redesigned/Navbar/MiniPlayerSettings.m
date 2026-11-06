@@ -2,8 +2,7 @@
 #import "Settings/SGSourcesPage.h"
 #import "Core/SGCore.h"
 #import "Settings/SGModPage.h"
-#import "Redesigned/Navbar/Navbar.h"
-#import "NowPlayingBar.h"
+#import "Navbar.h"
 
 // The mini player (Redesigned/Navbar/SystemTabs.x): Apple Music style (the tab bar minimizes as a page scrolls), the
 // swipe, and the buttons beside play, each on a key of its own.

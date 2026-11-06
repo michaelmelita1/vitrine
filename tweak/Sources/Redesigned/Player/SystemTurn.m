@@ -13,7 +13,7 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Redesigned/Player/Player.h"
+#import "Player.h"
 #import "SystemPlayer.h"
 
 static __weak UIViewController<SGRSystemTurnPage> *sg_page;

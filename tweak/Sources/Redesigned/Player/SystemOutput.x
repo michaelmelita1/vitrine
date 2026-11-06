@@ -7,7 +7,7 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Navbar.h"
+#import "Redesigned/Navbar/Navbar.h"
 #import "SystemPlayer.h"
 
 static NSString *const kConnectSymbol = @"airplayaudio";

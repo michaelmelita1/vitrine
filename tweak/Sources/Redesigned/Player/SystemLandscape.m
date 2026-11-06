@@ -15,7 +15,7 @@
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
-#import "Redesigned/Player/Player.h"
+#import "Player.h"
 #import "Redesigned/Artist/Artist.h"
 #import "SystemPlayer.h"
 #import "SystemQueue.h"
@@ -26,7 +26,7 @@
 
 static const CGFloat kControlSide = 44;
 static const NSTimeInterval kLandscapeRest = 4;
-// The portrait page's foot turned sideways (Redesigned/Navbar/SystemMotion.m; its owner, 2026-11-06): past the clip's
+// The portrait page's foot turned sideways (SystemMotion.m; its owner, 2026-11-06): past the clip's
 // trailing edge it goes on mirrored and stretched kClipStretch times across the rest of the screen (its owner's pick,
 // 2026-11-06), and one variable blur, at the foot's radius, starts at nothing on the mirror line, so the line never shows, and grows slowly over the
 // reflection (kSideBlur). Before a tall clip's leading edge its mirror is lightly blurred, as the portrait band is. The column is dimmed for its text from kBlurFrom (a share of the clip's width), and the field behind a cover.

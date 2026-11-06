@@ -10,16 +10,15 @@
 // - its minimize follows the page Spotify shows: each page's content scroll view is set to the scroll view the page is
 //   scrolling (TabBarMinimize.x hands it over);
 // - its accessory is a mini player of the mod's (SGRSystemMiniPlayer), from the player's state and the cover on
-//   Spotify's own bar, which stays unseen; a tap on it brings up the mod's own player (SystemPlayer.m) with UIKit's zoom.
+//   Spotify's own bar, which stays unseen; a tap on it brings up the mod's own player (Player/SystemPlayer.m) with UIKit's zoom.
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
-#import "Shared/Player/PlayerState.h"
 #import "Navbar.h"
-#import "SystemPlayer.h"
-#import "SystemPlayerTransition.h"
+#import "Shared/Player/PlayerState.h"
+#import "Redesigned/Player/SystemPlayer.h"
+#import "Redesigned/Player/SystemPlayerTransition.h"
 #import "Settings/SGPage.h"
 #import "Redesigned/Artist/Artist.h"
 
@@ -276,7 +275,7 @@ static const CGFloat kDeviceRoom = 80;
 
 - (void)show:(SPTPlayerState *)state {
     // A moment with no track between two (a new playlist loading) is not Not Playing: looked at again after a moment
-    // before the card says so, as the page does (SystemPlayer.m).
+    // before the card says so, as the page does (Player/SystemPlayer.m).
     BOOL hasTrack = [state.track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
     if (hasTrack) {
         _hadTrack = YES;
@@ -424,8 +423,8 @@ static const CGFloat kDeviceRoom = 80;
     else [player pause:nil];
 }
 
-// The player, a page of the mod's (SystemPlayer.m), presented by UIKit's zoom, the Music app's way: its open, its swipe
-// down and its close are the mod's own (SystemPlayerTransition.m), out of the capsule and back into it. Spotify's own
+// The player, a page of the mod's (Player/SystemPlayer.m), presented by UIKit's zoom, the Music app's way: its open, its swipe
+// down and its close are the mod's own (Player/SystemPlayerTransition.m), out of the capsule and back into it. Spotify's own
 // player is not asked for: held in
 // the page, it brought its own pulls and closes, and UIKit's swipe close lost to them, where a page of the mod's alone
 // closed every time (its owner, 2026-11-01).
@@ -493,7 +492,7 @@ static SGRSystemPlayerPage *takePage(void) {
     lastOpen = now;
     SGRSystemPlayerPage *page = takePage();
     __weak UIView *capsule = self.superview ?: self;
-    // Opened and closed by the mod's own move (SystemPlayerTransition.m), out of the capsule and back into it.
+    // Opened and closed by the mod's own move (Player/SystemPlayerTransition.m), out of the capsule and back into it.
     SGRSystemPlayerTransition *transition = [SGRSystemPlayerTransition attachTo:page];
     transition.source = ^UIView *{ return capsule; };
     __weak typeof(self) weakMini = self;

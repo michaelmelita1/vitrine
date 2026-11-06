@@ -8,7 +8,7 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Redesigned/Player/Player.h"
+#import "Player.h"
 #import "SystemPlayer.h"
 
 // The row's height (the touch area) and the glyphs' point size and gap to the track.

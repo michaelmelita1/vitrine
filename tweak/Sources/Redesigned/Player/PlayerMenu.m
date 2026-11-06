@@ -1,4 +1,4 @@
-// The player page's ⋯ items of the mod's own (Redesigned/Navbar/SystemPlayer.m):
+// The player page's ⋯ items of the mod's own (SystemPlayer.m):
 //
 //     Speed, Pitch & Reverb   opens the sliders in a popover from the ⋯ (SGPlayerShowSpeedPitchPanel): speed,
 //                             pitch, reverb and Pitch follows speed, as on Spotify's sheet (issue #14)

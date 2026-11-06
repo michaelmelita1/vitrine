@@ -1,4 +1,4 @@
-// The player page's background (Redesigned/Navbar/SystemPlayer.m), chosen on the Player page (PlayerSettings.m), and
+// The player page's background (SystemPlayer.m), chosen on the Player page (PlayerSettings.m), and
 // Spotify's Canvas kept to the mod's own drawing of it.
 #import "Core/SGCore.h"
 #import "Player.h"

@@ -48,7 +48,7 @@
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Shared/Player/SpeedPitch.h"
-#import "Redesigned/Player/Player.h"
+#import "Player.h"
 #import "SystemPlayer.h"
 
 // Where the blur under the controls may start at the latest, as a share of the clip's height.

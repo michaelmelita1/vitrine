@@ -6,8 +6,8 @@ A Theos tweak (Objective-C + Logos) injected into the decrypted Spotify iOS app.
 ## One look: the redesign
 
 Vitrine draws one look on Spotify's screens, the redesign (`Redesigned/`): the mod's own Liquid Glass look,
-from a clean sheet. iOS's own tab bar with the mod's mini player in it and the mod's own player page in place
-of Spotify's (`Redesigned/Navbar/System*`), the glass search field, the lyrics page with Apple Music style
+from a clean sheet. iOS's own tab bar with the mod's mini player in it (`Redesigned/Navbar/`) and the mod's own
+player page in place of Spotify's (`Redesigned/Player/`), the glass search field, the lyrics page with Apple Music style
 lyrics always on, a decluttered Home, Search's categories on tinted glass, a Library with one large title, the
 playlist, album and artist pages the way the Music app lays them out with one pinned ⋯ over each, black
 throughout, and its own accent color. There is no switch for it: the Redesigned UI switch, the native look it

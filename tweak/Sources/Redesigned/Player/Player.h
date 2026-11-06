@@ -1,17 +1,25 @@
-// What the player page (Redesigned/Navbar/SystemPlayer.m, SystemLandscape.m, SystemMotion.m) takes from here: the
-// background and its Mod Settings page, the Animated artwork clip, the Visualizer, the lyrics' state, the ⋯ menu's own
-// items and hold to play faster on the cover.
+// The redesign's player: a page of the mod's own in place of Spotify's player, which the mini player
+// (Redesigned/Navbar/SystemTabs.x) opens. The page and its parts are SystemPlayer.h's; this header is what they take
+// from the rest of the folder: the background and its Mod Settings page, the Animated artwork clip, the Visualizer, the
+// lyrics' state, the ⋯ menu's own items and hold to play faster on the cover.
 //
-//     PlayerField.x      the background chosen, and Spotify's Canvas kept to the mod's drawing of it
-//     PlayerArtwork.x    hold either side of the cover to play at 2x
-//     PlayerLyrics.x     whether the track has lyrics, or none, and what fades while they play alone
-//     PlayerMotion.x     Animated artwork: the Canvas or Apple Music's animated cover, looked up for the page
-//     PlayerVisualiser.m the Visualizer background: a calm spectrum of the song in the cover's colors, read
-//                        through SGRSpectrum.m from the audio effects' tap on Spotify's output
-//     PlayerMenu.m       the ⋯'s Speed, Pitch & Reverb, Artwork and Lyrics Source
-//     PlayerSettings.m   the Player page in Mod Settings, led by a showcase of the player
+//     SystemPlayer.m           the page: cover, title, progress, controls, volume, lyrics, AirPlay and the queue
+//     SystemPlayerTransition.m its open from the mini player's capsule and its close back into it
+//     SystemQueue.m            the queue in place of the lyrics, edited the Music app's way
+//     SystemLandscape.m        the landscape player the page holds while the app is turned
+//     SystemTurn.m             the whole app let turn with the phone, and the page told
+//     SystemMotion.m           the Animated background drawn as the lock screen draws it
+//     SystemVolume.x           the volume row, Sim Radio's elastic slider over the system's
+//     SystemOutput.x           the output's device glyph and name for the AirPlay buttons
+//     PlayerField.x            the background chosen, and Spotify's Canvas kept to the mod's drawing of it
+//     PlayerArtwork.x          hold either side of the cover to play at 2x
+//     PlayerLyrics.x           whether the track has lyrics, or none, and what fades while they play alone
+//     PlayerMotion.x           Animated artwork: the Canvas or Apple Music's animated cover, looked up for the page
+//     PlayerVisualiser.m       the Visualizer background: a calm spectrum of the song in the cover's colors, read
+//                              through SGRSpectrum.m from the audio effects' tap on Spotify's output
+//     PlayerMenu.m             the ⋯'s Speed, Pitch & Reverb, Artwork and Lyrics Source
+//     PlayerSettings.m         the Player page in Mod Settings, led by a showcase of the player
 //
-// The redesigned Spotify player these once restyled is gone; the page is the mod's own.
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 
@@ -60,7 +68,7 @@ SGModRow *SGRLyricsHideRow(void);
 // Shuffle and repeat left out of the controls, each on its own switch (shown as Shuffle and Repeat under Controls).
 #define SGRKeyPlayerHideShuffle @"spotifyglass.redesign.player.hideShuffle"
 #define SGRKeyPlayerHideRepeat @"spotifyglass.redesign.player.hideRepeat"
-// The app and the player page turn with the phone (Redesigned/Navbar/SystemTurn.m). On until switched off. The key is
+// The app and the player page turn with the phone (SystemTurn.m). On until switched off. The key is
 // the redesigned player's landscape lyrics', which it took over.
 #define SGRKeyLyricsLandscape @"spotifyglass.redesign.lyrics.landscape"
 
@@ -73,7 +81,7 @@ SGModRow *SGRLyricsHideRow(void);
 // Without `arrived` it only answers with a clip already in.
 UIView *SGRPlayerMotionPreview(void (^arrived)(void));
 // The clip in for the shown track, and its first frame: NO while there is none (the landscape player,
-// Redesigned/Navbar/SystemLandscape.m, plays it itself).
+// SystemLandscape.m, plays it itself).
 BOOL SGRPlayerMotionFile(NSURL **file, UIImage **poster);
 // YES when the page's lookup found no clip for `track` a moment ago: `arrived` runs then too, and the page shows Fluid at
 // once instead of keeping the last track's clip up while it waits (SystemPlayer.m's syncClipAnimated:).

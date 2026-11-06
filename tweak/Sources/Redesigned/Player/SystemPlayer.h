@@ -1,18 +1,18 @@
-// Prototype: the system tab bar's player (SystemPlayer.m), a page of the mod's own that the mini player
-// (SystemTabs.x) presents with a move of the mod's own (SystemPlayerTransition.m). Spotify's player is not in it: it is drawn from the player's state and
-// drives the player through the commands the mod already sends (Headers/SPTPlayer.h).
+// The player page (SystemPlayer.m), a page of the mod's own that the mini player (Redesigned/Navbar/SystemTabs.x)
+// presents with a move of the mod's own (SystemPlayerTransition.m), and its parts. Spotify's player is not in it: it is
+// drawn from the player's state and drives the player through the commands the mod already sends (Headers/SPTPlayer.h).
 //
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 #import "Redesigned/Kit/SGRGlyph.h"
 
 @interface SGRSystemPlayerPage : UIViewController
-// Built with the lyrics up or not as the last page was left, read as it is built: a page built ahead (SystemTabs.x)
+// Built with the lyrics up or not as the last page was left, read as it is built: a page built ahead (Navbar/SystemTabs.x)
 // while another was up is out of date once that one closes another way.
 @property (nonatomic, readonly) BOOL outOfDate;
 @end
 
-// The page's AirPlay button for another place (the system tab bar's mini player, SystemTabs.x): the output's device
+// The page's AirPlay button for another place (the system tab bar's mini player, Navbar/SystemTabs.x): the output's device
 // glyph at `pointSize`, followed as the output changes; a tap opens the system's AirPlay picker, a hold Spotify's Connect
 // sheet, with the footer's press feel. `place` names it in the log.
 UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place);
@@ -21,7 +21,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place);
 UIImage *SGRSystemNotPlayingArt(void);
 
 // Posted on the main queue when the page's close is over, gone or let go back by a swipe: a tap on the mini player during
-// the close, which UIKit would refuse while the page is still presented, opens it then if it has gone (SystemTabs.x).
+// the close, which UIKit would refuse while the page is still presented, opens it then if it has gone (Navbar/SystemTabs.x).
 extern NSNotificationName const SGRSystemPlayerPageDidCloseNotification;
 
 

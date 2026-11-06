@@ -1,5 +1,5 @@
 // Animated artwork: the track's Canvas or Apple Music's animated cover, looked up for the player page
-// (Redesigned/Navbar/SystemPlayer.m), which draws it its own way (SystemMotion.m), and for the landscape player
+// (SystemPlayer.m), which draws it its own way (SystemMotion.m), and for the landscape player
 // (SystemLandscape.m). A follower walks each track as it plays (SGMotionFollower) while the background is Animated,
 // so the next track's clip is often in the store before it is asked for; a page asking for a track the follower has
 // no clip for looks it up itself (SGRPlayerMotionPreview). The ⋯ menu switches between Animated and Fluid at once
@@ -11,7 +11,7 @@
 #import "Shared/Player/SGLastTrack.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Player.h"
-#import "Redesigned/Navbar/SystemPlayer.h"
+#import "SystemPlayer.h"
 
 static NSString *sg_track;   // the track playing
 static NSString *sg_shown;   // the track sg_motionFile is the clip of

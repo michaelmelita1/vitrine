@@ -1,4 +1,4 @@
-// Hold to play faster on the cover of the player page (Redesigned/Navbar/SystemPlayer.m): holding either side of
+// Hold to play faster on the cover of the player page (SystemPlayer.m): holding either side of
 // it plays at 2x until the finger lifts, with a 2x badge on the Kit's glass at its top.
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"

@@ -1,5 +1,5 @@
 // The redesign's Apple Music style lyrics view, always on, over Spotify's full screen lyrics page
-// (KaraokePage.x) and in the player page itself (Redesigned/Navbar/SystemPlayer.m, SystemLandscape.m). A track
+// (KaraokePage.x) and in the player page itself (Redesigned/Player/SystemPlayer.m, SystemLandscape.m). A track
 // without synced lyrics keeps Spotify's own lines, where there are any next to it. The lines and the
 // clock are Shared/Lyrics/Lyrics.h's.
 //

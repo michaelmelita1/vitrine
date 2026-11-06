@@ -16,7 +16,6 @@
 #import "Redesigned/Lyrics/LyricsText.h"
 #import "Redesigned/Lyrics/LyricsLook.h"
 #import "Redesigned/Navbar/Navbar.h"
-#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
 #import "Redesigned/Kit/SGRAccent.h"
 
 // The redesign's own rows (accent, AMOLED), then the font and the app icon.
@@ -71,7 +70,7 @@ UIViewController *SGPlayerSettingsPage(void) {
     ];
     // Shuffle, Repeat and Switch to video are switches that show them in the Player page's Controls section
     // (Redesigned/Player/PlayerSettings.m). Landscape turns the whole app and the player page with the phone
-    // (Redesigned/Navbar/SystemTurn.m; its owner, 2026-11-06).
+    // (Redesigned/Player/SystemTurn.m; its owner, 2026-11-06).
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObjects:SGSection(nil, pages),
         SGSection(nil, @[SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)]), nil];
 

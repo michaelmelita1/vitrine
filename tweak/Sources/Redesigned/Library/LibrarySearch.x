@@ -6,7 +6,7 @@
 // id=Components.Header.UI.Toolbar.SearchField 320x32 r=4, and id=Components.Header.UI.Toolbar.ButtonContainer
 // 58x32 r=4 around Cancel. Both already draw Reprise_LiquidGlassKit's LiquidGlass.SearchBarView inside
 // themselves, so there is nothing to put behind them: what Spotify's own glass is missing here is the shape.
-// They become capsules, which is the shape the Search tab's field has (Redesigned/Navbar/SearchField.x), and
+// They become capsules, which is the shape the Search tab's field has (Redesigned/Search/SearchField.x), and
 // the scrim goes the way it goes on every other redesigned page.
 //
 // The header is 142pt and holds no filter chips, so there is nothing here to close up: LibraryHeader.x shrinks

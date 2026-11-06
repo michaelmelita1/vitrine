@@ -476,8 +476,8 @@ Redesigned:
                   it, SGRHardTopEdge), AMOLED black (always on, SGRAmoled.x) and its own accent color (SGRAccent.x). The playlist, album and artist pages take their field's color from the
                   cover's main color (checked on the Mac by harness/palette/), and come in whole: a black veil over the
                   page until the cover has been read, at most SGRFieldHoldLimit (1 s), then faded away (SGRField.h)
-    Navbar/       iOS's own tab bar, the mod's mini player and its own player page, in place of Spotify's bar, now playing
-                  bar and player, and the glass search field. SystemTabs.x puts a UITabBarController over Spotify's tab
+    Navbar/       iOS's own tab bar and the mod's mini player in place of Spotify's bar and now playing bar (Navbar.h
+                  lists its files). SystemTabs.x puts a UITabBarController over Spotify's tab
                   area: its tabs are Spotify's own, composed first by the redesign's own list (Navbar.x, NavbarLayout.m)
                   and read off Spotify's items at each of its bar's passes (TabBar.x: SGRSystemTabsSync,
                   SGRTabSourceGlyph, SGRTabSourceEncoreGlyphs), a tap passed on to the item, and the mod's mini player is
@@ -487,11 +487,33 @@ Redesigned:
                   told through the private -[_UITabBarVisualProvider setMinimized:], reached by UITabBar's
                   _visualProvider ivar: UITabBar's own _setMinimized: and _isMinimized throw outside approved apps, and a
                   provider missing or throwing is given up for UIKit's own minimize on scroll. Spotify's tab bar and now
-                  playing bar stay, unseen and untouchable, as the sources of the tabs and the cover (NowPlayingBar/).
-                  A tap on the mini player opens the mod's own player page (SystemPlayer.m) instead of Spotify's player,
-                  opening from the capsule and closing into it through SystemPlayerTransition.m (a custom presentation on
-                  a Liquid Glass card, a spring of 0.3 s, a drag down that closes it). The page takes its background, clip
-                  lookup, menu items and cover hold from Player/ (Player.h), has its own volume row (SystemVolume.x, Sim
+                  playing bar stay, unseen and untouchable, as the sources of the tabs and the cover (NowPlayingBar.x,
+                  SGRNowPlayingCover). A tap on the mini player opens the player page (Player/). With nothing
+                  playing (no track for 0.6 s) the mini player says Not Playing over a note, as the page does. While the
+                  page is up, a global hook on -[UIViewController presentViewController:animated:completion:] sends a
+                  sheet presented from under the page to the controller on top of it, so Spotify's own sheets (Connect,
+                  the queue, the sleep timer) come up over the page. Its settings: the Player page's Mini player page
+                  (MiniPlayerSettings.m: Apple Music style, Swipe to skip, and Buttons, the AirPlay, Star, Play and Skip
+                  buttons in the order dragged, Settings/SGSourcesPage.h) and the Tab bar page (NavbarSettings.m). The
+                  glass tab bar and the glass now playing bar once in their place are gone, with their Split tabs and
+                  device button rows; a split tabs list was folded onto the end of the tab list once at launch
+                  (NavbarLayout.m's SGRFoldNavbarSplit).
+    ContextMenu/  the ⋯ pinned over the playlist, album and artist pages opens the system menu, always (ContextMenu.h);
+                  the player page's ⋯ is a menu of the mod's own (Player/SystemPlayer.m). A page's ⋯ tap opens
+                  Spotify's sheet, presented unanimated in a container hidden
+                  from the presented controller's viewWillAppear: on, and the menu comes from an invisible button
+                  inside the ⋯ that takes touches only while it is up, opened with -performPrimaryAction (else
+                  UIContextMenuInteraction's private _presentMenuAtLocation:). Spotify's rows, read off the sheet's
+                  cells (words, glyph, grayed out), and the mod's own rows in its header and footer (Sort, Mix, Edit
+                  info) are fired on the hidden sheet once the menu is gone, through the row's own control (scrolled
+                  to when it is below the fold); a row that pushes a page shows the sheet on that page, one that
+                  presents a sheet of its own (Sleep timer) leaves that sheet as Spotify's and the card goes unseen,
+                  and a close with no pick dismisses the hidden sheet. Checked in the simulator against
+                  harness/system-menu/
+    Player/       the player page, the mod's own in place of Spotify's player (Player.h lists its files), opening from
+                  the mini player's capsule and closing into it through SystemPlayerTransition.m (a custom presentation on
+                  a Liquid Glass card, a spring of 0.3 s, a drag down that closes it). SystemPlayer.m draws it from the
+                  player's state: its own volume row (SystemVolume.x, Sim
                   Radio's elastic slider, which follows an outside change of the system's slider through a UISlider
                   hook), the output glyph (SystemOutput.x: the device by model, its name under it, tap for AirPlay, hold
                   for Connect) and the Animated clip drawn like the lock screen (SystemMotion.m, which PlayerMotion.x's
@@ -513,35 +535,16 @@ Redesigned:
                   delegate's -application:supportedInterfaceOrientationsForWindow: and lifting portrait-only answers of
                   Spotify's own controllers, and the page holds SystemLandscape.m's landscape player while it is
                   sideways: the clip mirrored and stretched past its edge under a variable blur, the title row, the
-                  controls, lyrics and the queue, each view carried across the turn both ways. With nothing
-                  playing (no track for 0.6 s) the page and the mini player say Not Playing over a note
+                  controls, lyrics and the queue, each view carried across the turn both ways, told by PlayerLyrics.x as
+                  the track's lines come in or its grace ends without them. With nothing
+                  playing (no track for 0.6 s) the page says Not Playing over a note
                   (SGRSystemNotPlayingArt). On a skip the last cover and clip stay up until the next ones are in (at most
                   0.6 s and 1.2 s), the Kit fetches the next track's cover ahead (SGRBridges.x), and a track found to
-                  have no clip shows Fluid at once (SGRPlayerMotionNoneFor). While the page is up, a global hook on
-                  -[UIViewController presentViewController:animated:completion:] sends a sheet presented from under the
-                  page to the controller on top of it, so Spotify's own sheets (Connect, the queue, the ⋯ menu) come up
-                  over the page. Its settings: the Player page's Mini player page (Apple Music style, Swipe to skip, and
-                  Buttons, the AirPlay, Star, Play and Skip buttons in the order dragged, Settings/SGSourcesPage.h) and
-                  one Controls section (Volume, and Shuffle, Repeat and Switch to video as switches that show them, on
-                  the hide keys, with Match the lyrics button). The glass tab bar, the glass now playing bar and the
-                  redesigned Spotify player once in their place are gone, with their Split tabs, Follow the cover,
-                  Spotify's icons, device button and Gestures rows; a split tabs list was folded onto the end of the tab
-                  list once at launch (NavbarLayout.m's SGRFoldNavbarSplit).
-    NowPlayingBar/ Spotify's now playing bar kept unseen and untouchable as the source of the cover the mini player and the
-                  player page show (NowPlayingBar.x, SGRNowPlayingCover), and the Mini player page (NowPlayingBarSettings.m)
-    ContextMenu/  the ⋯ pinned over the playlist, album and artist pages opens the system menu, always (ContextMenu.h);
-                  the player page's ⋯ is a menu of the mod's own (Player/SystemPlayer.m). A page's ⋯ tap opens
-                  Spotify's sheet, presented unanimated in a container hidden
-                  from the presented controller's viewWillAppear: on, and the menu comes from an invisible button
-                  inside the ⋯ that takes touches only while it is up, opened with -performPrimaryAction (else
-                  UIContextMenuInteraction's private _presentMenuAtLocation:). Spotify's rows, read off the sheet's
-                  cells (words, glyph, grayed out), and the mod's own rows in its header and footer (Sort, Mix, Edit
-                  info) are fired on the hidden sheet once the menu is gone, through the row's own control (scrolled
-                  to when it is below the fold); a row that pushes a page shows the sheet on that page, one that
-                  presents a sheet of its own (Sleep timer) leaves that sheet as Spotify's and the card goes unseen,
-                  and a close with no pick dismisses the hidden sheet. Checked in the simulator against
-                  harness/system-menu/
-    Player/       what the player page takes (Player.h lists its files): the background chosen on the Player page and
+                  have no clip shows Fluid at once (SGRPlayerMotionNoneFor). Its settings: the Player page's one Controls
+                  section (Volume, and Shuffle, Repeat and Switch to video as switches that show them, on
+                  the hide keys, with Match the lyrics button). The redesigned Spotify player once in its place is gone,
+                  with its Follow the cover, Spotify's icons and Gestures rows.
+                  Beside the page, what it takes from the folder: the background chosen on the Player page and
                   the page itself, led by a card of the player (PlayerSettings.m); hold either side of the cover to play
                   at 2x until the finger lifts, an octave higher while Pitch follows speed is on (PlayerArtwork.x);
                   whether the track has lyrics or none, and what fades while they play alone (PlayerLyrics.x); the ⋯'s
@@ -566,7 +569,7 @@ Redesigned:
                   off, and stops once a paused song's hills have settled. The spectrum is checked on the Mac against
                   harness/visualiser/
     Lyrics/       the full screen lyrics page on glass with Apple Music style lyrics over it, always on (SGRKaraokeView,
-                  which the player page shows in itself too, Navbar/SystemPlayer.m, where with Hide the controls set to
+                  which the player page shows in itself too, Player/SystemPlayer.m, where with Hide the controls set to
                   Everything, everything else -- the header row, the thumbnail, the title row and the controls --
                   fades a few seconds after the last touch and the lines take the whole safe area until a tap where
                   the rest was or a scroll back; set
@@ -600,8 +603,8 @@ Redesigned:
                   of each scroll's frames and the hooks' time (Home.h lists its files)
     Search/       the Browse page decluttered to its category cards (an allow list of the list's cells: the watch feed
                   carousels and promos collapse, and the cards move up by the spacing they leave), the header the way Home
-                  has it without the camera, and each card as Liquid Glass tinted by its own color, read off the Box's
-                  shape layer (Search.h lists its files)
+                  has it without the camera, the search field a glass capsule (SearchField.x), and each card as Liquid
+                  Glass tinted by its own color, read off the Box's shape layer (Search.h lists its files)
     Library/      Your Library the way Home and Search have their headers: a large title at the leading edge, the avatar
                   at the trailing edge with the search and create buttons before it, the header's scrim gone, each row's
                   artwork at the Kit's radius with a circular one left round, a hairline between the rows, and the search

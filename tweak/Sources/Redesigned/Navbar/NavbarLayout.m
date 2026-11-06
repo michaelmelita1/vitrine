@@ -1,4 +1,4 @@
-// The saved composition of the redesign's bar, as NSUserDefaults property lists, apart from the native look's.
+// The saved composition of the redesign's bar, as NSUserDefaults property lists.
 #import "Navbar.h"
 #import "Shared/Navigation/Links.h"
 

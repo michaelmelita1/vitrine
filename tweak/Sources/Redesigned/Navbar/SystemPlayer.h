@@ -33,8 +33,8 @@ id SGRPreviousTrack(SPTPlayerState *state);
 // come), 0 when it is in neither.
 NSInteger SGRTrackMoved(SPTPlayerState *state, NSString *from);
 
-// The output's device for the page's and the mini player's AirPlay button (SystemOutput.x, PR #192's glyph, which the
-// redesigned player does not draw): its SF Symbol's name (airplayaudio on the phone, the AirPods by model, a HomePod, a
+// The output's device for the page's and the mini player's AirPlay button (SystemOutput.x, PR #192's glyph): its SF
+// Symbol's name (airplayaudio on the phone, the AirPods by model, a HomePod, a
 // Mac, EarPods...), that symbol as the system's catalogue draws it (iOS 27's names included, which systemImageNamed:
 // lacks), and the device's name, nil on the phone's speaker.
 NSString *SGRPlayerOutputSymbol(void);

@@ -62,10 +62,6 @@ static BOOL swap(CGFloat *r, CGFloat *g, CGFloat *b) {
     return NO;
 }
 
-BOOL SGRAccentSwap(CGFloat *r, CGFloat *g, CGFloat *b) {
-    return sg_accent >= 0 && swap(r, g, b);
-}
-
 %hook UIColor
 - (UIColor *)initWithRed:(CGFloat)r green:(CGFloat)g blue:(CGFloat)b alpha:(CGFloat)a {
     swap(&r, &g, &b);

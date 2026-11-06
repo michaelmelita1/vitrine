@@ -6,7 +6,7 @@
 #import "Shared/LockScreenLyrics/LockScreenLyrics.h"
 #import "Shared/LyricsSources/LyricsSources.h"
 
-SGModSection *SGLyricsSourcesSection(BOOL namingSource) {
+SGModSection *SGLyricsSourcesSection(void) {
     SGModRow *sources = SGPageRow(@"Sources", ^UIViewController *{ return SGLyricsSourcesPage(); });
     sources.value = ^NSString *{
         // The first one asked and how many follow it, short enough to sit beside the title.
@@ -21,11 +21,11 @@ SGModSection *SGLyricsSourcesSection(BOOL namingSource) {
         return count ? @(count).stringValue : @"None";
     };
     SGModRow *words = SGOptionRow(@"Prefer word-by-word timing", @"Asks down the order past lines timed by the line", SGKeyLyricsPreferWordTiming);
-    NSMutableArray<SGModRow *> *rows = [NSMutableArray arrayWithObjects:sources, words, imported,
-        SGSwitchRow(@"Lyrics for every track", @"Even where Spotify has none", SGKeyLyricsAllTracks), SGSpicyLyricsKeyRow(), nil];
     // Spicy Lyrics' terms ask for its credit wherever its lines show (Shared/LyricsSources/SpicyLyrics.m), so the switch
     // says so, or its credit under the lyrics reads as the switch not working (issue #20).
-    if (namingSource) [rows addObject:SGOptionRow(@"Show source", @"Spicy Lyrics is always credited after the last line: its terms ask for it", SGKeyLyricsCredit)];
+    NSMutableArray<SGModRow *> *rows = [NSMutableArray arrayWithObjects:sources, words, imported,
+        SGSwitchRow(@"Lyrics for every track", @"Even where Spotify has none", SGKeyLyricsAllTracks), SGSpicyLyricsKeyRow(),
+        SGOptionRow(@"Show source", @"Spicy Lyrics is always credited after the last line: its terms ask for it", SGKeyLyricsCredit), nil];
     if (SGEeveeLyricsOn()) {
         [rows addObject:SGOptionRow(@"Use these sources anyway", @"Only if EeveeSpotify's lyrics are really off", SGKeyLyricsBesideEevee)];
         return SGNotedSection(@"Sources", rows, @"EeveeSpotify's lyrics are on, so it answers Spotify's lyrics and these sources stay "

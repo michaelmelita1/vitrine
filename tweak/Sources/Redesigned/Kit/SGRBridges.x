@@ -259,7 +259,10 @@ static void followPlayer(void) {
     fetchAhead();
 }
 
-void SGRSetNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality) {
+// A picture read off a screen for `trackURI`: ignored unless that track is still the one playing, when
+// it is a picture already published for another track, when a better one is in for this picture, and
+// when it is the same image again.
+static void setNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality) {
     if (!image || !trackURI) return;
     followPlayer();
     // Read for a track that is no longer playing.
@@ -319,7 +322,7 @@ static void publishBarArtwork(void) {
     UIImage *image = cover.image;
     NSString *uri = SGURIString(SGPlayerState().track.URI);
     if (!image || !uri) return;
-    SGRSetNowPlayingArtwork(image, uri, SGRArtworkQualityLow);
+    setNowPlayingArtwork(image, uri, SGRArtworkQualityLow);
 }
 
 // The bar sets its picture when the image has loaded, which lays nothing out, so a track change looks

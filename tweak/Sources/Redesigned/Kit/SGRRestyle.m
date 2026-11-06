@@ -1,10 +1,9 @@
 #import <objc/message.h>
-#import <CoreText/SFNTLayoutTypes.h>
 #import "Core/SGCore.h"
 #import "SGRRestyle.h"
 #import "SGRTokens.h"
 
-static char kPlateKey, kImageObserverKey, kLayoutObserverKey, kSuppressedKey;
+static char kImageObserverKey, kLayoutObserverKey, kSuppressedKey;
 
 #pragma mark - instance subclasses
 
@@ -133,61 +132,6 @@ void SGRSuppress(UIView *view) {
     view.accessibilityElementsHidden = YES;
 }
 
-static BOOL hasMonospacedDigits(UIFont *font) {
-    for (NSDictionary *setting in font.fontDescriptor.fontAttributes[UIFontDescriptorFeatureSettingsAttribute]) {
-        if ([setting[UIFontFeatureTypeIdentifierKey] integerValue] == kNumberSpacingType
-            && [setting[UIFontFeatureSelectorIdentifierKey] integerValue] == kMonospacedNumbersSelector) return YES;
-    }
-    return NO;
-}
-
-static void applyMonospaced(UILabel *label, Class original) {
-    NSAttributedString *text = label.attributedText;
-    struct objc_super parent = {label, original};
-    if (!text.length) {
-        UIFont *font = label.font;
-        if (font && !hasMonospacedDigits(font)) {
-            ((void (*)(struct objc_super *, SEL, id))objc_msgSendSuper)(&parent, @selector(setFont:), SGRMonospacedDigitsFont(font));
-        }
-        return;
-    }
-    __block NSMutableAttributedString *mapped = nil;
-    [text enumerateAttribute:NSFontAttributeName inRange:NSMakeRange(0, text.length) options:0 usingBlock:^(UIFont *font, NSRange range, BOOL *stop) {
-        if (!font || hasMonospacedDigits(font)) return;
-        if (!mapped) mapped = [text mutableCopy];
-        [mapped addAttribute:NSFontAttributeName value:SGRMonospacedDigitsFont(font) range:range];
-    }];
-    if (mapped) ((void (*)(struct objc_super *, SEL, id))objc_msgSendSuper)(&parent, @selector(setAttributedText:), mapped);
-}
-
-// Spotify's setters run first; what they left is then given the feature through the original class's
-// own setters. UILabel may set one property through another, so a pass started inside a pass is
-// skipped rather than trusted to settle.
-static BOOL sg_keepingMonospaced = NO;
-
-static void keepMonospaced(UILabel *label, Class original) {
-    if (sg_keepingMonospaced) return;
-    sg_keepingMonospaced = YES;
-    applyMonospaced(label, original);
-    sg_keepingMonospaced = NO;
-}
-
-void SGRMonospacedDigits(UILabel *label) {
-    if (![label isKindOfClass:UILabel.class]) return;
-    BOOL kept = adopt(label, "SGRMonospaced_", ^(Class subclass, Class original) {
-        for (NSString *name in @[@"setText:", @"setAttributedText:", @"setFont:"]) {
-            SEL selector = NSSelectorFromString(name);
-            addOverride(subclass, original, selector, ^(UILabel *self, id value) {
-                struct objc_super parent = {self, original};
-                ((void (*)(struct objc_super *, SEL, id))objc_msgSendSuper)(&parent, selector, value);
-                keepMonospaced(self, original);
-            });
-        }
-    });
-    Class original = kept ? class_getSuperclass(object_getClass(label)) : object_getClass(label);
-    keepMonospaced(label, original);
-}
-
 // Only the views that asked: everything else of the class carrying the override goes straight back out.
 static void reportImage(UIImageView *view) {
     void (^block)(UIImageView *) = objc_getAssociatedObject(view, &kImageObserverKey);
@@ -281,55 +225,6 @@ void SGRFindByIdentifiers(UIView *root, NSArray<NSString *> *identifiers, const 
     SGFindRememberedAll(root, identifiers.count, cacheKeys, ^BOOL(NSUInteger i, UIView *v) {
         return identifierMatches(v.accessibilityIdentifier, identifiers[i]);
     }, found);
-}
-
-@implementation SGRShadowPlate {
-    CGRect _pathBounds;
-}
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    if (!(self = [super initWithFrame:frame])) return nil;
-    self.userInteractionEnabled = NO;
-    self.accessibilityElementsHidden = YES;
-    _cornerRadius = SGRRadiusArtwork;
-    _pathBounds = CGRectNull;
-    CALayer *layer = self.layer;
-    layer.shadowColor = UIColor.blackColor.CGColor;
-    layer.shadowOpacity = 0.45;
-    layer.shadowRadius = 32;
-    layer.shadowOffset = CGSizeMake(0, 12);
-    return self;
-}
-
-- (void)setCornerRadius:(CGFloat)radius {
-    _cornerRadius = radius;
-    _pathBounds = CGRectNull;
-    [self setNeedsLayout];
-}
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    CGRect bounds = self.bounds;
-    if (CGRectEqualToRect(bounds, _pathBounds)) return;
-    _pathBounds = bounds;
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:bounds cornerRadius:_cornerRadius].CGPath;
-    [CATransaction commit];
-}
-
-@end
-
-SGRShadowPlate *SGRShadowPlateIn(UIView *host, const void *key) {
-    if (!host) return nil;
-    const void *slot = key ?: &kPlateKey;
-    SGRShadowPlate *plate = objc_getAssociatedObject(host, slot);
-    if (!plate) {
-        plate = [[SGRShadowPlate alloc] initWithFrame:host.bounds];
-        objc_setAssociatedObject(host, slot, plate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    if (plate.superview != host) [host insertSubview:plate atIndex:0];
-    return plate;
 }
 
 #pragma mark - Spotify's controls and pages

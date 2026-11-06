@@ -641,7 +641,3 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
 UIViewController *SGRNavbarSettingsPage(void) {
     return [SGRNavbarPage new];
 }
-
-UIViewController *SGRNavbarEditorPage(void) {
-    return [SGRNavbarPage new];
-}

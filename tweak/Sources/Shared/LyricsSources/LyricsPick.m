@@ -1,5 +1,5 @@
 // A source picked for one track (issue #67). The walk stops at the first source with timed lyrics, so a source
-// lower in the order that has the song better timed is never asked; the redesigned player's ⋯ asks them all for
+// lower in the order that has the song better timed is never asked; the player page's ⋯ asks them all for
 // the track playing, lists the ones with lines, and keeps the one picked as the track's lyrics.
 //
 // A pick keeps the source's answer as the track's, marked picked, and records what the track showed before it.

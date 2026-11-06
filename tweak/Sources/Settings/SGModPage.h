@@ -23,8 +23,6 @@
 @property (nonatomic, strong) UIColor *color;   // title, subtitle and symbol, for a warning row
 @property (nonatomic, copy) NSString *symbol;
 @property (nonatomic, strong) UIColor *tint;   // the square under the symbol, gray when nil (SGWithTile)
-// A switch row that changes the whole app draws SGGlowSwitch instead of a UISwitch.
-@property (nonatomic) BOOL glows;
 // The switch shows the opposite of what is stored under its key (SGShownRow).
 @property (nonatomic) BOOL inverted;
 // An ⓘ button beside the row's switch, whose tap reads this out under the row's title.

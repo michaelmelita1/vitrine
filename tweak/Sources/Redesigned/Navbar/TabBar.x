@@ -266,10 +266,6 @@ BOOL SGRTabSourceEncoreGlyphs(UIView *source, UIImage **outline, UIImage **fille
     return YES;
 }
 
-BOOL SGRTabSourceIsActive(UIView *source) {
-    return isActive(source);
-}
-
 NSString *SGRTabSourceTitle(UIView *source) {
     return labelIn(source).text ?: @"";
 }

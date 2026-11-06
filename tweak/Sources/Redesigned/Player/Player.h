@@ -81,10 +81,6 @@ BOOL SGRPlayerMotionNoneFor(NSString *track);
 // Posted on the main queue as the follower's clip comes in or goes (a new track's clip found, none for it, switched off):
 // a page showing SGRPlayerMotionPreview asks it again.
 extern NSNotificationName const SGRPlayerMotionDidChangeNotification;
-// How dark the clip is drawn (the dim's opacity, where its gradient is whole) for white text over it to keep
-// 4.5:1, or 7:1 with `contrast` (Increase Contrast), when `luminance` is the clip's bright end, its 75th
-// percentile of linear luminance; between 0.10 and 0.80, 0.15 more while the lyrics are up.
-CGFloat SGRPlayerClipDim(CGFloat luminance, BOOL contrast, BOOL lyrics);
 
 #pragma mark - the Visualizer (PlayerVisualiser.m)
 

@@ -57,7 +57,7 @@ static SGProblem version(void) {
 // What this install lacks of the app changes Vitrine's IPA build makes (scripts/pipeline.sh: plist/liquid-glass.plist),
 // as when its .deb is injected by hand, each said as what it costs. Spotify's own plist opting out of the system's glass
 // (9.1.88's) costs the redesign its tab bar's glass. 9.1.90 has no such key, and none is the same as glass on. The Live
-// Activity and Music Haptics keys matter in either look, and their own settings say so too.
+// Activity and Music Haptics keys matter on any iOS, and their own settings say so too.
 static NSArray<NSString *> *missingAppChanges(void) {
     NSMutableArray<NSString *> *missing = [NSMutableArray array];
     id compatibility = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIDesignRequiresCompatibility"];

@@ -1,5 +1,5 @@
 // The redesign's navbar: the system tab bar (SystemTabs.x) over Spotify's own, which it mirrors (TabBar.x), composed
-// from its own list (Navbar.x, NavbarLayout.m), which the redesign keeps apart from the native look's: an ordered list of
+// from its own list (Navbar.x, NavbarLayout.m): an ordered list of
 // entries, each a dictionary. An entry with a URI is a tab of the mod's own; one without names
 // one of Spotify's, by the label under its icon. No list at all is Spotify's order, all shown.
 #import <UIKit/UIKit.h>
@@ -46,7 +46,6 @@ UIImage *SGRNavbarGlyph(NSDictionary *entry, BOOL active);
 void SGRShrinkTabTitles(UIView *bar);
 
 UIViewController *SGRNavbarSettingsPage(void);   // the tab editor, in Mod Settings
-UIViewController *SGRNavbarEditorPage(void);     // the tab editor alone, for the welcome tour
 
 // The redesign's tab bar (SystemTabs.x). A UITabBarController over Spotify's tab area, its tabs Spotify's own and
 // the mod's mini player in its bottomAccessory, so UIKit minimizes the bar and moves the mini player into its row as the
@@ -86,9 +85,6 @@ BOOL SGRTabSourceEncoreGlyphs(UIView *source, UIImage **outline, UIImage **fille
 // A tab of the mod's own's icon as its entry names it, an Encore glyph or an SF Symbol (Navbar.x); NO for Spotify's.
 BOOL SGRTabItemIcon(UIView *item, NSString **name, BOOL *symbol);
 NSString *SGRTabSourceTitle(UIView *source);
-// Whether Spotify's item is the active tab now, read off its own label: Spotify swaps the item's
-// icon to the filled one while it is, so the glyph read then is the filled one.
-BOOL SGRTabSourceIsActive(UIView *source);
 void SGRForwardTabTap(UIView *source);
 // The system bar minimized and expanded by the mod's own rule (TabBarMinimize.x) through the controller's own setter,
 // when this iOS has one (SGRSystemTabsCanMinimize); else UIKit's minimize on scroll stays.

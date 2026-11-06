@@ -10,7 +10,7 @@
     tweak/Sources/Settings/     the Mod Settings framework: SGPage (a page on Spotify's stack), SGModPage (sections
                                 of rows: switches, choices, sliders, links, rows shown only while a choice
                                 asks for them, and rows grayed out while the switch they wait on is off, a tap
-                                on one nudging that switch), SGPageStyle (the system Settings look), SGGlowSwitch,
+                                on one nudging that switch), SGPageStyle (the system Settings look),
                                 SGMarquee (a title that glides side to side when it is too long, for every layer)
     tweak/Sources/Shared/       what draws on no Spotify screen, on any iOS, see Layers below
     tweak/Sources/Redesigned/   the redesign, the one look, running on iOS 26 and later
@@ -101,7 +101,6 @@ Shared:
                   the provider pins 9.1.88's ios-reprise-liquid-glass-override.mode to default (after an All flags
                   override) and logs the server's own value once, as a force_disabled would take the glass off the redesign.
                   It also pins 9.1.90's ios-navigationui-tabbar-impl.is_liquid_glass_tab_bar_enabled off.
-    Gestures/     the double tap zones on the player: the grid, what each cell does, the recognizer (the native look hooked it on; with that look gone nothing does)
     Lyrics/       the lyrics engine for the redesign's Apple Music style lyrics and the lock screen: lines read from
                   color-lyrics and the player's clock (KaraokeSource.x), words timed by estimate inside Spotify's line
                   times (KaraokeTiming.m, which splits Thai, Lao, Khmer and Burmese at the system's dictionary words), which line to name where two voices sing at once (the one that came in first,
@@ -264,9 +263,8 @@ Shared:
                   (SGPlayerMenuReplaced). Switch to video,
                   the chip over the title of a song with a music video, is hidden on request
                   (VideoSwitch.x, spotifyglass.hide.videoSwitch), by its identifier in FloatingElementsUnit.
-                  Full screen cover hidden (spotifyglass.hide.fullScreenCover) and Gestures (Shared/Gestures/) were
-                  hooked up on Spotify's own player by the native look, which is gone: their code and keys stay, but
-                  nothing attaches them and Mod Settings no longer offers them.
+                  The double tap zones on the player (Gestures) and Full screen cover hidden were hooked up on
+                  Spotify's own player by the native look and went with it.
                   The sleep timer (SleepTimer.m, set from the Live Activity) pauses Spotify at a time, at the end of
                   the track or at the end of the album or playlist, the last track of it found by the tracks to come
                   that are neither queued by hand nor autoplay's (SPTPlayerTrack's provider), or by the next one
@@ -387,7 +385,7 @@ Shared:
                   model as both copies with `ane`, as the CPU's alone with `cpu`), the download against its download/
                   (`update` for the old model kept until it, `dev` for the dev folder), the pages in the simulator against harness/spatial-page/
     Haptics/      Vibrations (Haptics.h lists its files): a tap of UIKit's feedback generators for the player's and the now
-                  playing bar's controls, the scrubber's tenths and ends, cover swipes, gestures and the lyrics page's tap to
+                  playing bar's controls, the scrubber's tenths and ends, cover swipes and the lyrics page's tap to
                   seek, at the strength set for them (ControlHaptics.x, SGFeedback.m); and Music Haptics, Core Haptics
                   playing along with the song: the music's RemoteIO output unit (SGPlayerMusicOutput, Shared/Player)
                   gets a render notify, the samples, in the unit's output format (the hardware's), go through a drum
@@ -551,9 +549,9 @@ Redesigned:
                   aside so only the mod draws it (PlayerField.x). Animated artwork (PlayerMotion.x) follows each track
                   while the background is Animated (SGMotionFollower), so the page often finds the clip already in, and
                   looks one up itself for a track the follower has none for; under Reduce Motion and in Low Power Mode
-                  none is looked up. The clip is dimmed by its brightness (SGRPlayerClipDim: the 75th percentile of the
+                  none is looked up. The clip is dimmed by its brightness (SystemMotion.m's clipDim: the 75th percentile of the
                   linear luminance of three frames, so white text keeps 4.5:1, 7:1 with Increase Contrast, from 0.10 to
-                  0.80, 0.15 darker behind the lyrics, issue #101). The Visualizer (PlayerVisualiser.m) draws two soft
+                  0.80, 0.05 darker behind the lyrics, issue #101). The Visualizer (PlayerVisualiser.m) draws two soft
                   hills of the song's spectrum across the foot of the page, the kick a mound in the middle (the two
                   bands under 80 Hz are left out, and the kick's bands stand at least as tall as the bands beside them,
                   so the middle is never a notch), as light in the cover's flow colors added to the Fluid field held

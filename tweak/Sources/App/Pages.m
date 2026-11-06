@@ -38,7 +38,7 @@ static UIViewController *lyricsPage(void) {
     SGModRow *sing = SGPageRow(@"Karaoke", ^UIViewController *{ return SGSingSettingsPage(); });
     sing.value = ^NSString *{ return SGSingSummary(); };
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObjects:SGSection(nil, @[SGWithTile(sing, @"music.mic", UIColor.systemRedColor)]),
-                                                SGLyricsSourcesSection(YES), nil];
+                                                SGLyricsSourcesSection(), nil];
     [sections addObjectsFromArray:@[
         SGSection(@"Display", @[SGRLyricsTextSizesRow(), SGLyricsWordTimingRow(), SGLyricsRomanisedRow(), SGLyricsRomanisedReplaceRow(),
             SGRLyricsHideRow()]),

@@ -26,7 +26,7 @@
 // While a clip is showing, the Fluid field under it is held still too, and once the clip has faded in it is
 // hidden (the field's covered): the field's color is what shows above the clip on the pull that dismisses.
 //
-// The clip is dimmed by how bright it is (SGRPlayerClipDim): three of its frames are measured as it comes in,
+// The clip is dimmed by how bright it is (clipDim below): three of its frames are measured as it comes in,
 // so a white Canvas is drawn darker than a black one and the white text over it keeps its contrast.
 //
 // A track that changes while the player cannot be seen (out of a window, or with the app not in front, which a

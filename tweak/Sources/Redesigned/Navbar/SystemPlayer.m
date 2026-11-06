@@ -1,4 +1,4 @@
-// Prototype: the system tab bar's player, a page of the mod's own (its owner, 2026-11-01). Spotify's player held in the
+// The player page: the system tab bar's player, a page of the mod's own (its owner, 2026-11-01). Spotify's player held in the
 // page brought its own pulls and closes, and UIKit's swipe close lost to them; a page of the mod's alone opened and
 // closed by the zoom every time. So the player is drawn here from the player's state, the Music app's layout from top
 // to bottom: the cover blurred behind everything, a close button, the cover, the title and artist, the progress, the
@@ -9,7 +9,7 @@
 // The lyrics glyph trades the cover for the redesign's Apple Music style lines (Redesigned/Lyrics/SGRKaraokeView.h), as
 // the Music app does: the cover shrinks to a thumbnail at the top with the title and artist beside it, and the lines
 // take the room between them and the progress. The lines, their timing, the clock, the follow and the pause after a
-// scroll by hand, and the seek of a tap on a line are the view's own, the same as in the redesigned player.
+// scroll by hand, and the seek of a tap on a line are the view's own.
 //
 // Nothing else here pans up and down or scrolls: UIKit's zoom close is a drag down anywhere on the page, and a vertical
 // recognizer of the page's would compete with it. The lines' scroll view is the one exception, which the zoom's close
@@ -17,9 +17,8 @@
 // whenever it follows the song. The progress and the volume, the two sideways drags, turn the pans above them off
 // while a finger is on them, as the redesigned player's volume did.
 //
-// The header's ⋯ (its owner, 2026-11-01) cannot open the redesigned player's menu: that menu is Spotify's own ⋯ sheet read
-// into a system menu (Redesigned/ContextMenu), and the sheet comes only from the ⋯ action of Spotify's player, which is
-// never up under this page. No other way to that sheet is proven: Spotify's track menu presenters are Swift services
+// The header's ⋯ (its owner, 2026-11-01) cannot open Spotify's own song menu: that menu is Spotify's ⋯ sheet, which comes
+// only from the ⋯ action of Spotify's player, never up under this page. No other way to that sheet is proven: Spotify's track menu presenters are Swift services
 // handed out by its dependency graph, the ObjC factory selectors in the binary (contextMenuPresenterForTrackWithTrackURI:
 // and its thirteen more arguments) need a factory nothing of the mod's holds, spotify:context-menu is a URI kind with
 // fixed subpages (audio settings, DJ feedback...) rather than a menu for a track, and the now playing bar has no menu.
@@ -27,8 +26,8 @@
 // add button), share, the album and the artist, then the player's own Speed, Pitch & Reverb and Lyrics Source
 // (Player.h's SGRPlayerMenuPageItems). Spotify's own rows (add to playlist, the queue, radio...) are not in it.
 //
-// While the lines play, the rest of the page gives way to them as in the redesigned player (PlayerLyrics.x's setAlone,
-// its owner, 2026-11-01): a scroll on through the lines, or kRest without a touch while the song plays, fades the
+// While the lines play, the rest of the page gives way to them as the redesigned Spotify player once had them do (its
+// owner, 2026-11-01): a scroll on through the lines, or kRest without a touch while the song plays, fades the
 // header, the thumbnail and title, and every control, and the lines take the whole safe area (with Hide the controls
 // set to Keep the title, the header, thumbnail and title stay and the lines grow down only); a tap where nothing
 // seeks, a scroll back, a pause or VoiceOver brings it all back. The recognizers for that are taps and a watcher that
@@ -1814,8 +1813,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the header's ⋯
 
-// A pull-down button, the HIG's, as the redesigned player's ⋯ is (ContextMenu.x's SGRMenuFront): the menu opens on touch
-// down, made afresh as it opens. The glyph presses as the footer's do.
+// A pull-down button, the HIG's: the menu opens on touch down, made afresh as it opens. The glyph presses as the footer's do.
 - (UIButton *)makeMoreButton {
     UIButton *more = [UIButton buttonWithType:UIButtonTypeCustom];
     more.showsMenuAsPrimaryAction = YES;

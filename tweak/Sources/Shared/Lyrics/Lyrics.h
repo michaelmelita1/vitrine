@@ -12,7 +12,7 @@
 // from, naming the source (read by the redesign's lyrics view only), the lock screen, which
 // language a line's translation is taken in, of those the lyrics come with, and the one Musixmatch's
 // community translations are asked in (the redesign's lyrics being where translations show), whether lines timed only by the line are swept word by word, whether lines in other alphabets show again in Latin letters, and how much later than the song every line shows.
-SGModSection *SGLyricsSourcesSection(BOOL namingSource);
+SGModSection *SGLyricsSourcesSection(void);
 SGModRow *SGLockScreenLyricsRow(void);
 SGModRow *SGLockScreenTranslationRow(void);
 SGModRow *SGLyricsTranslationLanguageRow(void);

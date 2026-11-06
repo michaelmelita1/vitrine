@@ -15,7 +15,7 @@
 // The tracks themselves are the same cell class over RetrievalListStructuredData and are never touched here.
 //
 // A section comes back when its switch is off (AlbumSettings.m). Which one a cell is in is read the way the
-// native look's Album.x reads it: the nearest heading above it, by its title in English. Those are the only
+// native look's Album.x (since removed) read it: the nearest heading above it, by its title in English. Those are the only
 // names there are -- more by and you might also like are the same carousel of cards -- so in any other
 // language every section is the last switch's, the one for the sections no other switch names. With every
 // switch on, which is how they come, nothing is read and the rule is the one above.

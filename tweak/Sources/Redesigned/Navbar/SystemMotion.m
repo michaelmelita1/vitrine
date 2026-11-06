@@ -535,7 +535,7 @@ static CATransform3D flipAbout(CGFloat y, CGFloat stretch) {
 // A locked phone keeps the player in its window, so being in front counts as much as being in one.
 - (void)updateMotion {
     BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
-    BOOL may = self.window && front && !SGRPlayerIsTransitioning() && !SGRReduceMotion() && !NSProcessInfo.processInfo.lowPowerModeEnabled
+    BOOL may = self.window && !self.hidden && front && !SGRPlayerIsTransitioning() && !SGRReduceMotion() && !NSProcessInfo.processInfo.lowPowerModeEnabled
         && !SGPlayerState().isPaused;
     if (may) [_player play];
     else [_player pause];
@@ -557,6 +557,13 @@ static CATransform3D flipAbout(CGFloat y, CGFloat stretch) {
 - (void)didMoveToWindow {
     [super didMoveToWindow];
     [self updateMotion];
+}
+
+// Hidden counts as out of the window: the player page hides it under its landscape player.
+- (void)setHidden:(BOOL)hidden {
+    BOOL changed = hidden != self.hidden;
+    [super setHidden:hidden];
+    if (changed) [self updateMotion];
 }
 
 @end

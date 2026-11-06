@@ -1,14 +1,13 @@
-// Native redesign's output glyph (SystemPlayer.m's AirPlay button, the mini player's): the device playing drawn as the
+// The redesign's output glyph (SystemPlayer.m's AirPlay button, the mini player's): the device playing drawn as the
 // Music app draws it, AirPods by model, a HomePod, a Mac, EarPods..., with its name for the line under it. This was the
-// redesigned player's footer glyph in PR #192; the redesigned player keeps Spotify's own Connect glyph, and only Native
-// redesign draws this. A Spotify Connect device is drawn as AirPlay: its name came from the redesigned player's footer,
-// which is not up under Native redesign.
+// redesigned player's footer glyph in PR #192. A Spotify Connect device is drawn as AirPlay: its name came from the
+// redesigned player's footer, which is gone.
 #import <AVFoundation/AVFoundation.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Navbar.h"
+#import "Redesigned/Navbar/Navbar.h"
 #import "SystemPlayer.h"
 
 static NSString *const kConnectSymbol = @"airplayaudio";
@@ -407,7 +406,7 @@ void SGRPlayerPressGlyphOnTouch(UIView *control) {
 }
 
 %ctor {
-    if (!SGRSystemTabsOn()) return;
+    if (!SGRedesignedUI()) return;
     // The route changes off the main thread, so it is not observed on the main queue (AGENTS.md).
     [NSNotificationCenter.defaultCenter addObserverForName:AVAudioSessionRouteChangeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
         dispatch_async(dispatch_get_main_queue(), ^{

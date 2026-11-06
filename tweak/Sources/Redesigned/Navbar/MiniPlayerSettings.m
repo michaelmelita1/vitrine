@@ -1,32 +1,11 @@
-// The now playing bar's rows of the redesign, the Mini player section of the Player page
-// (Redesigned/Player/PlayerSettings.m puts them there).
+// The Mini player page, a page of the Player page (App/Pages.m).
 #import "Settings/SGSourcesPage.h"
 #import "Core/SGCore.h"
 #import "Settings/SGModPage.h"
-#import "Redesigned/Navbar/Navbar.h"
-#import "NowPlayingBar.h"
+#import "Navbar.h"
 
-NSArray<SGModRow *> *SGRNowPlayingBarRows(void) {
-    // The tab bar reads the switch as each scroll goes; a bar minimized when it goes off grows back at once.
-    SGModRow *minimize = SGSwitchRow(@"Apple Music style", @"Between two tabs as a page scrolls down", SGRKeyNavbarMinimize);
-    minimize.changed = ^(BOOL on) {
-        if (!on) SGRSetTabBarMinimized(NO, NO);
-        SGRRefreshTabBar();
-    };
-    SGModRow *inlineConnect = SGOptionRow(@"Device button", @"Kept on the bar between the tabs", SGRKeyBarInlineConnect);
-    inlineConnect.waitsOn = SGRKeyNavbarMinimize;
-    return @[
-        minimize,
-        inlineConnect,
-        SGHideRow(@"Hide the device button", @"On the full now playing bar", SGRHideBarConnect),
-        // Spotify's own flag for the bar's save button, forced off: Spotify leaves the button out.
-        SGKillRow(@"Hide the like button", @"ios-feature-nowplayingbar.add_button"),
-    ];
-}
-
-// Native redesign's mini player (Redesigned/Navbar/SystemTabs.x): Apple Music style (UIKit's tab bar minimizes as a page
-// scrolls), the swipe and the Skip button, and the AirPlay button beside play, each on a key of its own. The glass bar's
-// rows are left out: that bar is not up then.
+// The mini player (Redesigned/Navbar/SystemTabs.x): Apple Music style (the tab bar minimizes as a page scrolls), the
+// swipe, and the buttons beside play, each on a key of its own.
 UIViewController *SGRMiniPlayerSettingsPage(void) {
     SGModRow *minimize = SGSwitchRow(@"Apple Music style", @"The tab bar shrinks as a page scrolls down", SGRKeyNavbarMinimize);
     SGModRow *swipe = SGSwitchRow(@"Swipe to skip", @"Sideways on the mini player", SGRKeyMiniPlayerSwipe);

@@ -1,4 +1,4 @@
-// The redesign's AMOLED background, always on: its copy of Native/Appearance/Amoled.x without the switch.
+// The redesign's AMOLED background, always on.
 // AMOLED background: Spotify paints its base surface #121212; with the switch on, that gray and
 // the gradients fading into it go pure black. Lighter grays stay (#1F1F1F placeholders, #292929
 // cards), so elevated surfaces still read against the black.

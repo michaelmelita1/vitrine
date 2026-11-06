@@ -18,7 +18,7 @@
 //     MadeForYouCovers.x  Made For You, a Hub page opened from Home: its cards' covers at Home's radius
 //     HomePerf.x       FLEX builds: the frames of each scroll of Home and the time the hooks above took
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI).
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

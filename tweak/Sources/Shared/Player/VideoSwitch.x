@@ -1,11 +1,10 @@
-// Switch to video hidden from the player, under either look (SGKeyHideVideoSwitch, off until switched on).
+// Switch to video hidden from Spotify's player (SGKeyHideVideoSwitch, off until switched on).
 //
 // The switch is the chip Spotify puts over the track's title for a song with a music video, Switch to
 // video and, once switched, Switch to audio. Its accessibility identifier is nowplaying-npv-musicvideos-switch:
 // in 9.1.78's strings it sits between NowPlaying_ElementsKit's AudioVideoSwitchButtonAdapter and the
 // sNowPlayingMusicVideosSwitchToVideo and ...SwitchToAudio strings, and no recorded tree shows it yet. The
-// chips are FloatingElementsUnit's (Redesigned/Player/PlayerLyrics.x), a unit of Spotify's player that both
-// looks keep, so its pass looks for it there. It goes by alpha, not hidden, since it may sit in one of
+// chips are FloatingElementsUnit's, a unit of Spotify's player, so its pass looks for it there. It goes by alpha, not hidden, since it may sit in one of
 // Spotify's stacks (AGENTS.md), and takes no touches and says nothing to VoiceOver.
 #import "Core/SGCore.h"
 #import "PlayerSettings.h"

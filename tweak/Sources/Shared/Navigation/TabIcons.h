@@ -1,9 +1,9 @@
-// The icons a tab of the mod's own can wear, on either look's bar: one of Spotify's Encore glyphs or an
-// SF Symbol. Each look keeps which of the two an entry's icon name belongs to under its own key; an entry
-// saved before there was a choice has none and means Encore.
+// The icons a tab of the mod's own can wear on the tab bar: one of Spotify's Encore glyphs or an SF Symbol. The tab
+// list keeps which of the two an entry's icon name belongs to under a key of its own (Redesigned/Navbar/Navbar.h's
+// SGRNavbarIconSet); an entry saved before there was a choice has none and means Encore.
 #import <UIKit/UIKit.h>
 
-// The value either look stores for a tab whose icon is an SF Symbol.
+// The value stored for a tab whose icon is an SF Symbol.
 extern NSString *const SGTabIconSetSymbols;
 
 // The icon drawn the way the bar draws Spotify's own: an Encore glyph by its SPTEncoreIcon class method,

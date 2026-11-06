@@ -8,9 +8,9 @@
 //     LibraryRows.x     every row and grid card: the artwork at the Kit's radius with continuous corners, a
 //                       circular one left round, and a hairline between the rows
 //     LibrarySearch.x   the search inside the library: its field a glass capsule, the way the Search tab's is
-//                       (Redesigned/Navbar/SearchField.x)
+//                       (Redesigned/Search/SearchField.x)
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI).
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

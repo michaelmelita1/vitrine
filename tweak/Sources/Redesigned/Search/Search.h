@@ -1,6 +1,6 @@
 // The Search redesign: Spotify's Browse page (the Search tab before anything is typed) kept, with its controllers,
-// list and cards, decluttered to the categories on black and restyled from the Kit. No settings of its own. The glass
-// search field is the Navbar part's (Redesigned/Navbar/SearchField.x).
+// list and cards, decluttered to the categories on black and restyled from the Kit, its search field a glass capsule. No
+// settings of its own.
 //
 //     SearchSections.x  an allow list of the page's cells: the category cards stay; the watch feed carousels
 //                       (Playlists you can watch, Explore episodes for you), promos and any new kind collapse, and the
@@ -8,8 +8,9 @@
 //     SearchPage.x      the header the way Home has it: a large title, the avatar at the trailing edge, no camera, no
 //                       scrim; and the page's layout pass, which measures that spacing
 //     SearchCards.x     each category card as Liquid Glass tinted by its own color, at the card radius, giving under a press
+//     SearchField.x     the white search field as a glass capsule with white text
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI).
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

@@ -2,7 +2,7 @@
 // the view tree), so a shelf is known by what the heading says: "Recents", an artist's name, or the small line
 // over a title ("More like" over an artist, stored as "More like …") so one switch covers that kind whoever the
 // artist is today. The heading is a supplementary view of the shelf's own collection view, dequeued when the
-// shelf lays out, so the shelf is laid out first, the way Native/Home/HomeDeclutter.x lays nested lists out
+// shelf lays out, so the shelf is laid out first, the way the native look's Home declutter (since removed) laid nested lists out
 // before it reads them.
 //
 // Tree (out/sim/home/tree-before.txt, 9.1.90): TouchCancellingCollectionView > ... > SupplementaryItemView >

@@ -1,16 +1,14 @@
-// What minimizes the glass bar and what brings it back (TabBar.x draws it): a page scrolled down by a
-// finger or the fling after it, and scrolled back up or to its top (MinimizeStep.h). After the bar changes some
-// other way (a tap on its circle, a tab, the player), only a new touch minimizes it again: the fling still
-// running would otherwise undo the tap at once; another tab (TabBar.x);
-// and the full screen player opening or closing, which takes Spotify's pictures of the bars to move with it
-// and would have moved the card from the tab bar's row back up to its place above the bar.
+// What minimizes the system tab bar (SystemTabs.x) and what brings it back: a page scrolled down by a finger or the
+// fling after it, and scrolled back up or to its top (MinimizeStep.h). After the bar changes some other way (a tab, the
+// player), only a new touch minimizes it again: the fling still running would otherwise undo it at once. The bar is told
+// through the controller's own setter where this iOS has one (SGRSystemTabsCanMinimize); else UIKit's own minimize on
+// scroll stands in, from the page's scroll view handed to it.
 //
 // Only a page's own scroll views count: those inside Spotify's tab bar container. The player and the now
 // playing bar are outside it, and a shelf scrolling sideways has nothing to scroll down.
 #import "Core/SGCore.h"
 #import "Navbar.h"
 #import "MinimizeStep.h"
-#import "Shared/Player/PlayerEvents.h"
 
 static Class sg_containerClass;
 static __weak UIScrollView *sg_page, *sg_other;
@@ -24,10 +22,7 @@ static BOOL inContainer(UIView *view) {
 
 static void scrolled(UIScrollView *scrollView) {
     if ((!scrollView.isTracking && !scrollView.isDecelerating) || scrollView == sg_other) return;
-    // The system tab bar: by the rule below through the controller's setter when there is one, else UIKit's own minimize
-    // on scroll, from the page's scroll view handed to it.
-    BOOL systemTabs = SGRSystemTabsOn();
-    if (systemTabs && !SGRSystemTabsCanMinimize()) {
+    if (!SGRSystemTabsCanMinimize()) {
         if (inContainer(scrollView)) SGRSystemTabsFollowScroll(scrollView);
         else sg_other = scrollView;
         return;
@@ -39,9 +34,9 @@ static void scrolled(UIScrollView *scrollView) {
             return;
         }
         sg_page = scrollView;
-        sg_track = (SGRMinimizeTrack){offset, systemTabs ? SGRSystemTabsMinimized() : SGRTabBarMinimized()};
+        sg_track = (SGRMinimizeTrack){offset, SGRSystemTabsMinimized()};
     }
-    BOOL now = systemTabs ? SGRSystemTabsMinimized() : SGRTabBarMinimized();
+    BOOL now = SGRSystemTabsMinimized();
     // The bar changed some other way (a tab, the player): the scroll counts from here.
     if (sg_track.minimized != now) {
         sg_track = (SGRMinimizeTrack){offset, now};
@@ -53,8 +48,7 @@ static void scrolled(UIScrollView *scrollView) {
     BOOL minimized = SGRMinimizeStep(&sg_track, offset, top, bottom);
     if (minimized == now || (minimized && !SGEnabled(SGRKeyNavbarMinimize))) return;
     if (minimized && sg_waitForTouch) return;
-    if (systemTabs) SGRSystemTabsSetMinimized(minimized);
-    else SGRSetTabBarMinimized(minimized, YES);
+    SGRSystemTabsSetMinimized(minimized);
 }
 
 %hook UIScrollView
@@ -69,6 +63,4 @@ static void scrolled(UIScrollView *scrollView) {
     sg_containerClass = NSClassFromString(@"_TtC23NavigationUI_TabBarImpl19TabBarContainerImpl");
     if (!sg_containerClass) return;
     %init;
-    [NSNotificationCenter.defaultCenter addObserverForName:SGPlayerTransitionNotification object:nil queue:nil
-                                                usingBlock:^(NSNotification *note) { SGRSetTabBarMinimized(NO, NO); }];
 }

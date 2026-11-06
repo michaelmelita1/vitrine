@@ -1,25 +1,24 @@
-// Prototype: the system tab bar's player, a page of the mod's own (its owner, 2026-11-01). Spotify's player held in the
+// The player page: the system tab bar's player, a page of the mod's own (its owner, 2026-11-01). Spotify's player held in the
 // page brought its own pulls and closes, and UIKit's swipe close lost to them; a page of the mod's alone opened and
 // closed by the zoom every time. So the player is drawn here from the player's state, the Music app's layout from top
 // to bottom: the cover blurred behind everything, a close button, the cover, the title and artist, the progress, the
 // controls, the volume and a row of lyrics, AirPlay and the queue. The queue and Spotify's Connect sheet open over the
-// page, which stays: Spotify presents them from its own controllers under the page, and SystemTabs.x sends those
+// page, which stays: Spotify presents them from its own controllers under the page, and Navbar/SystemTabs.x sends those
 // presentations to the page instead (its owner, 2026-11-01; closing the page first left Connect opening nothing).
 //
 // The lyrics glyph trades the cover for the redesign's Apple Music style lines (Redesigned/Lyrics/SGRKaraokeView.h), as
 // the Music app does: the cover shrinks to a thumbnail at the top with the title and artist beside it, and the lines
 // take the room between them and the progress. The lines, their timing, the clock, the follow and the pause after a
-// scroll by hand, and the seek of a tap on a line are the view's own, the same as in the redesigned player.
+// scroll by hand, and the seek of a tap on a line are the view's own.
 //
 // Nothing else here pans up and down or scrolls: UIKit's zoom close is a drag down anywhere on the page, and a vertical
 // recognizer of the page's would compete with it. The lines' scroll view is the one exception, which the zoom's close
 // works with as with any scroll view at its top: the view lays the lines out for an offset of 0, so it is at its top
 // whenever it follows the song. The progress and the volume, the two sideways drags, turn the pans above them off
-// while a finger is on them, as the redesigned player's volume does (PlayerVolume.m).
+// while a finger is on them, as the redesigned player's volume did.
 //
-// The header's ⋯ (its owner, 2026-11-01) cannot open the redesigned player's menu: that menu is Spotify's own ⋯ sheet read
-// into a system menu (Redesigned/ContextMenu), and the sheet comes only from the ⋯ action of Spotify's player, which is
-// never up under this page. No other way to that sheet is proven: Spotify's track menu presenters are Swift services
+// The header's ⋯ (its owner, 2026-11-01) cannot open Spotify's own song menu: that menu is Spotify's ⋯ sheet, which comes
+// only from the ⋯ action of Spotify's player, never up under this page. No other way to that sheet is proven: Spotify's track menu presenters are Swift services
 // handed out by its dependency graph, the ObjC factory selectors in the binary (contextMenuPresenterForTrackWithTrackURI:
 // and its thirteen more arguments) need a factory nothing of the mod's holds, spotify:context-menu is a URI kind with
 // fixed subpages (audio settings, DJ feedback...) rather than a menu for a track, and the now playing bar has no menu.
@@ -27,8 +26,8 @@
 // add button), share, the album and the artist, then the player's own Speed, Pitch & Reverb and Lyrics Source
 // (Player.h's SGRPlayerMenuPageItems). Spotify's own rows (add to playlist, the queue, radio...) are not in it.
 //
-// While the lines play, the rest of the page gives way to them as in the redesigned player (PlayerLyrics.x's setAlone,
-// its owner, 2026-11-01): a scroll on through the lines, or kRest without a touch while the song plays, fades the
+// While the lines play, the rest of the page gives way to them as the redesigned Spotify player once had them do (its
+// owner, 2026-11-01): a scroll on through the lines, or kRest without a touch while the song plays, fades the
 // header, the thumbnail and title, and every control, and the lines take the whole safe area (with Hide the controls
 // set to Keep the title, the header, thumbnail and title stay and the lines grow down only); a tap where nothing
 // seeks, a scroll back, a pause or VoiceOver brings it all back. The recognizers for that are taps and a watcher that
@@ -38,7 +37,7 @@
 // everything of its own, on its lyrics or queue if the page's are up, and comes back on what it showed.
 //
 // The Player page's settings reach it too (its owner, 2026-11-01): Volume (the row goes and the controls close up, read at
-// each open), Hide on the player's Shuffle and Repeat (by alpha in their slots, as PlayerControls.x hides them), the hold
+// each open), Shuffle and Repeat under Controls (by alpha in their slots, as the redesigned player hid them), the hold
 // on the cover for 2× (PlayerArtwork.x's, SGRPlayerAttachCoverHold). TODO ("aim to add at some point"): Switch to video is
 // not honoured here yet; the page has no video chip, and its row stays as it is meanwhile.
 //
@@ -49,7 +48,6 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import "Core/SGCore.h"
-#import "Redesigned/Kit/SGRRepaint.h"
 #import "Shared/Player/SleepTimer.h"
 #import "Settings/SGMarquee.h"
 #import "Shared/Player/SpeedPitch.h"
@@ -57,8 +55,8 @@
 #import "Redesigned/Artist/Artist.h"
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
 #import "Redesigned/Lyrics/SGRSingButton.h"
-#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
-#import "Redesigned/Player/Player.h"
+#import "Redesigned/Navbar/Navbar.h"
+#import "Player.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Shared/Navigation/Links.h"
@@ -99,11 +97,11 @@ static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24;
 // After a seek the state still reports the old place for a moment: the bar holds the new one meanwhile, so it does not
 // jump back and forth.
 static const CFTimeInterval kSeekHold = 1.5;
-// How far a finger moves along the bar before the pans above it go off (PlayerVolume.m's kDragStart).
+// How far a finger moves along the bar before the pans above it go off (the redesigned player's volume's kDragStart).
 static const CGFloat kScrubDragStart = 6;
 // The cover as the thumbnail it shrinks to while the lyrics are up, and the gap between it and the title beside it.
 static const CGFloat kThumbSide = 60, kThumbGap = 14;
-// The lyrics glyph, the redesigned player's footer's (PlayerFooter.x).
+// The lyrics glyph, the redesigned player's footer's.
 static NSString *const kLyricsSymbol = @"quote.bubble", *const kLyricsSymbolOpen = @"quote.bubble.fill";
 
 // A light disc `side` across with `symbol` in `config` cut out of it.
@@ -134,8 +132,8 @@ UIImageView *SGRSystemCutDisc(NSString *symbol) {
     return cutDisc(symbol);
 }
 // The bottom row's middle above the safe area's bottom, never less than the minimum above the screen's, and the route
-// line's middle under it: the redesigned player's footer's (PlayerFooter.x's kRowAboveSafeArea, kRowMinBottom and
-// kRouteLineDrop), which leave the line its room over the home indicator.
+// line's middle under it: the redesigned player's footer's (its kRowAboveSafeArea, kRowMinBottom and kRouteLineDrop),
+// which leave the line its room over the home indicator.
 static const CGFloat kRowAboveSafeArea = 32, kRowMinBottom = 34, kRouteLineDrop = 32;
 // The add button's glyph beside the title and artist, and its touch square.
 static const CGFloat kAddGlyph = 22, kAddSide = 44;
@@ -143,7 +141,7 @@ static const CGFloat kAddGlyph = 22, kAddSide = 44;
 // screen (2026-11-01): the volume's middle above the row's, the controls' above the volume's, the times' above the
 // controls', the progress bar's above the times'; the header's circles in from the sides and down from the safe area;
 // previous and next out from the middle as a share of the width between the margins; the bottom row's glyphs at a
-// fifth, half and four fifths of the width, as PlayerFooter.x places them (kLeading, kMiddle, kTrailing). The first three
+// fifth, half and four fifths of the width, as the redesigned player's footer placed them (kLeading, kMiddle, kTrailing). The first three
 // gaps are times controlsSpacing() (below).
 static const CGFloat kVolumeAboveRow = 38, kControlsAboveVolume = 58, kTimesAboveControls = 46, kScrubberAboveTimes = 17;
 static const CGFloat kHeaderSide = 16, kHeaderDrop = 2, kSkipShare = 0.25, kSkipGlyph = 32, kPlayGlyph = 44;
@@ -151,10 +149,10 @@ static const CGFloat kHeaderSide = 16, kHeaderDrop = 2, kSkipShare = 0.25, kSkip
 static const double kEpisodeSkip = 15;
 // With the volume row off, the controls' middle above the bottom row's: they close up into its room.
 static const CGFloat kControlsAboveRowAlone = 72;
-// The title's swipe pages to the track before or after as the mini player's does (SystemTabs.x's kSwipeDistance,
+// The title's swipe pages to the track before or after as the mini player's does (Navbar/SystemTabs.x's kSwipeDistance,
 // kSwipeSpeed and kPageGap): far enough as a share of the text's width, or fast enough, and the gap between pages.
 static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitlePageGap = 24;
-// The soft edge at each side of the title's column, the mini player's (SystemTabs.x's kTextFade).
+// The soft edge at each side of the title's column, the mini player's (Navbar/SystemTabs.x's kTextFade).
 static const CGFloat kTitleFade = 14;
 // The lines on their own: the controls fade after this long without a touch, and the lines keep this far from the safe
 // area's ends (PlayerLyrics.x's kRest and kLyricsBottom).
@@ -937,10 +935,10 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 // Spotify's Connect sheet. The first way is Spotify's own link to its device picker (kConnectURI), sent only when the
 // dispatcher's registry says a handler takes it (Shared/Navigation/Links.h's SGSpotifyURIRoute asks every handler as the
 // dispatcher would, so a link nothing takes never ends in Spotify's "Couldn't open link"). The second is the redesigned
-// player's footer's (PlayerFooter.x): the tap recognizer on Spotify's Connect holder is sent the tap a finger would have
+// player's footer's: the tap recognizer on Spotify's Connect holder is sent the tap a finger would have
 // made, as Spotify opens its sheet from that recognizer rather than from its button's actions (the phone's log,
 // 2026-10-30). The page has no Spotify footer, so that holder is the now playing bar's, which under the system tab bar
-// is at alpha 0 and takes no touches (NowPlayingBar.x), and can be missing altogether: the bar tucks its Connect item
+// is at alpha 0 and takes no touches (Navbar/NowPlayingBar.x), and can be missing altogether: the bar tucks its Connect item
 // away (hidden) when it goes to the tab bar's row, and has none while Spotify shows no device button. A hold on the
 // AirPlay glyph did not open Connect on the phone (its owner, 2026-11-01), which is why the link comes first now and
 // each way says in the log why it was or was not taken. `how` says which way was taken, or why none was.
@@ -992,7 +990,7 @@ static BOOL openSpotifyConnect(NSString **how) {
 
 // A tap opens the system's AirPlay picker, the Music app's; a press held opens Spotify's Connect sheet with a haptic, as
 // in the redesigned player's footer (its owner, 2026-10-30). The picker's own glyph is always the plain AirPlay one, so it
-// is drawn clear and the glyph over it is the output's device, the footer's (PlayerFooter.x's SGRPlayerOutputSymbol:
+// is drawn clear and the glyph over it is the output's device, the footer's (SystemOutput.x's SGRPlayerOutputSymbol:
 // AirPods by model, a HomePod, a Mac, EarPods...), drawn again as the footer says the output changed, and pressed as the
 // footer's is while a finger is on it (its owner, 2026-11-01).
 @interface SGRSystemRouteButton : AVRoutePickerView
@@ -1094,8 +1092,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the lines on their own
 
-// Sees every touch on the page and takes none, as the redesigned player's watcher does (PlayerLyrics.x's
-// SGRPlayerTouchWatcher): it holds the clock while a finger is down and starts it once the last one lifts. It never
+// Sees every touch on the page and takes none, as the redesigned player's touch watcher did:
+// it holds the clock while a finger is down and starts it once the last one lifts. It never
 // recognizes, so it stands in no one's way, the zoom's close included.
 @interface SGRSystemTouchWatcher : UIGestureRecognizer <UIGestureRecognizerDelegate>
 @property (nonatomic, readonly) BOOL touching;
@@ -1289,10 +1287,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     [_coverHolder addSubview:_cover];
 
     // A long title or artist glides to its end and back, its edge faded, as the redesigned player's title does (Spotify's
-    // own marquee there; the mod's SGMarqueeLabel, the Music app's timing, here and on the glass bar). The two sit in one
+    // own marquee there; the mod's SGMarqueeLabel, the Music app's timing, here). The two sit in one
     // block that a sideways swipe pages through the tracks (titleSwiped:), with the track coming in beside them.
     _titleBlock = [UIView new];
-    // Cut at the column's sides through a soft edge, as the mini player's lines are (SystemTabs.x's kTextFade): the block
+    // Cut at the column's sides through a soft edge, as the mini player's lines are (Navbar/SystemTabs.x's kTextFade): the block
     // reaches kTitleFade past the text on either side, so at rest the fade lies over nothing.
     _titleBlock.clipsToBounds = YES;
     _titleFade = [CAGradientLayer layer];
@@ -1392,20 +1390,20 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         button.accessibilityElementsHidden = YES;
     }
 
-    // Dimmed until the track's lines are in, as the redesigned player's footer glyph is (PlayerFooter.x): syncLyrics.
+    // Dimmed until the track's lines are in, as the redesigned player's footer glyph was: syncLyrics.
     _lyrics = [SGRGlyphButton buttonWithSymbol:kLyricsSymbol pointSize:20 title:@"Lyrics"];
     _lyrics.glyph.tintColor = SGRSecondary();
     _lyrics.enabled = NO;
     _lyrics.onTap = ^{ [weakSelf toggleLyrics]; };
     _route = [[SGRSystemRouteButton alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
-    // Spotify's sheet goes up over the page (SystemTabs.x sends a presentation from under the page to the page), so the
+    // Spotify's sheet goes up over the page (Navbar/SystemTabs.x sends a presentation from under the page to the page), so the
     // page stays where it is.
     _route.onHold = ^{
         NSString *how = nil;
         openSpotifyConnect(&how);
     };
-    // The output's name under the glyph, as the redesigned player's footer draws it (PlayerFooter.x's
-    // SGRPlayerPlaceRoute): the Music app's 15pt at about 68% white, semibold to read as its blended regular does, and
+    // The output's name under the glyph, as the redesigned player's footer drew it:
+    // the Music app's 15pt at about 68% white, semibold to read as its blended regular does, and
     // nothing on the phone's own speaker (its owner, 2026-11-01: "missing the text under the AirPlay icon").
     _routeLine = [UILabel new];
     _routeLine.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryLarge);
@@ -1642,7 +1640,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // A swipe close let go back ends the close too: a tap on the mini player waiting on it (SystemTabs.x's opened) is let
+    // A swipe close let go back ends the close too: a tap on the mini player waiting on it (Navbar/SystemTabs.x's opened) is let
     // go, rather than left waiting to open the page at the next close.
     [self.transitionCoordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         if (context.isCancelled) [NSNotificationCenter.defaultCenter postNotificationName:SGRSystemPlayerPageDidCloseNotification object:nil];
@@ -1677,14 +1675,14 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
-    // The close is over: a tap on the mini player during it opens the page now (SystemTabs.x's opened). A turn later, so
+    // The close is over: a tap on the mini player during it opens the page now (Navbar/SystemTabs.x's opened). A turn later, so
     // UIKit has finished with this presentation.
     dispatch_async(dispatch_get_main_queue(), ^{
         [NSNotificationCenter.defaultCenter postNotificationName:SGRSystemPlayerPageDidCloseNotification object:nil];
     });
     [_timer invalidate];
     _timer = nil;
-    // The page goes only by closing (a new one is made for each open: SystemTabs.x), so this is where it was left.
+    // The page goes only by closing (a new one is made for each open: Navbar/SystemTabs.x), so this is where it was left.
     sgr_lyricsLeftOpen = _lyricsOpen;
 }
 
@@ -1716,7 +1714,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGFloat headerBottom = top + button;
 
     // From the bottom up: the row of three with the route line under it, the volume, the controls, the progress, the
-    // two lines. The row stands where the redesigned player's footer puts it (PlayerFooter.x's SGRPlayerLowerRow).
+    // two lines. The row stands where the redesigned player's footer put it.
     CGFloat rowMid = height - MAX(safe.bottom + kRowAboveSafeArea, kRowMinBottom);
     NSArray<UIView *> *row = @[_lyrics, _route, _queue];
     static const CGFloat shares[] = {0.2, 0.5, 0.8};
@@ -1841,8 +1839,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the header's ⋯
 
-// A pull-down button, the HIG's, as the redesigned player's ⋯ is (ContextMenu.x's SGRMenuFront): the menu opens on touch
-// down, made afresh as it opens. The glyph presses as the footer's do.
+// A pull-down button, the HIG's: the menu opens on touch down, made afresh as it opens. The glyph presses as the footer's do.
 - (UIButton *)makeMoreButton {
     UIButton *more = [UIButton buttonWithType:UIButtonTypeCustom];
     more.showsMenuAsPrimaryAction = YES;
@@ -2819,7 +2816,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
     [self restartRest];
 }
 
-// The wake tap takes nothing from anything under it (PlayerLyrics.x's SGRPlayerWake): Sing's mic and a line the lines'
+// The wake tap takes nothing from anything under it, as the redesigned player's did: Sing's mic and a line the lines'
 // own tap would seek to keep their touches.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     if (recognizer != _wake) return YES;
@@ -2835,7 +2832,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
 }
 
 // The title's swipe is sideways only: a drag that starts more down than across is never its, so UIKit's swipe close
-// takes it, as the mini player's swipe leaves its taps (SystemTabs.x's gestureRecognizerShouldBegin:).
+// takes it, as the mini player's swipe leaves its taps (Navbar/SystemTabs.x's gestureRecognizerShouldBegin:).
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
     if (recognizer.view != _titleBlock || ![recognizer isKindOfClass:UIPanGestureRecognizer.class]) return YES;
     CGPoint velocity = [(UIPanGestureRecognizer *)recognizer velocityInView:_titleBlock];
@@ -2852,7 +2849,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
 }
 
 // Moved sideways the title and artist go with the finger and the next or previous track's come in beside them, as the
-// mini player's lines do (SystemTabs.x's swiped:): far or fast enough it settles on that track and skips to it, short of
+// mini player's lines do (Navbar/SystemTabs.x's swiped:): far or fast enough it settles on that track and skips to it, short of
 // that it springs back. Left is the next track, right the one before, episodes the same.
 - (void)titleSwiped:(UIPanGestureRecognizer *)swipe {
     CGFloat step = _titleBlock.bounds.size.width - 2 * kTitleFade + kTitlePageGap, x = [swipe translationInView:_titleBlock].x;

@@ -1,4 +1,4 @@
-// The redesign's accent color, chosen apart from the native look's: its copy of Native/Appearance/Accent.x.
+// The redesign's accent color.
 // Accent color: Spotify's green, #1ED760, is one token. Its three components occur once in the
 // whole binary, and every green the app draws, from the play button to the "Zobrazit vše" links
 // and the progress bar, is that token or a state blended from it. So it is swapped where it is
@@ -60,10 +60,6 @@ static BOOL swap(CGFloat *r, CGFloat *g, CGFloat *b) {
         return YES;
     }
     return NO;
-}
-
-BOOL SGRAccentSwap(CGFloat *r, CGFloat *g, CGFloat *b) {
-    return sg_accent >= 0 && swap(r, g, b);
 }
 
 %hook UIColor

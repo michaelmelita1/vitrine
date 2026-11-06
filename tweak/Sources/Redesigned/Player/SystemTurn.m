@@ -1,4 +1,4 @@
-// Native redesign's landscape: the whole app turns with the phone, as iOS turns any app that allows it (its owner,
+// The redesign's landscape: the whole app turns with the phone, as iOS turns any app that allows it (its owner,
 // 2026-11-06: "force the Spotify app to support landscape everywhere and just have it happen natively"), and the system
 // tab bar's player page (SystemPlayer.m) holds its landscape player (SystemLandscape.m) while it is sideways. The turn is
 // the system's own; this file only lets it happen and carries what the page shows to the landscape player.
@@ -13,7 +13,7 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Redesigned/Player/Player.h"
+#import "Player.h"
 #import "SystemPlayer.h"
 
 static __weak UIViewController<SGRSystemTurnPage> *sg_page;
@@ -173,7 +173,7 @@ void SGRSystemTurnBack(void) {
 
 // The unlock as Spotify starts, so its first screens turn too, not only once the player page has been up.
 __attribute__((constructor)) static void unlockAtLaunch(void) {
-    if (!SGNativeRedesign()) return;
+    if (!SGRedesignedUI()) return;
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidFinishLaunchingNotification object:nil queue:nil
                                                 usingBlock:^(NSNotification *note) {
         dispatch_async(dispatch_get_main_queue(), ^{

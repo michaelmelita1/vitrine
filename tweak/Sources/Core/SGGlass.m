@@ -44,11 +44,6 @@ UIVisualEffectView *SGGlassAt(UIView *host, NSUInteger index) {
     return glass;
 }
 
-void SGHideGlassFrom(UIView *host, NSUInteger count) {
-    NSArray<UIVisualEffectView *> *panes = objc_getAssociatedObject(host, &kPanesKey);
-    for (NSUInteger i = count; i < panes.count; i++) panes[i].hidden = YES;
-}
-
 void SGShapeGlass(UIView *glass, CGFloat radius, BOOL capsule) {
     // The classes and what they answer to are fixed once loaded; whether this pane takes a configuration is asked each time.
     static Class config, cornerRadius;

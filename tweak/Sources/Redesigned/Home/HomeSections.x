@@ -5,7 +5,7 @@
 // Preview), a heading over one of those (Fitness for you, Videos from your top artists), the episode
 // cards, and any kind the server adds later.
 //
-// An allow list, as for the cards under the player (Redesigned/Player/PlayerCards.x): the feed is the
+// An allow list, as the redesigned player once kept for the cards under it: the feed is the
 // server's, and a new kind should not turn up on a redesigned Home.
 //
 // Tree (trees/clean/home/10.txt): a section is an Element_List.CollectionViewCell of the page's list whose

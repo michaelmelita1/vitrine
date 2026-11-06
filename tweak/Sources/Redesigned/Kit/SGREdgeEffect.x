@@ -1,4 +1,3 @@
-// The redesign's copy of Native/Appearance/EdgeEffect.x.
 // Soft top edge: iOS 27 resolves a scroll view's automatic top edge effect to the hard style, the
 // flat dark band under the navigation bar (UIKit.ScrollEdgeEffectView in trees/continuous/1.txt).
 // Setting the soft style brings back iOS 26's thin fading blur. Set on every layout pass as well as

@@ -57,14 +57,6 @@ BOOL SGClassNamed(Class cls, NSString *marker) {
     return answer.boolValue;
 }
 
-BOOL SGHasClass(UIView *root, NSString *marker) {
-    __block BOOL found = NO;
-    SGForEachView(root, ^(UIView *v) {
-        if (!found && SGClassNamed(v.class, marker)) found = YES;
-    });
-    return found;
-}
-
 @interface SGWeakBox : NSObject
 @property (nonatomic, weak) UIView *value;
 @end
@@ -128,10 +120,6 @@ UIView *SGFindIdentifier(UIView *root, NSString *prefix, const void *key) {
     return SGFindRemembered(root, key, ^BOOL(UIView *v) { return [v.accessibilityIdentifier hasPrefix:prefix]; });
 }
 
-void SGFindIdentifiers(UIView *root, NSUInteger count, NSString *const prefixes[], const void *const keys[], UIView *__strong out[]) {
-    SGFindRememberedAll(root, count, keys, ^BOOL(NSUInteger i, UIView *v) { return [v.accessibilityIdentifier hasPrefix:prefixes[i]]; }, out);
-}
-
 BOOL SGKeepsColor(UIView *view) {
     return [view isKindOfClass:UIImageView.class] || [view isKindOfClass:UILabel.class] || view.bounds.size.height <= 4;
 }
@@ -147,15 +135,6 @@ void SGStripBackgrounds(UIView *view) {
         if ([layer isKindOfClass:CAGradientLayer.class]) layer.hidden = YES;
     }
     for (UIView *sub in view.subviews) SGStripBackgrounds(sub);
-}
-
-BOOL SGIsVisibleColor(CGColorRef color) {
-    if (!color || CGColorGetAlpha(color) < 0.05) return NO;
-    const CGFloat *c = CGColorGetComponents(color);
-    size_t n = CGColorGetNumberOfComponents(color);
-    CGFloat brightest = 0;
-    for (size_t i = 0; i + 1 < n; i++) brightest = MAX(brightest, c[i]);
-    return brightest > 0.08;
 }
 
 BOOL SGIsLightColor(CGColorRef color) {
@@ -174,9 +153,4 @@ BOOL SGIsBaseSurface(CGColorRef color) {
     if (n == 2) return c[0] <= 0.10;
     if (n < 3) return NO;
     return c[0] <= 0.10 && fabs(c[0] - c[1]) < 0.02 && fabs(c[1] - c[2]) < 0.02;
-}
-
-BOOL SGLooksLikeCard(UIView *view, CGColorRef color) {
-    CGSize size = view.bounds.size;
-    return size.height >= 40 && size.height <= 140 && size.width >= 200 && SGIsVisibleColor(color);
 }

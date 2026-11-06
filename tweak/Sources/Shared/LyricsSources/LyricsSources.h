@@ -241,7 +241,7 @@ SGLyricsResult *SGSpicyLyricsResult(id root);
 
 UIViewController *SGLyricsSourcesPage(void);   // the ordered list on the Lyrics page
 
-// LyricsPick.m. The source picked for a track from the redesigned player's ⋯, which may be lower in the order
+// LyricsPick.m. The source picked for a track from the player page's ⋯, which may be lower in the order
 // than the one that answered (issue #67). The pick is a track's id against a source's key, kept until Spotify
 // quits; a track's walk asks its picked source first, the rest of the order after it. Main queue.
 NSString *SGLyricsChosenSource(NSString *trackID);

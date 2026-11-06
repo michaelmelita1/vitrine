@@ -18,7 +18,7 @@
 //                      more by the artist, no videos, no concerts, no merch, no you might also like, each
 //                      back once its switch is off
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI); the native look's do not then.
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

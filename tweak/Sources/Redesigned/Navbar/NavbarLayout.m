@@ -1,4 +1,4 @@
-// The saved composition of the redesign's bar, as NSUserDefaults property lists, apart from the native look's.
+// The saved composition of the redesign's bar, as NSUserDefaults property lists.
 #import "Navbar.h"
 #import "Shared/Navigation/Links.h"
 
@@ -29,51 +29,55 @@ void SGRSetNavbarLayout(NSArray<NSDictionary *> *layout) {
     [NSUserDefaults.standardUserDefaults setObject:layout ?: @[] forKey:kNavbarLayout];
 }
 
-// A tab of the mod's own leaves the bar's list with its entry; one of Spotify's is named by its identity. The bar's order
-// is kept: it was the order on the right. A hidden tab was shown nowhere, set apart or not, and stays where it is,
-// hidden: the split list shows whatever is on it, so the bar looks as it did.
-void SGRMigrateNavbarSplit(void) {
+// Split tabs, a list of tabs set apart at the trailing end of the glass bar, are gone with that bar; the system tab bar
+// keeps one row. Their order was the bar's order on the right, after the rest, so each moves to the end of the bar's
+// list, once, and the list is let go: the mod's own as they were, Spotify's shown and out of their earlier place. A
+// list from before the split tabs had one of their own (.split, the identities of entries of the bar's list) is read
+// the same way. Run at launch, so a settings backup from before, which an import writes back before it restarts, is
+// folded too.
+void SGRFoldNavbarSplit(void) {
     NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
-    if (![store objectForKey:kNavbarSplitWas]) return;
-    if ([store objectForKey:kNavbarSplit]) {
-        [store removeObjectForKey:kNavbarSplitWas];
-        return;
+    BOOL hasList = [store objectForKey:kNavbarSplit] != nil, hasOld = [store objectForKey:kNavbarSplitWas] != nil;
+    if (!hasList && !hasOld) return;
+    NSMutableArray<NSDictionary *> *apart = [NSMutableArray array];
+    if (hasList) {
+        [apart addObjectsFromArray:listOfKind(kNavbarSplit, NSDictionary.class)];
+    } else {
+        // The old list named entries of the bar's list, or Spotify's tabs it never named, in no order: the bar's order
+        // first, then Spotify's.
+        NSMutableOrderedSet<NSString *> *split = [NSMutableOrderedSet orderedSetWithArray:listOfKind(kNavbarSplitWas, NSString.class)];
+        for (NSDictionary *entry in SGRNavbarLayout()) {
+            NSString *ident = entry[SGRNavbarID];
+            if (![ident isKindOfClass:NSString.class] || ![split containsObject:ident]) continue;
+            [split removeObject:ident];
+            if (![entry[SGRNavbarHidden] boolValue]) [apart addObject:entry];
+        }
+        NSArray<NSString *> *stock = SGRNavbarStock();
+        for (NSString *ident in stock) if ([split containsObject:ident]) [apart addObject:@{SGRNavbarID: ident, SGRNavbarTitle: ident}];
     }
-    NSMutableOrderedSet<NSString *> *split = [NSMutableOrderedSet orderedSetWithArray:listOfKind(kNavbarSplitWas, NSString.class)];
-    NSMutableArray<NSDictionary *> *layout = [NSMutableArray array], *apart = [NSMutableArray array];
+    NSMutableSet<NSString *> *moved = [NSMutableSet set];
+    for (NSDictionary *entry in apart) if ([entry[SGRNavbarID] isKindOfClass:NSString.class]) [moved addObject:entry[SGRNavbarID]];
+    NSMutableArray<NSDictionary *> *layout = [NSMutableArray array];
     for (NSDictionary *entry in SGRNavbarLayout()) {
-        NSString *ident = entry[SGRNavbarID];
-        BOOL listed = [ident isKindOfClass:NSString.class] && [split containsObject:ident];
-        if (listed) [split removeObject:ident];
-        if (!listed || [entry[SGRNavbarHidden] boolValue]) {
-            [layout addObject:entry];
-            continue;
-        }
-        if (entry[SGRNavbarURI]) [apart addObject:entry];
-        else {
-            [layout addObject:entry];
-            [apart addObject:@{SGRNavbarID: ident, SGRNavbarTitle: entry[SGRNavbarTitle] ?: ident}];
-        }
+        if (![moved containsObject:entry[SGRNavbarID]]) [layout addObject:entry];
     }
-    // Spotify's tabs the bar's list never named stood where Spotify put them: in Spotify's order, not the old list's,
-    // which was saved from a set and so in none.
-    NSArray<NSString *> *stock = SGRNavbarStock();
-    NSArray<NSString *> *rest = [split.array sortedArrayWithOptions:NSSortStable usingComparator:^NSComparisonResult(NSString *a, NSString *b) {
-        NSUInteger ia = [stock indexOfObject:a], ib = [stock indexOfObject:b];
-        return ia < ib ? NSOrderedAscending : ia > ib ? NSOrderedDescending : NSOrderedSame;
-    }];
-    for (NSString *ident in rest) [apart addObject:@{SGRNavbarID: ident, SGRNavbarTitle: ident}];
-    SGRSetNavbarLayout(layout);
-    SGRSetNavbarSplit(apart);
+    if (apart.count) {
+        // Spotify's tabs the bar's list never named stood after the ones it did, in Spotify's order: they are named now,
+        // so they keep their place ahead of the moved tabs.
+        NSMutableSet<NSString *> *named = [NSMutableSet set];
+        for (NSDictionary *entry in layout) if ([entry[SGRNavbarID] isKindOfClass:NSString.class]) [named addObject:entry[SGRNavbarID]];
+        for (NSString *ident in SGRNavbarStock()) {
+            if (![named containsObject:ident] && ![moved containsObject:ident]) [layout addObject:@{SGRNavbarID: ident, SGRNavbarTitle: ident}];
+        }
+        for (NSDictionary *entry in apart) {
+            NSMutableDictionary *shown = [entry mutableCopy];
+            [shown removeObjectForKey:SGRNavbarHidden];
+            [layout addObject:shown];
+        }
+        SGRSetNavbarLayout(layout);
+    }
+    [store removeObjectForKey:kNavbarSplit];
     [store removeObjectForKey:kNavbarSplitWas];
-}
-
-NSArray<NSDictionary *> *SGRNavbarSplit(void) {
-    return listOfKind(kNavbarSplit, NSDictionary.class);
-}
-
-void SGRSetNavbarSplit(NSArray<NSDictionary *> *split) {
-    [NSUserDefaults.standardUserDefaults setObject:split ?: @[] forKey:kNavbarSplit];
 }
 
 NSArray<NSString *> *SGRNavbarStock(void) {

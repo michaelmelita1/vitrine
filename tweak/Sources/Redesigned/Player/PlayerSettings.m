@@ -1,4 +1,5 @@
-// The redesign's Player page in Mod Settings (App/Pages.m opens it in place of the native look's).
+// The redesign's Player page in Mod Settings (App/Pages.m opens it in place of the native look's), for the player
+// page (SystemPlayer.m).
 //
 // It leads with a card of the player as the now playing track shows on it: the background chosen on the
 // page edge to edge, and over its foot the cover, the title and the artist (gliding when too long) and how
@@ -18,9 +19,8 @@
 // choice does; it is given the room of the longest note, so the rows under it hold still as it changes.
 //
 // Under the header: the rows that follow the choice (Animated's sources and its Low Data Mode switch; Fluid's
-// five sliders and their Reset, which the card and the player follow as they move, SGRFluid.h), the Mini
-// player section (Redesigned/NowPlayingBar/NowPlayingBarSettings.m), then the sections either look shares. Under
-// Native redesign the Mini player section gives way to a page of its own (App/Pages.m) and Follow the cover goes.
+// five sliders and their Reset, which the card and the player follow as they move, SGRFluid.h), the Controls
+// section, then the sections App/Pages.m adds (the Mini player page among them).
 //
 // Threading: main thread only.
 #import "Core/SGCore.h"
@@ -28,7 +28,6 @@
 #import "Settings/SGPageStyle.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Redesigned/Kit/SGRFluid.h"
-#import "Redesigned/NowPlayingBar/NowPlayingBar.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Shared/Player/SGLastTrack.h"
 #import "Shared/Player/PlayerSettings.h"
@@ -363,33 +362,20 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
         SGNotedSection(nil, fluid, @"Brightness above 100% can make white text harder to read. A paused song holds the "
                                    @"background still. Animated and Visualizer use these where they show Fluid."),
         nil];
-    // Native redesign draws its own player page and mini player: Follow the cover, Spotify's icons and the glass bar's Mini
-    // player section are not theirs, and its mini player's rows are on a page of their own (App/Pages.m).
-    if (SGNativeRedesignStored()) {
-        // One section for what the page's controls show, each switch on to show its control (its owner, 2026-11-02): Hide
-        // on the player's Shuffle, Repeat and Switch to video turned round, on the same keys.
-        [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
-                                                          SGShownRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle),
-                                                          SGShownRow(@"Repeat", nil, SGRKeyPlayerHideRepeat),
-                                                          SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch),
-                                                          SGOptionRow(@"Match the lyrics button", @"The title, play and pause, and skip", SGRKeyPlayerSoftControls)],
-            @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
-            @"Shuffle and Repeat switched off move into the queue's row. "
-            @"Match the lyrics button draws the song's title, play and pause, and skip buttons in the see-through white of the lyrics and queue buttons while they're open.")];
-    } else {
-        [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
-                                                          SGOptionRow(@"Follow the cover", nil, SGRKeyPlayerFollowsCover),
-                                                          SGOptionRow(@"Spotify's icons", @"Lyrics, device, queue and the AI DJ's button", SGRKeyPlayerSpotifyIcons)],
-            @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
-            @"Follow the cover paints the like, shuffle, repeat, device and queue buttons, and the mini player's device and like, in the color of the song playing. "
-            @"Spotify's icons keeps Spotify's own glyphs in the row under the controls instead of the Music app's.")];
-        [sections addObject:SGNotedSection(@"Mini player", SGRNowPlayingBarRows(),
-            @"Apple Music style moves the now playing bar in between two tabs as you scroll down.")];
-    }
+    // One section for what the page's controls show, each switch on to show its control (its owner, 2026-11-02): Hide
+    // on the player's Shuffle, Repeat and Switch to video turned round, on the same keys.
+    [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
+                                                      SGShownRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle),
+                                                      SGShownRow(@"Repeat", nil, SGRKeyPlayerHideRepeat),
+                                                      SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch),
+                                                      SGOptionRow(@"Match the lyrics button", @"The title, play and pause, and skip", SGRKeyPlayerSoftControls)],
+        @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
+        @"Shuffle and Repeat switched off move into the queue's row. "
+        @"Match the lyrics button draws the song's title, play and pause, and skip buttons in the see-through white of the lyrics and queue buttons while they're open.")];
     [sections addObjectsFromArray:more];
-    // Fluid, Animated and Visualizer share the field (PlayerMotion.x reads the choice on every track, PlayerVisualiser.m
-    // on the field's layout); Still and Colors are a field of another kind, made once a launch (PlayerField.x).
-    NSString *footer = @"Fluid, Animated and Visualizer change with the next song. Still, Colors, Hide on the player and Spotify's icons apply after you restart Spotify.";
+    // Fluid, Animated and Visualizer share the field (PlayerMotion.x reads the choice on every track); Still and Colors
+    // are a field of another kind.
+    NSString *footer = @"Fluid, Animated and Visualizer change with the next song. Still and Colors apply after you restart Spotify.";
     SGRPlayerPage *page = [[SGRPlayerPage alloc] initWithTitle:@"Player" intro:nil sections:sections footer:footer];
     weakPage = page;
     page.showcase = showcase;

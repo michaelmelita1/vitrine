@@ -23,12 +23,10 @@
 // The block keeps whether it was open for the rest of the session; speed and pitch last until Spotify
 // quits.
 //
-// Under the redesign, with the player's background Fluid or Animated, a row under the block switches
-// Animated artwork (SpeedPitch.h), which the redesign's PlayerMotion.x defines.
-//
-// The redesign shows the player's sheet as the system menu, with speed, pitch, reverb and Animated artwork
-// as items of its own (Redesigned/Player/PlayerMenu.m), so the block stays out of a sheet shown that way
-// and comes in only if the sheet itself is shown after all (SGPlayerMenuReplaced).
+// The redesign has a player page of its own in place of Spotify's, whose ⋯ has speed, pitch, reverb and the
+// Artwork choice as items of its own (Redesigned/Player/PlayerMenu.m), the sliders in a popover of this block
+// (SGPlayerShowSpeedPitchPanel). A sheet the redesign shows as the system menu never gets the block
+// (SGPlayerMenuReplaced).
 #import <CoreText/SFNTLayoutTypes.h>
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
@@ -110,10 +108,6 @@ static char kBlockKey, kDecidedKey, kWatchedKey, kShownAtKey, kRowsInKey;
     UISlider *_speed, *_pitch, *_reverb;
     UILabel *_followsName;
     UISwitch *_follows;
-    UIView *_animatedRow;
-    UIImageView *_animatedIcon;
-    UILabel *_animatedName;
-    UISwitch *_animated;
     float _shownSpeed, _shownPitch, _shownReverb;
     NSTimeInterval _speedSentAt;
     BOOL _speedPending;
@@ -248,26 +242,12 @@ static void placeTick(UISlider *slider) {
     for (UIView *view in @[_speedName, _speedValue, _speed, _pitchName, _pitchValue, _pitch, _reverbName, _reverbValue, _reverb,
                            _followsName, _follows]) [_panel addSubview:view];
 
-    if (SGPlayerMenuOffersAnimatedArtwork()) {
-        _animatedRow = [UIView new];
-        _animatedIcon = [[UIImageView alloc] initWithImage:paintedSymbol(@"play.rectangle.on.rectangle", 18, UIImageSymbolWeightRegular, secondary())];
-        _animatedIcon.contentMode = UIViewContentModeCenter;
-        _animatedName = makeLabel(font(UIFontTextStyleBody, UIFontWeightRegular, UIContentSizeCategoryExtraLarge), primary());
-        _animatedName.text = @"Animated artwork";
-        _animated = [UISwitch new];
-        _animated.accessibilityLabel = @"Animated artwork";
-        [_animated addTarget:self action:@selector(animatedChanged) forControlEvents:UIControlEventValueChanged];
-        for (UIView *view in @[_animatedIcon, _animatedName, _animated]) [_animatedRow addSubview:view];
-        [self addSubview:_animatedRow];
-    }
-
     [self refresh];
     return self;
 }
 
 + (CGFloat)heightOpen:(BOOL)open {
-    return kRowHeight + (open ? 3 * kSliderBlockHeight + kSwitchRowHeight + kPanelBottom : 0)
-         + (SGPlayerMenuOffersAnimatedArtwork() ? kRowHeight : 0);
+    return kRowHeight + (open ? 3 * kSliderBlockHeight + kSwitchRowHeight + kPanelBottom : 0);
 }
 
 // Set after init, which drew the values for the sheet's closed block: drawn again open.
@@ -290,7 +270,6 @@ static void placeTick(UISlider *slider) {
     _summary.frame = CGRectMake(summaryX, 0, MAX(0, CGRectGetMinX(_chevron.frame) - kGrid - summaryX), kRowHeight);
 
     _row.hidden = self.panelOnly;
-    _animatedRow.hidden = self.panelOnly;
     _panel.frame = CGRectMake(0, self.panelOnly ? kGrid : kRowHeight, width, 3 * kSliderBlockHeight + kSwitchRowHeight + kPanelBottom);
     CGFloat y = 0;
     for (NSArray<UIView *> *line in @[@[_speedName, _speedValue, _speed], @[_pitchName, _pitchValue, _pitch],
@@ -305,13 +284,6 @@ static void placeTick(UISlider *slider) {
     CGSize toggle = [_follows sizeThatFits:CGSizeZero];
     _follows.frame = CGRectMake(width - side - toggle.width, y + (kSwitchRowHeight - toggle.height) / 2, toggle.width, toggle.height);
     _followsName.frame = CGRectMake(side, y, CGRectGetMinX(_follows.frame) - side - kGrid, kSwitchRowHeight);
-
-    // Under the panel while it is open, under the row while it is closed.
-    _animatedRow.frame = CGRectMake(0, sg_open ? CGRectGetMaxY(_panel.frame) : kRowHeight, width, kRowHeight);
-    _animatedIcon.frame = _icon.frame;
-    toggle = [_animated sizeThatFits:CGSizeZero];
-    _animated.frame = CGRectMake(width - side - toggle.width, (kRowHeight - toggle.height) / 2, toggle.width, toggle.height);
-    _animatedName.frame = CGRectMake(titleX, 0, MAX(0, CGRectGetMinX(_animated.frame) - kGrid - titleX), kRowHeight);
 }
 
 #pragma mark state
@@ -360,7 +332,6 @@ static NSString *pitchText(float pitch) {
     _follows.on = SGPlayerPitchFollowsSpeed();
     _follows.enabled = speedAllowed;
     _follows.alpha = _followsName.alpha = speedAllowed ? 1 : 0.4;
-    _animated.on = SGPlayerMenuAnimatedArtwork();
     [self showValues];
 }
 
@@ -494,11 +465,6 @@ static NSString *pitchText(float pitch) {
     [self showValues];
 }
 
-- (void)animatedChanged {
-    SGPlayerMenuSetAnimatedArtwork(_animated.on);
-    SGPlayFeedback(SGFeedbackDetent);
-}
-
 - (void)followsChanged {
     SGSetPlayerPitchFollowsSpeed(_follows.on);
     SGPlayFeedback(SGFeedbackDetent);
@@ -612,10 +578,6 @@ static BOOL isPlayerMenu(UIViewController *menu) {
     SGLog(@"speed and pitch: a context menu, %@ (tapped %d, presented by %@)", ours ? @"the player's" : @"not the player's", ours,
           presenter ? NSStringFromClass(presenter.class) : @"nothing");
     return ours;
-}
-
-void SGPlayerMenuMarkPlayers(void) {
-    sg_moreTappedAt = CACurrentMediaTime();
 }
 
 BOOL SGPlayerMenuIsPlayers(UIViewController *menu) {

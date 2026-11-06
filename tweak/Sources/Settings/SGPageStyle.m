@@ -127,13 +127,12 @@ void SGInsetForBars(UITableView *table) {
     table.verticalScrollIndicatorInsets = inset;
 }
 
-// The pages follow the running look's accent color, read here by its key so the page framework depends on no
-// layer: the native look's (Native/Appearance) or the redesign's (Redesigned/Kit/SGRAccent.h).
-static NSString *const kAccentKey = @"spotifyglass.accent";
+// The pages follow the redesign's accent color (Redesigned/Kit/SGRAccent.h), read here by its key so the page framework
+// depends on no layer.
 static NSString *const kRedesignAccentKey = @"spotifyglass.redesign.accent";
 
 static UIColor *lookAccent(void) {
-    NSInteger rgb = SGInt(SGRedesignedUI() ? kRedesignAccentKey : kAccentKey, -1);
+    NSInteger rgb = SGInt(kRedesignAccentKey, -1);
     if (rgb < 0 || rgb > 0xFFFFFF) return nil;
     return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0 green:((rgb >> 8) & 0xFF) / 255.0 blue:(rgb & 0xFF) / 255.0 alpha:1];
 }

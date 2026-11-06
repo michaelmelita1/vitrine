@@ -104,6 +104,34 @@ NSString *SGMotionSearchName(NSString *name) {
     return bare.length ? bare : name;
 }
 
+// Which edition a name is: the words of what it adds to the album's name ("(Deluxe)", "[Remastered]", " - 2011 Remaster"),
+// without the words both stores add to any edition, so Spotify's "(Deluxe)" and Apple Music's "(Deluxe Edition)" are the
+// same edition and the standard album is none. Apple Music's " - Single" and " - EP" are none either.
+static NSString *editionOf(NSString *name) {
+    if (![name isKindOfClass:NSString.class]) return @"";
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    NSRange dash = [name rangeOfString:@" - "];
+    if (dash.location != NSNotFound) {
+        [parts addObject:[name substringFromIndex:NSMaxRange(dash)]];
+        name = [name substringToIndex:dash.location];
+    }
+    NSRegularExpression *brackets = [NSRegularExpression regularExpressionWithPattern:@"\\(([^)]*)\\)|\\[([^\\]]*)\\]" options:0 error:nil];
+    for (NSTextCheckingResult *match in [brackets matchesInString:name options:0 range:NSMakeRange(0, name.length)]) {
+        for (NSUInteger group = 1; group <= 2; group++) {
+            NSRange range = [match rangeAtIndex:group];
+            if (range.location != NSNotFound) [parts addObject:[name substringWithRange:range]];
+        }
+    }
+    NSSet<NSString *> *common = [NSSet setWithArray:@[@"edition", @"version", @"the", @"single", @"ep", @"album"]];
+    NSMutableArray<NSString *> *words = [NSMutableArray array];
+    for (NSString *word in [plain([parts componentsJoinedByString:@" "]) componentsSeparatedByString:@" "]) {
+        if (!word.length || [common containsObject:word]) continue;
+        [words addObject:[word isEqualToString:@"remastered"] ? @"remaster" : word];
+    }
+    [words sortUsingSelector:@selector(compare:)];
+    return [words componentsJoinedByString:@" "];
+}
+
 // Apple Music may credit several artists where Spotify names the lead, so either name may hold the
 // other as a run of whole words.
 static BOOL sameArtist(NSString *a, NSString *b) {
@@ -382,25 +410,39 @@ void SGMotionAlbumCover(NSString *artist, NSString *album, SGMotionShape shape, 
         done(nil);
         return;
     }
-    NSString *key = [NSString stringWithFormat:@"album\n%ld\n%@\n%@", (long)shape, artistKey, albumKey];
+    // Each edition its own answer: the standard album's motion is not the deluxe's ("edition" marks the keys made so, as
+    // older ones, which editions shared, could hold another edition's cover).
+    NSString *edition = editionOf(album);
+    NSString *key = [NSString stringWithFormat:@"album\n%ld\n%@\n%@\nedition %@", (long)shape, artistKey, albumKey, edition];
     // The remote file is what is kept: the store may drop its local copy later in the launch.
     lookUp(key, ^(NSURL *remote) { SGMotionFile(remote, done); }, ^(void (^answer)(id, BOOL)) {
-        NSString *term = [NSString stringWithFormat:@"%@ %@", artist, SGMotionSearchName(album)];
-        search(@"albums", term, @"editorialVideo", YES, ^(NSArray *found, BOOL answered) {
-            if (!answered) {
+        // Searched by the whole name too when it names an edition: the search by the bare name alone may not bring
+        // the edition up among its ten.
+        NSString *bare = [NSString stringWithFormat:@"%@ %@", artist, SGMotionSearchName(album)];
+        NSString *whole = [NSString stringWithFormat:@"%@ %@", artist, album];
+        BOOL both = edition.length && ![whole isEqualToString:bare];
+        search(@"albums", both ? whole : bare, @"editorialVideo", YES, ^(NSArray *foundWhole, BOOL answeredWhole) {
+          void (^pick)(NSArray *, BOOL) = ^(NSArray *foundBare, BOOL answeredBare) {
+            if (!answeredWhole || !answeredBare) {
                 answer(nil, NO);
                 return;
             }
-            // Editions share a key (Midnights and Midnights (3am Edition), clean and explicit), and only one of
-            // them may have the motion: the album of the same name first, then the first edition that has it.
+            NSMutableArray *found = [NSMutableArray arrayWithArray:foundWhole ?: @[]];
+            if (both) [found addObjectsFromArray:foundBare ?: @[]];
+            // Editions share a key (Midnights and Midnights (3am Edition), the standard and the deluxe, clean and
+            // explicit), and their covers often differ, so only this edition's motion is taken: the album of the same
+            // name first, then one of the same edition named another way ("(Deluxe)" and "(Deluxe Edition)"). Another
+            // edition's motion is not, even when this one has none (its owner, 2026-11-06: a deluxe album showed the
+            // standard one's cover).
             NSString *video = nil, *exact = plain(album);
             for (int pass = 0; pass < 2 && !video; pass++) {
                 for (id result in found) {
                     id attributes = dig(result, @"attributes");
                     if (!sameArtist(artistKey, SGMotionNameKey(dig(attributes, @"artistName")))) continue;
                     id name = dig(attributes, @"name");
-                    if (pass == 0 ? ![name isKindOfClass:NSString.class] || ![plain(name) isEqualToString:exact]
-                                  : ![SGMotionNameKey(name) isEqualToString:albumKey]) continue;
+                    if (![name isKindOfClass:NSString.class]) continue;
+                    if (pass == 0 ? ![plain(name) isEqualToString:exact]
+                                  : ![SGMotionNameKey(name) isEqualToString:albumKey] || ![editionOf(name) isEqualToString:edition]) continue;
                     video = videoOf(dig(attributes, @"editorialVideo"), shape);
                     if (video) break;
                 }
@@ -412,6 +454,9 @@ void SGMotionAlbumCover(NSString *artist, NSString *album, SGMotionShape shape, 
                 return;
             }
             wholeFileOf(master, pixels, answer);
+          };
+          if (both) search(@"albums", bare, @"editorialVideo", YES, pick);
+          else pick(nil, YES);
         });
     });
 }

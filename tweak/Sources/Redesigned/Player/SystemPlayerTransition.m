@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Core/SGGlass.h"
-#import "Navbar.h"
+#import "Redesigned/Navbar/Navbar.h"
 
 // After f728743/Sim-Radio-SwiftUI's ExpandableNowPlaying.swift and NowPlayingBackground.swift (MIT, Copyright (c) 2025
 // Alexey Vorobyov), its owner's pick (2026-11-01): its playerExpandAnimation, SwiftUI's .smooth(duration: 0.3,

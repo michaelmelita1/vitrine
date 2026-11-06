@@ -299,7 +299,7 @@ static void applyContent(UIView *header, UIView *container, SGRHeaderInfo *info,
     SGRPinnedMore(SGRArtistPageOf(container), &kMoreButtonKey, more);
 
     // The buttons arrive after the header has laid out, in a row that keeps its size and so lays nothing out
-    // again (Native/Artist/Artist.x): the row's own pass is watched, a plain UIStackView.
+    // again (as the native look's artist page did): the row's own pass is watched, a plain UIStackView.
     UIView *row = shuffle ?: play ?: follow;
     while (row && row.superview != header) row = row.superview;
     if (row && [row class] == UIStackView.class && !objc_getAssociatedObject(row, &kRowWatchedKey)) {

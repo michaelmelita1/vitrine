@@ -4,9 +4,8 @@
 // UIGlassEffect made the only way that resolves its material, or a dark chrome blur before iOS 26.
 UIVisualEffect *SGGlassEffect(void);
 UIVisualEffectView *SGGlassFor(UIView *host, const void *key);
-// Several panes on one host, addressed by index; panes past `count` are hidden by SGHideGlassFrom.
+// Several panes on one host, addressed by index.
 UIVisualEffectView *SGGlassAt(UIView *host, NSUInteger index);
-void SGHideGlassFrom(UIView *host, NSUInteger count);
 // Glass takes its shape from cornerConfiguration on iOS 26; layer.cornerRadius is the fallback.
 void SGShapeGlass(UIView *glass, CGFloat radius, BOOL capsule);
 
@@ -14,5 +13,4 @@ void SGShapeGlass(UIView *glass, CGFloat radius, BOOL capsule);
 // which the controller's own override does not reach. Call it after modalPresentationStyle is set.
 void SGPresentDark(UIViewController *controller);
 
-// The areas each look keeps transparent are its own: Native/Appearance/Repaint.h and
-// Redesigned/Kit/SGRRepaint.h.
+// The areas the redesign keeps transparent are its own: Redesigned/Kit/SGRRepaint.h.

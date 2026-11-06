@@ -25,15 +25,11 @@
 
 typedef NS_ENUM(NSInteger, SGRArtworkQuality) {
     SGRArtworkQualityLow,     // the now playing bar's 40pt cover
-    SGRArtworkQualityHigh,    // the player's own cover
+    SGRArtworkQualityHigh,    // a large cover read off a screen (none does now: the player page is the mod's)
     SGRArtworkQualityExact,   // the picture the track's metadata names, fetched by the Kit
 };
 // Posted when the artwork changes, object nil, userInfo image, trackURI and quality.
 extern NSNotificationName const SGRNowPlayingArtworkDidChangeNotification;
-// A picture read off a screen for `trackURI`: ignored unless that track is still the one playing, when
-// it is a picture already published for another track, when a better one is in for this picture, and
-// when it is the same image again.
-void SGRSetNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality);
 // The last artwork published; `trackURI` and `identity` (for -[SGRArtworkField setArtwork:identity:
 // animated:]: the same identity is the same picture) are filled when asked for. Until the playing
 // track's own picture is in, this is the last one.

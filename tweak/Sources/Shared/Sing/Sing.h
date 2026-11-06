@@ -1,4 +1,4 @@
-// Sing: a song's vocals turned down while it plays, from a mic button on the redesigned player's lyrics
+// Sing: a song's vocals turned down while it plays, from a mic button on the redesign's lyrics
 // (Redesigned/Lyrics/SGRSingButton.m) and the Sing page (Sing on Mod Settings' main page, and Lyrics > Karaoke),
 // under either look: the work is on Spotify's sound.
 //

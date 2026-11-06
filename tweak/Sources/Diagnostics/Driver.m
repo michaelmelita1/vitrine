@@ -546,7 +546,7 @@ static NSArray<UIView *> *tabItems(NSMutableArray<NSString *> *titles) {
                 [buttons sortUsingComparator:^NSComparisonResult(UIView *a, UIView *b) {
                     return CGRectGetMinX(screenFrame(a)) < CGRectGetMinX(screenFrame(b)) ? NSOrderedAscending : NSOrderedDescending;
                 }];
-                // The glass bar stacks two buttons on each tab: one a tab, by where it sits.
+                // UIKit's tab bar stacks two buttons on each tab: one a tab, by where it sits.
                 for (UIView *button in buttons) {
                     if (items.count && fabs(CGRectGetMidX(screenFrame(button)) - CGRectGetMidX(screenFrame(items.lastObject))) < 4) continue;
                     NSUInteger i = items.count;
@@ -978,13 +978,6 @@ static NSDictionary<NSString *, SGCommand> *commands(void) {
                 return onMain(^id {
                     SGSetSingOn(on);
                     return @{@"sing" : @(on)};
-                });
-            },
-            @"landscape" : ^NSDictionary *(NSDictionary *p) {
-                BOOL on = [(p[@"value"] ?: p[@"arg"]) boolValue];
-                return onMain(^id {
-                    SGRPlayerShowLandscape(on);
-                    return @{@"landscape" : @(on)};
                 });
             },
             @"play" : ^NSDictionary *(NSDictionary *p) {

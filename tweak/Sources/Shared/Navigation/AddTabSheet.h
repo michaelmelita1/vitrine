@@ -1,6 +1,6 @@
-// "Add a Tab", the same for either look: a sheet with the tab's name, the page it opens and the icon on
-// it, each picked rather than typed (Choose a Link, Choose an Icon). The sheet stores nothing; the look's
-// own editor keeps what it hands back in that look's list.
+// "Add a Tab": a sheet with the tab's name, the page it opens and the icon on it, each picked rather than typed
+// (Choose a Link, Choose an Icon). The sheet stores nothing; the Tab bar page's editor keeps what it hands back in the
+// tab list (Redesigned/Navbar/NavbarSettings.m).
 #import <UIKit/UIKit.h>
 
 // The keys of a preset and of the tab handed back.

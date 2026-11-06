@@ -1,8 +1,8 @@
 // LocalLyrics.h says what is kept and how a track finds its file.
 //
-// Threading: the lyrics engine and the sources ask on the main queue, the native look's metadata hook
-// on whatever thread Spotify reads a track on, so the links are swapped whole under a lock and the read
-// files are kept under one; the files are written on the main thread.
+// Threading: the lyrics engine and the sources ask on the main queue, and a reader may be on another thread, so the
+// links are swapped whole under a lock and the read files are kept under one; the files are written on the main
+// thread.
 #import <os/lock.h>
 #import "Core/SGCore.h"
 #import "Shared/Lyrics/Lyrics.h"

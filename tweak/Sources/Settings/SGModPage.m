@@ -1,7 +1,6 @@
 #import <CoreText/SFNTLayoutTypes.h>
 #import "SGModPage.h"
 #import "SGPageStyle.h"
-#import "SGGlowSwitch.h"
 #import "Core/SGCore.h"
 
 NSString *const SGRestartNote = @"Changes apply after you restart Spotify.";
@@ -238,7 +237,7 @@ SGModRow *SGMenuRow(NSString *title, NSArray<NSString *> *choices, NSString *(^v
 
 @end
 
-// Made from a CGColor: either look's accent hooks swap Spotify's green as UIColor makes it from components, and
+// Made from a CGColor: the redesign's accent hook swaps Spotify's green as UIColor makes it from components, and
 // this color has to stay the one asked for, Spotify's green included, to show what a preset is.
 UIColor *SGColorRGB(NSInteger rgb) {
     CGColorRef cg = CGColorCreateSRGB(((rgb >> 16) & 0xFF) / 255.0, ((rgb >> 8) & 0xFF) / 255.0, (rgb & 0xFF) / 255.0, 1);
@@ -895,18 +894,9 @@ static void showWaiting(UITableViewCell *cell, BOOL waiting, NSString *switchTit
         if (locked) SGLockedFlagValue(row.key, &beats);
         BOOL showsLock = locked && (beats || !SGFlagOverride(row.key));
         BOOL on = row.flag ? (showsLock ? lockedRowOn(row) : flagRowOn(row)) : SGFlag(row.key, row.defaultOn) != row.inverted;
-        UIControl *toggle;
-        if (row.glows) {
-            SGGlowSwitch *glow = [SGGlowSwitch new];
-            glow.on = on;
-            glow.accessibilityLabel = row.title;
-            toggle = glow;
-        } else {
-            UISwitch *plain = [UISwitch new];
-            plain.onTintColor = SGGreen();
-            plain.on = on;
-            toggle = plain;
-        }
+        UISwitch *toggle = [UISwitch new];
+        toggle.onTintColor = SGGreen();
+        toggle.on = on;
         toggle.enabled = !locked;
         // A disabled switch would swallow the tap; letting it through is what gets the row asked.
         toggle.userInteractionEnabled = !locked;
@@ -1018,20 +1008,17 @@ static void showWaiting(UITableViewCell *cell, BOOL waiting, NSString *switchTit
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// A UISwitch or an SGGlowSwitch, both answering isOn.
-- (void)toggled:(UIControl *)toggle {
-    BOOL on = [(UISwitch *)toggle isOn];
+- (void)toggled:(UISwitch *)toggle {
+    BOOL on = toggle.isOn;
     NSIndexPath *path = [self pathOf:toggle];
     if (!path) return;
     SGModRow *row = [self rowAt:path];
     if (row.flag) SGSetFlagOverride(row.key, on ? @(!row.forceOff) : nil);
     else SGSetEnabled(row.key, on != row.inverted);
     if (row.changed) row.changed(on);
-    // A glowing switch is let finish its slide before the reload puts a new one in its place; rows coming
-    // or going are let finish first too.
-    NSTimeInterval wait = [toggle isKindOfClass:SGGlowSwitch.class] ? 0.45 : 0;
+    // Rows coming or going are let finish before the reload.
     void (^reload)(void) = ^{
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self.tableView reloadData]; });
+        dispatch_async(dispatch_get_main_queue(), ^{ [self.tableView reloadData]; });
     };
     BOOL moved = [self showRowsThen:row.changed ? reload : nil];
     // The rows waiting on this switch stay where they are and fade to their new state.

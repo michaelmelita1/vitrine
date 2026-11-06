@@ -213,12 +213,12 @@ static BOOL publishLocalCover(void) {
 
 // The next track's full picture fetched into the session's store once while this one plays, so a skip finds it there
 // in a few milliseconds rather than tenths of a second, and no screen's small picture stands in meanwhile (its owner,
-// 2026-11-02: a skip felt slow while the page waited for the cover). Native redesign's alone, and not in Low Power Mode.
+// 2026-11-02: a skip felt slow while the page waited for the cover). Not in Low Power Mode.
 // After the playing track's own fetch has started, and looked at once per next track.
 static NSString *sg_aheadKey, *sg_aheadURI;
 
 static void fetchAhead(void) {
-    if (!SGNativeRedesign() || NSProcessInfo.processInfo.lowPowerModeEnabled) return;
+    if (NSProcessInfo.processInfo.lowPowerModeEnabled) return;
     SPTPlayerState *state = SGPlayerState();
     id future = [state respondsToSelector:@selector(future)] ? state.future : nil;
     id next = [future isKindOfClass:NSArray.class] ? [(NSArray *)future firstObject] : nil;
@@ -259,7 +259,10 @@ static void followPlayer(void) {
     fetchAhead();
 }
 
-void SGRSetNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality) {
+// A picture read off a screen for `trackURI`: ignored unless that track is still the one playing, when
+// it is a picture already published for another track, when a better one is in for this picture, and
+// when it is the same image again.
+static void setNowPlayingArtwork(UIImage *image, NSString *trackURI, SGRArtworkQuality quality) {
     if (!image || !trackURI) return;
     followPlayer();
     // Read for a track that is no longer playing.
@@ -319,7 +322,7 @@ static void publishBarArtwork(void) {
     UIImage *image = cover.image;
     NSString *uri = SGURIString(SGPlayerState().track.URI);
     if (!image || !uri) return;
-    SGRSetNowPlayingArtwork(image, uri, SGRArtworkQualityLow);
+    setNowPlayingArtwork(image, uri, SGRArtworkQualityLow);
 }
 
 // The bar sets its picture when the image has loaded, which lays nothing out, so a track change looks

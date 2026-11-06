@@ -20,10 +20,6 @@
 // on the next call, and a log line says so once.
 void SGRSuppress(UIView *view);
 
-// Digits of one width in the label, kept through Spotify's own setText:, setAttributedText: and
-// setFont: by a runtime subclass of the instance, like SGRSuppress. Idempotent.
-void SGRMonospacedDigits(UILabel *label);
-
 // `changed` after every setImage: on the image view, Spotify's included, for as long as the view lives: by a
 // runtime subclass of the instance like SGRSuppress, or, for one of Spotify's own classes (Encore's image
 // views, which no instance of can be subclassed), by an override on that class, which only ever reports the
@@ -55,14 +51,6 @@ void SGRFindByIdentifiers(UIView *root, NSArray<NSString *> *identifiers, const 
 // its identifier, which every version gives it: 9.1.88 draws it in an AdaptiveFaceContainer, 9.1.90 in an Encore
 // button around a listening-activity pulse, which a check by class alone took for something else.
 BOOL SGRIsAvatar(UIView *view);
-
-// A view that draws only a shadow, for a view whose own layer clips (rounded artwork): made once per
-// host under `key`, inserted at the bottom of `host`. The caller gives it its frame and transform; its
-// shadowPath follows its bounds and cornerRadius.
-@interface SGRShadowPlate : UIView
-@property (nonatomic) CGFloat cornerRadius;   // SGRRadiusArtwork unless set
-@end
-SGRShadowPlate *SGRShadowPlateIn(UIView *host, const void *key);
 
 #pragma mark - Spotify's controls and pages
 

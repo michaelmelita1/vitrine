@@ -6,7 +6,6 @@
 // no id, so for one the matcher searches by its names and length (q_track, q_artist, q_album, q_duration).
 #import "Core/SGCore.h"
 #import "LyricsSources.h"
-#import "Shared/LocalFiles/LocalFiles.h"
 
 static NSString *const kAPI = @"https://apic-appmobile.musixmatch.com/ws/1.1/";
 static NSString *const kAppID = @"mac-ios-v2.0";
@@ -288,11 +287,10 @@ static void ask(NSString *trackID, NSDictionary<NSString *, NSString *> *match, 
     });
 }
 
-// What the matcher goes by: Spotify's id, or for a local file, which has none, its names and length to
-// search by. nil when there is nothing to go by.
+// What the matcher goes by: Spotify's id, or the names and length to search by when there is none. nil when there
+// is nothing to go by.
 static NSDictionary<NSString *, NSString *> *matchFor(NSString *trackID, NSString *title, NSString *artist, NSString *album, NSInteger seconds) {
-    if (!trackID.length) return nil;
-    if (!SGLocalFileIs(trackID)) return @{@"track_spotify_id": trackID};
+    if (trackID.length) return @{@"track_spotify_id": trackID};
     if (!title.length) return nil;
     NSMutableDictionary<NSString *, NSString *> *match = [NSMutableDictionary dictionaryWithObject:title forKey:@"q_track"];
     match[@"q_artist"] = artist;
@@ -396,9 +394,7 @@ static void translationsIn(NSString *token, NSString *commontrack, NSArray<NSStr
 // done gets what was found, and whether it is Musixmatch's whole answer rather than one cut short.
 static void askTranslations(NSString *trackID, NSString *language, BOOL renewToken,
                             void (^done)(NSDictionary<NSString *, NSString *> *found, BOOL answered)) {
-    // A local file is matched by the names it goes by, its key's edit over its tags, as its lyrics were.
-    NSDictionary *local = SGLocalFileInfo(trackID);
-    NSDictionary<NSString *, NSString *> *match = matchFor(trackID, local[@"title"], local[@"artist"], local[@"album"], [local[@"seconds"] integerValue]);
+    NSDictionary<NSString *, NSString *> *match = matchFor(trackID, nil, nil, nil, 0);
     if (!match) {
         done(nil, YES);
         return;

@@ -6,8 +6,6 @@
 // hands the lines over.
 #import "Core/SGCore.h"
 #import "Lyrics.h"
-#import "Shared/LocalFiles/LocalFiles.h"
-#import "Shared/LocalFiles/LocalLyrics.h"
 #import "Shared/LockScreenLyrics/LockScreenLyrics.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
 #import "Shared/LyricsSources/LyricsSources.h"
@@ -316,48 +314,10 @@ void SGKaraokeAskSpotifyForTiming(NSString *trackID) {
     });
 }
 
-// A local file the sources had nothing for is asked again this many times, on askAgainLater's pauses:
-// nothing may mean a request was lost, and LRCLIB asked alone cannot say which it was, so a song it has
-// nothing for is not asked for every minute while it plays. ponytail: an outage longer than the pauses
-// (about two minutes) leaves the file without lyrics until its names are edited or Spotify restarts; a
-// source answer that tells "lost" from "none" would lift that.
-static const NSUInteger kLocalTries = 4;
-
-// With no source of the mod's switched on, a local file still gets LRCLIB, the open and keyless floor of
-// the order, by the names it goes by: spclient has nothing for it, and without this the redesign's
-// lyrics, the lock screen and the Live Activity would have nothing to show. Answers NO, asking nothing,
-// when the file has no title and artist to search with.
-static BOOL askLrcLib(NSString *trackID, void (^done)(SGLyricsResult *lyrics)) {
-    NSDictionary *info = SGLocalFileInfo(trackID);
-    SGLyricsProvider *lrclib = SGLyricsProviderFor(@"lrclib");
-    if (!lrclib.ask || ![info[@"title"] length] || ![info[@"artist"] length]) return NO;
-    SGLyricsQuery *query = [SGLyricsQuery new];
-    query.trackID = trackID;
-    query.title = info[@"title"];
-    query.artist = info[@"artist"];
-    query.album = info[@"album"];
-    query.seconds = [info[@"seconds"] integerValue];
-    SGLog(@"karaoke: no source is on, asking LRCLIB for the local file \"%@\" by \"%@\"", query.title, query.artist);
-    lrclib.ask(query, ^(SGLyricsResult *lyrics) {
-        if (lyrics.karaokeLines && !lyrics.provider) lyrics.provider = lrclib.name;
-        done(lyrics);
-    });
-    return YES;
-}
-
 // Main queue only.
 void SGKaraokeRequestLyrics(NSString *trackID) {
     if (!trackID || sg_lyrics[trackID] || [sg_requested containsObject:trackID]) return;
-    // spclient has nothing for a local file, which only the sources can name. A file of the user's own,
-    // linked to it or matching its names, comes before every source.
-    BOOL local = SGLocalFileIs(trackID);
-    SGLyricsResult *imported = local ? SGImportedLRCFor(trackID, nil, nil) : nil;
-    if (imported) {
-        keep(trackID, imported.karaokeLines);
-        SGLyricsSetCredit(trackID, imported.provider);
-        return;
-    }
-    if (!sg_ownSources && !local) {
+    if (!sg_ownSources) {
         requestFromSpotify(trackID);
         return;
     }
@@ -371,29 +331,15 @@ void SGKaraokeRequestLyrics(NSString *trackID) {
             [sg_losses removeObjectForKey:trackID];
             keep(trackID, lyrics.karaokeLines);   // on the main queue, where the sources answer
             SGLyricsSetCredit(trackID, lyrics.provider);
-            // Plain text is shown while Spotify is asked whether it has the song timed; it has no local file.
-            if (local || SGKaraokeLinesTiming(lyrics.karaokeLines) != SGKaraokeTimingNone) return;
-        } else if (local) {
-            // Asked again after a pause; a miss the sources keep answers at once then. An instrumental, or
-            // a file out of tries, is left asked for: the readers ask on every tick, and an edit of its
-            // names gives it a new key.
-            if (!lyrics.instrumental && sg_losses[trackID].unsignedIntegerValue < kLocalTries) askAgainLater(trackID);
-            else [sg_asking removeObject:trackID];
-            announce(trackID);
-            return;
+            // Plain text is shown while Spotify is asked whether it has the song timed.
+            if (SGKaraokeLinesTiming(lyrics.karaokeLines) != SGKaraokeTimingNone) return;
         }
         [sg_asking removeObject:trackID];
         [sg_requested removeObject:trackID];
         // Spotify is asked next, so the look goes on; with nothing to ask it with, it is over.
         if (!requestFromSpotify(trackID)) announce(trackID);
     };
-    if (sg_ownSources) {
-        SGLyricsFetch(trackID, answered);
-    } else if (!askLrcLib(trackID, answered)) {
-        [sg_asking removeObject:trackID];
-        [sg_looking removeObject:trackID];
-        announce(trackID);
-    }
+    SGLyricsFetch(trackID, answered);
 }
 
 id SGKaraokePlayer(void) {
@@ -439,16 +385,15 @@ void SGKaraokeSeek(NSInteger ms) {
     });
 }
 
-// A Spotify track by its base62 id, a local file by its URI (Shared/LocalFiles/LocalFiles.h).
-// The id is kept on the track, which the page asks for on every frame; a local file's key is not,
-// as a rename changes it.
+// A Spotify track by its base62 id, nil for anything else (a local file, an episode). The id is kept on the track,
+// which the page asks for on every frame.
 static char sg_trackIDKey;
 static NSString *idOf(SPTPlayerTrack *track) {
     NSString *kept = track ? objc_getAssociatedObject(track, &sg_trackIDKey) : nil;
     if (kept) return kept;
     id uri = track.URI;
     NSString *text = [uri isKindOfClass:NSURL.class] ? ((NSURL *)uri).absoluteString : [uri description];
-    if (![text hasPrefix:@"spotify:track:"]) return SGLocalFileLyricsKey(text);
+    if (![text hasPrefix:@"spotify:track:"]) return nil;
     NSString *trackID = [text substringFromIndex:@"spotify:track:".length];
     objc_setAssociatedObject(track, &sg_trackIDKey, trackID, OBJC_ASSOCIATION_RETAIN);
     return trackID;
@@ -482,13 +427,8 @@ void SGKaraokeRememberTrack(SPTPlayerTrack *track, NSString *trackID) {
 // beat of starting it and gives its card list about a second to load, so an answer that is already
 // in is what puts the card there. The track is named here, so no walk waits for a name.
 static void prefetch(SPTPlayerTrack *track, NSString *trackID, SPTPlayerState *state) {
-    // Spotify never asks for a local file's lyrics, so they are asked for and kept here, a source of the
-    // mod's on or not (SGKaraokeRequestLyrics). The state is read on any thread, and the kept lines are
-    // the main queue's.
-    BOOL local = SGLocalFileIs(trackID);
-    if (local) dispatch_async(dispatch_get_main_queue(), ^{ SGKaraokeRequestLyrics(trackID); });
     if (!sg_ownSources) return;
-    if (!local) SGLyricsPrefetch(trackID);
+    SGLyricsPrefetch(trackID);
     SPTPlayerTrack *next = upNextIn(state);
     NSString *nextID = idOf(next);
     if (!nextID || [nextID isEqualToString:trackID]) return;
@@ -591,30 +531,6 @@ static SGKaraokeTrackWatcher *sg_trackWatcher;
     sg_losses = [NSMutableDictionary dictionary];
     sg_looking = [NSMutableSet set];
     sg_ownSources = SGLyricsEnabled();
-    // A rename gives the file playing a new lyrics key at once, with no new state from the player to
-    // bring it here, so the new key is asked for now; the redesign's lyrics view shows what comes in.
-    // Posted on the main thread.
-    [NSNotificationCenter.defaultCenter addObserverForName:SGLocalFileEditsDidChangeNotification object:nil queue:nil
-                                                usingBlock:^(NSNotification *note) {
-        NSString *key = SGLocalFileLyricsKey(note.object);
-        if (key && [key isEqualToString:SGKaraokePlayingTrack()]) SGKaraokeRequestLyrics(key);
-    }];
-    // An imported or deleted LRC file can change any local file's lyrics, found or missed: they are
-    // forgotten, but for a look still out, and the file playing is asked for again.
-    [NSNotificationCenter.defaultCenter addObserverForName:SGImportedLRCDidChangeNotification object:nil queue:nil
-                                                usingBlock:^(NSNotification *note) {
-        for (NSString *track in [sg_requested setByAddingObjectsFromArray:sg_lyrics.allKeys]) {
-            if (!SGLocalFileIs(track) || [sg_looking containsObject:track]) continue;
-            [sg_lyrics removeObjectForKey:track];
-            [sg_requested removeObject:track];
-            [sg_asking removeObject:track];
-            [sg_losses removeObjectForKey:track];
-        }
-        NSString *playing = SGKaraokePlayingTrack();
-        if (!SGLocalFileIs(playing)) return;
-        SGKaraokeRequestLyrics(playing);
-        announce(playing);
-    }];
     // Spotify asks for a track's lyrics only while a page of its own shows them, so a track the player
     // moved on to in the background came back to the app with none, and the redesign's lyrics, which
     // ask for nothing themselves, stayed empty. They are asked for here as the app becomes active again,

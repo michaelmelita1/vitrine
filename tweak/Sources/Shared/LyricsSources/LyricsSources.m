@@ -10,8 +10,6 @@
 #import "Core/SGCore.h"
 #import "LyricsSources.h"
 #import "Shared/Lyrics/Lyrics.h"
-#import "Shared/LocalFiles/LocalFiles.h"
-#import "Shared/LocalFiles/LocalLyrics.h"
 #import "Settings/SGSourcesPage.h"
 #import "Settings/SGPageStyle.h"
 #import "Headers/SPTPlayer.h"
@@ -200,7 +198,6 @@ NSArray<SGLyricsProvider *> *SGLyricsAllProviders(void) {
             make(SGSpicyLyricsKey, @"Spicy Lyrics", @"Community word syncs, your own key", SGSpicyLyricsAsk),
             make(@"qqmusic", @"QQ Music", @"Line timing, Chinese catalog", SGQQMusicAsk),
             make(@"kugou", @"KuGou", @"Word timing, Chinese catalog", SGKuGouAsk),
-            make(SGImportedLRCKey, @"Imported LRC", @"Your own .lrc files", SGImportedLRCAsk),
             make(@"genius", @"Genius", @"Untimed, when no other has lyrics", SGGeniusAsk),
         ];
     });
@@ -223,12 +220,11 @@ static NSArray<NSString *> *fromLegacyKeys(void) {
     return order;
 }
 
-// With nothing stored and nothing to carry over, every source is on: the user's own files first, word
-// timing ahead of line timing, the two Chinese catalogs once the rest have missed, and Genius's untimed
+// With nothing stored and nothing to carry over, every source is on: word timing ahead of line timing, the two Chinese catalogs once the rest have missed, and Genius's untimed
 // words under everything.
 // Spicy Lyrics passes straight on without its key.
 static NSArray<NSString *> *defaultOrder(void) {
-    return @[SGImportedLRCKey, SGSpicyLyricsKey, @"binilyrics", @"musixmatch", @"unison", @"netease", @"lrclib", @"qqmusic", @"kugou", @"genius"];
+    return @[SGSpicyLyricsKey, @"binilyrics", @"musixmatch", @"unison", @"netease", @"lrclib", @"qqmusic", @"kugou", @"genius"];
 }
 
 NSArray<NSString *> *SGLyricsOrder(void) {
@@ -262,15 +258,6 @@ BOOL SGLyricsEnabled(void) {
 SGLyricsQuery *SGLyricsQueryFor(NSString *trackID) {
     SGLyricsQuery *query = [SGLyricsQuery new];
     query.trackID = trackID;
-    // A local file is named by its own key: its tags, and the names the user gave it over them.
-    NSDictionary *local = SGLocalFileInfo(trackID);
-    if (local) {
-        query.title = local[@"title"];
-        query.artist = local[@"artist"];
-        query.album = local[@"album"];
-        query.seconds = [local[@"seconds"] integerValue];
-        return query;
-    }
     SPTPlayerTrack *track = SGKaraokeTrackFor(trackID);
     if (!track) return query;
     query.title = track.trackTitle;
@@ -522,10 +509,7 @@ static void step(SGLyricsWalk *walk) {
         // The pick stands timed or not, so a timed source lower in the order cannot replace it. A pick made while
         // the walk runs is left to finish, which keeps the order's answer for Automatic.
         BOOL pick = [provider.key isEqualToString:walk.picked] && [walk.picked isEqualToString:SGLyricsChosenSource(query.trackID)];
-        // The user's own timed file is the answer too: Prefer word-by-word timing looks past the sources' line timing,
-        // not past lyrics the user imported for the song (#111). Below a source as finely timed, the order still wins.
-        BOOL imported = fresh.synced && [provider.key isEqualToString:SGImportedLRCKey] && betterLines(merged, fresh);
-        if (fresh.karaokeLines.count && (pick || imported)) {
+        if (fresh.karaokeLines.count && pick) {
             if (!fresh.provider) fresh.provider = provider.name;
             walk.merged = fresh;
             walk.pickedAnswered = pick;

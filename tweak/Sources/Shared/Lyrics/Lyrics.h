@@ -175,7 +175,7 @@ BOOL SGEeveeLyricsOn(void);
 #define SGKeyLyricsBesideEevee @"spotifyglass.lyrics.besideEevee"
 // SGEeveeLyricsOn, unless the user asked for the mod's sources beside it.
 BOOL SGLyricsStandAsideForEevee(void);
-// The base62 id, a local file's lyrics key (Shared/LocalFiles), nil before the player reported.
+// The base62 id, nil before the player reported (and for a local file or an episode).
 NSString *SGKaraokePlayingTrack(void);
 NSInteger SGKaraokePositionMs(void);     // negative when unknown
 // The Lyrics page's Delay: every line shows this many ms later than the song, for headphones that play

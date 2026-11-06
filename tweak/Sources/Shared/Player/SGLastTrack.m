@@ -1,18 +1,14 @@
 // SGLastTrack.h says what this is for.
 #import "Core/SGCore.h"
 #import "Shared/AnimatedArtwork/AnimatedArtwork.h"
-#import "Shared/LocalFiles/LocalFiles.h"
 #import "PlayerState.h"
 #import "SGLastTrack.h"
 
-// The cover a track's metadata names, largest first: a local file's cover on the phone, or Spotify's picture on
-// i.scdn.co.
+// The cover a track's metadata names, largest first: Spotify's picture on i.scdn.co.
 static NSString *artworkIn(NSDictionary *metadata) {
     for (NSString *field in @[@"image_xlarge_url", @"image_large_url", @"image_url"]) {
         id value = metadata[field];
         if (![value isKindOfClass:NSString.class] || ![value length]) continue;
-        NSString *local = SGLocalFileCoverInURL(value);
-        if (local) return [NSURL fileURLWithPath:local].absoluteString;
         if ([value hasPrefix:@"https://"]) return value;
         if ([value hasPrefix:@"spotify:image:"]) return [@"https://i.scdn.co/image/" stringByAppendingString:[value substringFromIndex:14]];
     }

@@ -1233,7 +1233,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     UIView *_optionBadge;             // shuffle or repeat on the queue button, while on and hidden from the controls
     UIViewController *_landscapeScreen;   // the landscape player over the page while the app is turned
     CGFloat _headPush;                // how far the queue's scroll has pushed the thumbnail row up, 0 to its headRoom
-    CGFloat _shownPush;               // the push the row's alpha was last set for
+    CGFloat _shownAlpha;              // the alpha placeHeadPush last gave the row
     UIImageView *_queueBubble;        // the queue button's light disc while the queue is open, the Music app's
     UIImageView *_lyricsBubble;       // the lyrics button's, while the lyrics are up
     BOOL _alone;      // the lines have the page to themselves
@@ -2519,12 +2519,12 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     _add.transform = up;
     _more.transform = up;
     // Only the queue's: the lyrics' rest fades the row by its own alpha (fadingViews), the thumbnail's own staying put.
-    if (_queueOpen || push != _shownPush) {
+    if (_queueOpen || shown != _shownAlpha) {
         _titleBlock.alpha = shown;
         _add.alpha = shown;
         _more.alpha = shown;
     }
-    _shownPush = push;
+    _shownAlpha = shown;
     _cover.alpha = shown;
     // The shadow, which is the holder's, goes with the thumbnail, or it stayed behind as a dark square as the row went
     // (its owner's recording, 2026-11-06).

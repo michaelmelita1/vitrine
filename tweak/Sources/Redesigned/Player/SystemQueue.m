@@ -465,6 +465,8 @@ static UIImage *chipSymbol(NSString *name) {
     [self placeFade];
     [CATransaction commit];
     [self padForHistory];
+    // The list's size known now: how much of the head and the chips shows is worked out again.
+    if (_headRoom > 0) [self pushHead];
 }
 
 // Room under a short list, so it scrolls far enough for the head to rest where it does with History above out of view.
@@ -610,6 +612,9 @@ static UIImage *chipSymbol(NSString *name) {
 // How much of something whose foot is at `bottom` shows: all of it until it nears where the list fades out over the
 // controls, none past there, as the list's own rows go.
 - (CGFloat)shownAbove:(CGFloat)bottom {
+    // Not laid out yet: nothing is known to be past the foot (the queue opened, asked before its list had a size, hid the
+    // page's title row; its owner's recording, 2026-11-06).
+    if (_list.bounds.size.height <= 0) return 1;
     CGFloat end = _list.frame.origin.y + _list.bounds.size.height - _controlsCover;
     return MIN(1, MAX(0, (end - bottom) / kListFootFade));
 }

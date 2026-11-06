@@ -79,6 +79,22 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
 }
 @end
 
+// The rest's shield: over everything but `passing`, where the touches go to what is under it (the lines, which a drag
+// scrolls whatever the controls are doing; its owner's recording, 2026-11-06: a drag on the lines at rest woke the
+// controls instead, so scrolling worked one time in two).
+@interface SGRSystemShieldView : UIView
+@property (nonatomic, weak) UIView *passing;
+@end
+
+@implementation SGRSystemShieldView
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *passing = self.passing;
+    if (passing.window && passing.alpha > 0.01 && !passing.hidden
+        && CGRectContainsPoint([passing convertRect:passing.bounds toView:self], point)) return nil;
+    return [super hitTest:point withEvent:event];
+}
+@end
+
 @interface SGRSystemLandscapeController : UIViewController <SGPlayerStateObserver, UIGestureRecognizerDelegate>
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated;
 - (void)setQueueMode:(BOOL)queue animated:(BOOL)animated;
@@ -97,7 +113,7 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     SGRKaraokeView *_lyrics;
     NSTimer *_rest;
     UITapGestureRecognizer *_hide;   // only while the controls are up
-    UIView *_shield;                 // only while they are not: the touch that brings them back
+    SGRSystemShieldView *_shield;    // only while they are not: the touch that brings them back, but on the lines
     BOOL _bare;                      // the track playing has no lines: the cover takes the screen
     // The clip, when the track has one: sharp on the left, and again under a blur behind the column (one player for both).
     UIView *_clip;
@@ -419,7 +435,8 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     // Never a button's touch: on the phone the tap to rest took the lyrics button's (its owner, 2026-11-06).
     _hide.delegate = self;
     [self.view addGestureRecognizer:_hide];
-    _shield = [[UIView alloc] initWithFrame:self.view.bounds];
+    _shield = [[SGRSystemShieldView alloc] initWithFrame:self.view.bounds];
+    _shield.passing = _stage;
     _shield.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _shield.accessibilityElementsHidden = YES;
     [_shield addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(wake)]];

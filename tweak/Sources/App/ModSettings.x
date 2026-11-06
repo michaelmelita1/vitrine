@@ -110,7 +110,7 @@ static UIViewController *modSettingsPage(void) {
     [sections addObject:SGSection(nil, features)];
 
     SGModRow *mod = pageRow(@"Mod", @"info.circle", SGColorRGB(0x7D7D81), ^UIViewController *{ return SGAboutPage(); });
-    mod.value = ^NSString *{ return @(SG_VERSION); };
+    mod.value = ^NSString *{ return SGVersionWithBuild(); };
     [sections addObjectsFromArray:@[
         SGSection(nil, @[
             pageRow(@"Lock screen", @"lock.iphone", SGColorRGB(0x32ADE6), ^UIViewController *{ return SGLockScreenWidgetPage(); }),

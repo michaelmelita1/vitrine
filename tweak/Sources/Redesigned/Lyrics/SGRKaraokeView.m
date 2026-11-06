@@ -1479,12 +1479,19 @@ typedef struct {
 // and the wave every held word's, so a change is the song measured again in it and crossfaded over.
 - (void)takeLook {
     SGRLyricsLook look = SGRLyricsLookNow();
-    _fontSize = look.size;
-    _lineGap = look.spacing;
+    CGFloat scale = _lookScale > 0 ? _lookScale : 1;
+    _fontSize = round(look.size * scale);
+    _lineGap = round(look.spacing * scale);
     _blurPerLine = kBlurPerLine * look.blur;
     _maxBlur = kMaxBlur * look.blur;
     sgr_glowScale = look.glow;
     sgr_waveScale = look.wave;
+}
+
+- (void)setLookScale:(CGFloat)lookScale {
+    if (lookScale == _lookScale) return;
+    _lookScale = lookScale;
+    [self lookChanged];
 }
 
 - (void)lookChanged {
@@ -1790,13 +1797,18 @@ typedef struct {
     _placedHeight = self.bounds.size.height;
 }
 
+- (void)setRowOverLines:(BOOL)over {
+    _rowOverLines = over;
+    [self clearBottomRow];
+}
+
 // The lines fade out above the bottom row (the mic and the extras button) and stay clear under
 // it, so none is read through the credit; with nothing there they fade out at the bottom edge.
 - (void)clearBottomRow {
     CGFloat height = self.bounds.size.height;
     if (height <= 0) return;
     CGFloat floor = height;
-    for (UIView *view in @[_sing ?: NSNull.null, _extrasBox ?: NSNull.null]) {
+    for (UIView *view in _rowOverLines ? @[] : @[_sing ?: NSNull.null, _extrasBox ?: NSNull.null]) {
         if ([view isKindOfClass:UIView.class] && !view.hidden && view.superview) floor = MIN(floor, CGRectGetMinY(view.frame) - 8);
     }
     CGFloat clear = MAX(0, MIN(1, (height - floor) / height));

@@ -79,7 +79,7 @@ UIViewController *SGAboutPage(void) {
     ]];
     if (SGWhatsNewChanges().count) [links insertObject:withSymbol(SGActionRow(@"What's New", nil, ^{ SGShowWhatsNew(); }), @"sparkles") atIndex:links.count - 1];
     NSMutableArray<SGModRow *> *build = [NSMutableArray arrayWithObjects:updates, betas,
-        SGStatRow(@"Version", ^NSString *{ return @(SG_VERSION); }),
+        SGStatRow(@"Version", ^NSString *{ return SGVersionWithBuild(); }),
         SGStatRow(@"Spotify", ^NSString *{ return spotify; }), nil];
     SGModRow *signedUntil = SGSigningExpiryRow();
     if (signedUntil) [build addObject:signedUntil];
@@ -94,4 +94,9 @@ UIViewController *SGAboutPage(void) {
         ]),
         SGSection(nil, @[clearKeys, reset]),
     ] footer:nil];
+}
+
+NSString *SGVersionWithBuild(void) {
+    const char *stamp = SGBuildStamp();
+    return stamp[0] ? [NSString stringWithFormat:@"%s (%s)", SG_VERSION, stamp] : @(SG_VERSION);
 }

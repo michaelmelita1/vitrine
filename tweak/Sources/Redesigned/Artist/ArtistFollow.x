@@ -5,6 +5,7 @@
 #import <os/lock.h>
 #import "Core/SGCore.h"
 #import "Artist.h"
+#import "Shared/HeadGestures/HeadGestures.h"
 
 @protocol SGRCollectionState <NSObject>
 + (id)saved;
@@ -42,12 +43,25 @@ static void keepProvider(id provider) {
 
 static __weak id sg_platform;
 
+// The platform that saves to Liked Songs, from whichever of Spotify's four the app last reached for, as
+// Shared/HeadGestures/HeadGestures.x keeps it: 9.1.90 may never make SPTCollectionPlatformImplementation, whose init was
+// the only place it was kept, and the player page's star did nothing (its owner, 2026-11-06). Asked for from any thread.
+static void keepPlatform(id platform) {
+    if (![platform respondsToSelector:NSSelectorFromString(@"addURL:showUIConfirmation:completion:")]) return;
+    os_unfair_lock_lock(&sg_providerLock);
+    BOOL changed = platform != sg_platform;
+    if (changed) sg_platform = platform;
+    os_unfair_lock_unlock(&sg_providerLock);
+    if (changed) SGLog(@"redesign artist: collection platform %@", NSStringFromClass([platform class]));
+}
+
 static id currentProvider(void) {
     os_unfair_lock_lock(&sg_providerLock);
     id provider = sg_provider;
     os_unfair_lock_unlock(&sg_providerLock);
-    if (!provider && [sg_platform respondsToSelector:@selector(stateProvider)]) {
-        provider = [sg_platform performSelector:@selector(stateProvider)];
+    id platform = sg_platform ?: SGCollectionPlatformKept();
+    if (!provider && [platform respondsToSelector:@selector(stateProvider)]) {
+        provider = [platform performSelector:@selector(stateProvider)];
         keepProvider(provider);
     }
     return provider;
@@ -62,6 +76,7 @@ static id currentProvider(void) {
 - (id)stateProvider {
     id provider = %orig;
     keepProvider(provider);
+    keepPlatform(self);
     return provider;
 }
 %end
@@ -70,6 +85,7 @@ static id currentProvider(void) {
 - (id)stateProvider {
     id provider = %orig;
     keepProvider(provider);
+    keepPlatform(self);
     return provider;
 }
 %end
@@ -78,6 +94,7 @@ static id currentProvider(void) {
 - (id)stateProvider {
     id provider = %orig;
     keepProvider(provider);
+    keepPlatform(self);
     return provider;
 }
 %end
@@ -86,6 +103,7 @@ static id currentProvider(void) {
 - (id)stateProvider {
     id provider = %orig;
     keepProvider(provider);
+    keepPlatform(self);
     return provider;
 }
 %end
@@ -249,7 +267,11 @@ BOOL SGRCollectionWatchSaved(id watch, BOOL *saved) {
 }
 
 BOOL SGRCollectionSetSaved(NSURL *uri, BOOL saved) {
+    os_unfair_lock_lock(&sg_providerLock);
     id platform = sg_platform;
+    os_unfair_lock_unlock(&sg_providerLock);
+    // Head Gestures keeps one from the same classes from launch, whatever look: the one it has, should none have come here.
+    if (!platform) platform = SGCollectionPlatformKept();
     SEL selector = saved ? NSSelectorFromString(@"addURL:showUIConfirmation:completion:") : NSSelectorFromString(@"removeURL:showUIConfirmation:completion:");
     if (!uri || ![platform respondsToSelector:selector]) {
         SGLog(@"redesign artist: cannot %@ %@ (platform %@)", saved ? @"save" : @"unsave", uri.absoluteString, platform ? NSStringFromClass([platform class]) : @"not known yet");

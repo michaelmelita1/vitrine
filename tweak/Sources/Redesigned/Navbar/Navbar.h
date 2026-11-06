@@ -83,6 +83,18 @@ BOOL SGRSystemTabsOn(void);
 // The AirPlay button beside play on the system tab bar's mini player (SystemTabs.x), over the bar and in its row while the
 // title keeps room. On until switched off on the Mini player page; its own key, apart from the glass bar's device button.
 #define SGRKeyMiniPlayerAirPlay @"spotifyglass.redesign.navbar.miniPlayerAirPlay"
+// The star beside play on the system tab bar's mini player (SystemTabs.x), saving the song to Liked Songs as the player's
+// does, over the bar while the title keeps room. Off until switched on on the Mini player page (its owner, 2026-11-06).
+#define SGRKeyMiniPlayerLike @"spotifyglass.redesign.navbar.miniPlayerLike"
+// The mini player's buttons, left to right, as keys of SGRMiniPlayerButtons below: those on, in their order (the Mini player
+// page's Buttons, its owner, 2026-11-06). Play is always on.
+#define SGRKeyMiniPlayerOrder @"spotifyglass.redesign.navbar.miniPlayerOrder"
+#define SGRMiniButtonAirPlay @"airplay"
+#define SGRMiniButtonStar @"star"
+#define SGRMiniButtonPlay @"play"
+#define SGRMiniButtonNext @"next"
+NSArray<NSString *> *SGRMiniPlayerButtons(void);
+void SGRSetMiniPlayerButtons(NSArray<NSString *> *keys);
 // Lays the system tab bar's mini player out again, for a setting of the Mini player page that changed; nothing without it.
 void SGRRefreshMiniPlayer(void);
 // TabBar.x hands it Spotify's tab items and the one on screen at each of Spotify's bar passes.

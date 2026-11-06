@@ -23,8 +23,14 @@
 // The mic stays when the extras go, for a host that lets it take its own touches while its controls are
 // hidden (the player's lines on their own, Redesigned/Player/PlayerLyrics.x), so Sing is always in reach.
 @property (nonatomic) BOOL keepsSing;
+// The mic and the extras button float over the lines rather than keep a clear row of their own under them, so the lines
+// run to the view's foot (the landscape player, short of height; its owner, 2026-11-06).
+@property (nonatomic) BOOL rowOverLines;
 // How far down a tap on the lines seeks, from the view's top; 0 is all the way. Below it, and above
 // seeksBelow, the tap is the host's (the player's lines on their own, over the controls that faded).
+// The Lyrics page's size and spacing scaled for a host that sets its lines smaller (the landscape player, as the Music
+// app's are there); 1 unless set, and set before the view has lines or at any time after.
+@property (nonatomic) CGFloat lookScale;
 @property (nonatomic) CGFloat seeksAbove;
 @property (nonatomic) CGFloat seeksBelow;
 // Whether a tap at point, in the view, seeks: on a timed line, inside the seeking band, and not on the credit

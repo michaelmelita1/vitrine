@@ -61,6 +61,8 @@ void SGHeadGesturesCue(SGHeadCue cue);
 // nod's Like, and the Like shortcut's (Shared/LiveActivity). NO when what plays is no track or the platform
 // was not reached yet. Spotify's toast shows only with Spotify in front.
 BOOL SGLikePlayingTrack(void);
+// That collection platform, nil until the app has reached for one: for another feature that saves to Liked Songs.
+id SGCollectionPlatformKept(void);
 
 // From the switch, the sensitivity, the actions and learning: listens or stops, and reads the thresholds again.
 void SGHeadGesturesSettingsChanged(void);

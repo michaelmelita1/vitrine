@@ -18,6 +18,7 @@
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
 #import "Player.h"
+#import "Redesigned/Navbar/SystemPlayer.h"
 
 static const CGFloat kSide = 32, kCoverGap = 16, kControlSide = 44, kColumnShare = 0.38;
 // The title and the controls beside the cover of a track without lines.
@@ -27,9 +28,6 @@ static const NSTimeInterval kLandscapeRest = 4;
 static UIWindow *sg_window;
 // Shut from the screen: turning the phone again does not reopen it until it has stood upright.
 static BOOL sg_shut;
-// The system tab bar's player page has its lyrics up (SystemPlayer.m): it stands in for Spotify's player, which is
-// never up then, so its lyrics turn sideways as the player's do (its owner, 2026-11-01).
-static BOOL sg_pageLyrics;
 
 #pragma mark - the screen
 
@@ -390,6 +388,8 @@ static void requestOrientations(UIWindowScene *scene, UIInterfaceOrientationMask
 void SGRPlayerLandscapeLinesChanged(void) {
     id screen = sg_window.rootViewController;
     if ([screen isKindOfClass:SGRLandscapeLyricsController.class]) [screen updateBare:YES];
+    // The system tab bar's player page turns onto a landscape player of its own (Redesigned/Navbar/SystemTurn.m).
+    SGRSystemTurnLinesChanged();
 }
 
 void SGRPlayerShowLandscape(BOOL show) {
@@ -434,15 +434,11 @@ void SGRPlayerShowLandscape(BOOL show) {
 static void orientationChanged(void) {
     UIDeviceOrientation orientation = UIDevice.currentDevice.orientation;
     if (UIDeviceOrientationIsLandscape(orientation)) {
-        if (!sg_shut && SGEnabled(SGRKeyLyricsLandscape) && (SGRPlayerLyricsOpen() || sg_pageLyrics)) SGRPlayerShowLandscape(YES);
+        if (!sg_shut && SGEnabled(SGRKeyLyricsLandscape) && SGRPlayerLyricsOpen()) SGRPlayerShowLandscape(YES);
     } else if (orientation == UIDeviceOrientationPortrait) {
         sg_shut = NO;
         SGRPlayerShowLandscape(NO);
     }
-}
-
-void SGRPlayerSetPageLyricsOpen(BOOL open) {
-    sg_pageLyrics = open;
 }
 
 %ctor {

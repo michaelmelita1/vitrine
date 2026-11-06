@@ -39,8 +39,8 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 // How far the page's head is pushed: up to headRoom as the list scrolls on, and below 0, down, as History is pulled into
 // view over it.
 @property (nonatomic, copy) void (^onHeadPush)(CGFloat push);
-// A track of History tapped: how many tracks back it lies, to step back to it.
-@property (nonatomic, copy) void (^onPickPast)(NSInteger steps);
+// A track of History tapped: the track itself, and how many tracks back it lies.
+@property (nonatomic, copy) void (^onPickPast)(SPTPlayerTrack *track, NSInteger steps);
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
 // The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the

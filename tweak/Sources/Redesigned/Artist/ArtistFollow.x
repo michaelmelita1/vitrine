@@ -49,10 +49,8 @@ static __weak id sg_platform;
 static void keepPlatform(id platform) {
     if (![platform respondsToSelector:NSSelectorFromString(@"addURL:showUIConfirmation:completion:")]) return;
     os_unfair_lock_lock(&sg_providerLock);
-    BOOL changed = platform != sg_platform;
-    if (changed) sg_platform = platform;
+    sg_platform = platform;
     os_unfair_lock_unlock(&sg_providerLock);
-    if (changed) SGLog(@"redesign artist: collection platform %@", NSStringFromClass([platform class]));
 }
 
 static id currentProvider(void) {
@@ -273,13 +271,10 @@ BOOL SGRCollectionSetSaved(NSURL *uri, BOOL saved) {
     // Head Gestures keeps one from the same classes from launch, whatever look: the one it has, should none have come here.
     if (!platform) platform = SGCollectionPlatformKept();
     SEL selector = saved ? NSSelectorFromString(@"addURL:showUIConfirmation:completion:") : NSSelectorFromString(@"removeURL:showUIConfirmation:completion:");
-    if (!uri || ![platform respondsToSelector:selector]) {
-        SGLog(@"redesign artist: cannot %@ %@ (platform %@)", saved ? @"save" : @"unsave", uri.absoluteString, platform ? NSStringFromClass([platform class]) : @"not known yet");
-        return NO;
-    }
+    if (!uri || ![platform respondsToSelector:selector]) return NO;
     // Spotify's own confirmation ("Added to Liked Songs"), as a tap on its add button gives; a completion that reads no
     // arguments, as HeadGestures.x passes, is safe whatever it is called with.
-    void (^done)(void) = ^{ SGLog(@"redesign artist: %@ %@", saved ? @"saved" : @"unsaved", uri.absoluteString); };
+    void (^done)(void) = ^{};
     ((void (*)(id, SEL, NSURL *, BOOL, id))objc_msgSend)(platform, selector, uri, YES, done);
     return YES;
 }

@@ -6,7 +6,7 @@
 // play and next, the volume) or the lines, and at its foot lyrics, AirPlay with the output's name under it, and the
 // queue. The lyrics button changes between the two; the lines' view fades the column's head and foot after a few seconds
 // without a touch, as the page's lyrics do, and a tap on a clear shield brings them back without seeking.
-// The window, the turning and when the screen comes up are SystemTurn.m's.
+// The page (SystemPlayer.m) holds it while the app is sideways; the turn itself is SystemTurn.m's.
 //
 // Threading: main thread only.
 #import <AVFoundation/AVFoundation.h>
@@ -113,6 +113,7 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     AVQueuePlayer *_clipPlayer;
     AVPlayerLooper *_clipLooper;
     NSURL *_clipFile;
+    NSArray<NSString *> *_queueKey;   // the queue Spotify's list was shown from, which a move is checked against
     BOOL _clipped;
     // The column (iOS 27.3's): the head's ★, the player's view, and the foot.
     UIView *_fieldDim;
@@ -391,7 +392,14 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
     };
-    _queue.onReorder = ^(NSArray *upcoming) { SGRSystemHandQueueBack(upcoming, ^{ [weakSelf refreshQueue]; }); };
+    _queue.onReorder = ^(NSArray *upcoming) {
+        SGRSystemLandscapeController *me = weakSelf;
+        if (!me) return;
+        SGRSystemHandQueueBack(me->_queueKey, upcoming, ^(NSArray<NSString *> *key) {
+            SGRSystemLandscapeController *again = weakSelf;
+            if (again) again->_queueKey = key;
+        }, ^{ [weakSelf refreshQueue]; });
+    };
     // As the portrait page's queue (SystemPlayer.m): the screen has no Shuffle or Repeat of its own, so the queue's
     // chips carry them, as the Music app's landscape queue does; a lift puts the foot away while a track is moved.
     _queue.showsShuffle = _shuffleOff;
@@ -400,7 +408,7 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _queue.onRepeat = ^{ SGRSystemCycleRepeat(); };
     _queue.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
     _queue.onHeadPush = ^(CGFloat push) { [weakSelf pushHead:push]; };
-    _queue.onPickPast = ^(NSInteger steps) { SGRSystemStepBack(steps); };
+    _queue.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) { SGRSystemStepBack(track, steps); };
     // Under the foot, as the list now runs on behind it.
     [self.view insertSubview:_queue belowSubview:_lyricsButton];
 
@@ -424,6 +432,10 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
                                                name:SGRNowPlayingArtworkDidChangeNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateClip)
                                                name:SGRPlayerMotionDidChangeNotification object:nil];
+    for (NSNotificationName name in @[UIApplicationDidBecomeActiveNotification, UIApplicationWillResignActiveNotification,
+                                      NSProcessInfoPowerStateDidChangeNotification]) {
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(syncClipPlayingSoon) name:name object:nil];
+    }
     [self updateClip];
     // The shield is hidden from VoiceOver, so turning it on brings the controls back and keeps them.
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(wake)
@@ -444,10 +456,23 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     if (has && ![file isEqual:_clipFile]) {
         _clipFile = file;
         _clipAspect = poster.size.width > 0 ? poster.size.height / poster.size.width : 0;
+        // Without a poster, square until the asset's track has loaded, off the main thread.
         if (_clipAspect <= 0) {
-            AVAssetTrack *track = [[AVURLAsset assetWithURL:file] tracksWithMediaType:AVMediaTypeVideo].firstObject;
-            CGSize size = CGSizeApplyAffineTransform(track.naturalSize, track.preferredTransform);
-            _clipAspect = fabs(size.width) > 0 ? fabs(size.height / size.width) : 1;
+            _clipAspect = 1;
+            __weak typeof(self) weakSelf = self;
+            [[AVURLAsset assetWithURL:file] loadTracksWithMediaType:AVMediaTypeVideo completionHandler:^(NSArray<AVAssetTrack *> *tracks, NSError *error) {
+                AVAssetTrack *track = tracks.firstObject;
+                if (!track) return;
+                CGSize size = CGSizeApplyAffineTransform(track.naturalSize, track.preferredTransform);
+                if (fabs(size.width) <= 0) return;
+                CGFloat aspect = fabs(size.height / size.width);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    typeof(self) screen = weakSelf;
+                    if (!screen || ![screen->_clipFile isEqual:file]) return;
+                    screen->_clipAspect = aspect;
+                    [screen.view setNeedsLayout];
+                });
+            }];
         }
         [self.view setNeedsLayout];
         _clipPlayer = [AVQueuePlayer new];
@@ -476,9 +501,17 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     else swap();
 }
 
+// The page's clip's checks (SystemMotion.m's updateMotion): in a window, in front, not in Low Power Mode and the song
+// playing.
 - (void)syncClipPlaying {
-    if (_clipPlayer && self.view.window && !SGPlayerState().isPaused) [_clipPlayer play];
+    BOOL front = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+    if (_clipPlayer && self.view.window && front && !NSProcessInfo.processInfo.lowPowerModeEnabled && !SGPlayerState().isPaused) [_clipPlayer play];
     else [_clipPlayer pause];
+}
+
+// The power state is reported off the main thread.
+- (void)syncClipPlayingSoon {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self syncClipPlaying]; });
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -820,6 +853,7 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
         SGRSystemLandscapeController *me = weakSelf;
         NSArray *next = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
         if (!me || !me->_queueMode || ![next isKindOfClass:NSArray.class]) return;
+        me->_queueKey = SGRSystemQueueKey(next);
         [me->_queue showState:SGPlayerState() upcoming:next from:from];
         if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queue showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
     } on:dispatch_get_main_queue()];
@@ -1031,7 +1065,6 @@ static NSString *landscapeTime(double seconds) {
     else if (mayGoBare && SGRPlayerLyricsNone()) bare = YES;
     if (bare == _bare) return;
     _bare = bare;
-    SGLog(@"redesign player: landscape %@", bare ? @"without lines, the cover takes the screen" : @"with lines");
     // The lines leave the window while they are away, so their display link stops with them.
     if (!bare) [self.view insertSubview:_stage aboveSubview:_controls];
     UIView *stage = _stage;

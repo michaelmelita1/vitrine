@@ -597,7 +597,8 @@ static UIImage *chipSymbol(NSString *name) {
 
 - (void)historyTapped:(UITapGestureRecognizer *)tap {
     NSInteger steps = tap.view.tag - 100;
-    if (steps > 0 && _onPickPast) _onPickPast(steps);
+    if (steps <= 0 || (NSUInteger)steps > _history.count || !_onPickPast) return;
+    _onPickPast(_history[_history.count - steps], steps);
 }
 
 // The list's scroll from where the head rests pushes the page's head up with it, as far as its room, and down with

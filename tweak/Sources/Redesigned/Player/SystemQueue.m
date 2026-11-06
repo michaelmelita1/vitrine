@@ -125,6 +125,7 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     UIButton *_automix;   // one chip, three states as repeat has: off, AutoMix (beat-matched), Crossfade
     UIButton *_shuffle, *_repeat;   // shown while the controls have them hidden (showsShuffle, showsRepeat)
     UIButton *_clear;               // clears Playing Next, dimmed while it holds nothing
+    UIView *_chipsRow;              // holds the chips, so the row fades as a whole whatever each chip's own dim
     BOOL _shuffling;
     NSInteger _repeatMode;          // 0 off, 1 the playlist or album, 2 the track
     UITableView *_list;
@@ -205,7 +206,11 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     _clear = [self chipWithImage:chipSymbol(@"xmark") title:@"Clear Playing Next"];
     _clear.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
     [_clear addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf tapClear]; }] forControlEvents:UIControlEventTouchUpInside];
-    for (UIView *view in @[_list, _automix, _shuffle, _repeat, _clear]) [self addSubview:view];
+    _chipsRow = [UIView new];
+    _headShown = 1;
+    [self addSubview:_list];
+    [self addSubview:_chipsRow];
+    for (UIView *view in @[_automix, _shuffle, _repeat, _clear]) [_chipsRow addSubview:view];
     [self syncCrossfade];
     [self syncClear];
     return self;
@@ -444,10 +449,11 @@ static UIImage *chipSymbol(NSString *name) {
         if (view.tag == 1) view.frame = CGRectMake(kSideMargin, 6, size.width - 2 * kSideMargin, kHistoryHeading - 6);
         else if (view.tag > 100) view.frame = CGRectMake(0, kHistoryHeading + (_history.count - (view.tag - 100)) * kRowHeight, size.width, kRowHeight);
     }
+    _chipsRow.frame = CGRectMake(0, chipsTop, size.width, kChipHeight);
+    [self bringSubviewToFront:_chipsRow];
     [chips enumerateObjectsUsingBlock:^(UIView *chip, NSUInteger i, BOOL *stop) {
         chip.bounds = CGRectMake(0, 0, chipWidth, kChipHeight);
-        chip.center = CGPointMake(kSideMargin + i * (chipWidth + kChipGap) + chipWidth / 2, chipsTop + kChipHeight / 2);
-        [self bringSubviewToFront:chip];
+        chip.center = CGPointMake(kSideMargin + i * (chipWidth + kChipGap) + chipWidth / 2, kChipHeight / 2);
     }];
     CGFloat listTop = inList ? 0 : kChipHeight + kChipsBelow - kListTopFade / 2;
     _list.frame = CGRectMake(0, listTop, size.width, MAX(0, size.height - listTop));
@@ -601,12 +607,23 @@ static UIImage *chipSymbol(NSString *name) {
     _onPickPast(_history[_history.count - steps], steps);
 }
 
+// How much of something whose foot is at `bottom` shows: all of it until it nears where the list fades out over the
+// controls, none past there, as the list's own rows go.
+- (CGFloat)shownAbove:(CGFloat)bottom {
+    CGFloat end = _list.frame.origin.y + _list.bounds.size.height - _controlsCover;
+    return MIN(1, MAX(0, (end - bottom) / kListFootFade));
+}
+
 // The list's scroll from where the head rests pushes the page's head up with it, as far as its room, and down with
-// History pulled into view.
+// History pulled into view. Pulled down, the head and the chips fade as they reach the list's foot, rather than run on
+// over the controls (its owner's recording, 2026-11-06).
 - (void)pushHead {
     CGFloat push = MIN(_headRoom, [self scrolled]);
-    if (push == _headPush) return;
+    _chipsRow.alpha = [self shownAbove:[self chipsY] + kChipHeight];
+    CGFloat shown = [self shownAbove:_headRoom - MIN(0, push)];
+    if (push == _headPush && shown == _headShown) return;
     _headPush = push;
+    _headShown = shown;
     if (_onHeadPush) _onHeadPush(push);
 }
 
@@ -615,7 +632,7 @@ static UIImage *chipSymbol(NSString *name) {
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (_controlsCover > 0 && point.y > self.bounds.size.height - _controlsCover) return nil;
     // Where the page's head shows now, the touch is its.
-    if (_headRoom > 0 && point.y >= -_headPush && point.y < _headRoom - _headPush) return nil;
+    if (_headRoom > 0 && _headShown > 0.5 && point.y >= -_headPush && point.y < _headRoom - _headPush) return nil;
     return [super hitTest:point withEvent:event];
 }
 
@@ -677,7 +694,7 @@ static UIImage *chipSymbol(NSString *name) {
     _listFade.frame = _list.bounds;
     if (_headRoom > 0) {
         CGFloat y = [self chipsY];
-        for (UIView *chip in @[_automix, _shuffle, _repeat, _clear]) chip.center = CGPointMake(chip.center.x, y + kChipHeight / 2);
+        _chipsRow.frame = CGRectMake(0, y, _chipsRow.frame.size.width, kChipHeight);
         [self placePinnedHeading];
         [self placeFade];
     }

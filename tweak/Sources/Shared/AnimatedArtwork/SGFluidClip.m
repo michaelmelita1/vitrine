@@ -157,7 +157,7 @@ CGImageRef SGFluidClipFrame(CGImageRef cover, CGSize size) {
     return frame;
 }
 
-// ponytail: the writing loop is SGMotionClip.m's again, kept apart so neither clip's drawing leaks into the
+// ponytail: the writing loop is kept apart from the other clips', so no clip's drawing leaks into the
 // other's; one writer taking a draw block is the step up if a third clip comes.
 BOOL SGFluidClipWrite(NSURL *file, CGImageRef cover, CGSize size) {
     if (!cover) return NO;

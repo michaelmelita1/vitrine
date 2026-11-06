@@ -69,6 +69,8 @@ static const CGFloat kPausedScale = 0.84;
 // titles, and the soft edge the block cuts them through.
 // A column switch: what goes fades out over kSwitchOut, what comes fades in over kSwitchIn once it has nearly gone.
 static const NSTimeInterval kSwitchOut = 0.14, kSwitchIn = 0.32;
+// How far what comes drifts up into place, in points (what goes lifts half as far).
+static const CGFloat kSwitchDrift = 14;
 static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitlePageGap = 24, kTitleFade = 14;
 
 // A layer for views that takes no touch of its own, only its subviews'.
@@ -783,12 +785,30 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
         else if (target > view.alpha) [coming addObject:view];
     }
     UIViewAnimationOptions options = UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState;
+    NSTimeInterval comingDelay = going.count ? kSwitchOut * 0.8 : 0;
     [UIView animateWithDuration:kSwitchOut delay:0 options:options | UIViewAnimationOptionCurveEaseIn animations:^{
         for (UIView *view in going) view.alpha = [targets objectForKey:view].doubleValue;
     } completion:nil];
-    [UIView animateWithDuration:kSwitchIn delay:going.count ? kSwitchOut * 0.8 : 0 options:options | UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:kSwitchIn delay:comingDelay options:options | UIViewAnimationOptionCurveEaseOut animations:^{
         for (UIView *view in coming) view.alpha = [targets objectForKey:view].doubleValue;
     } completion:nil];
+    // Movement, as the portrait page's switch has in its cover and title: what goes lifts a little as it fades, what
+    // comes drifts up into place. Additive animations on the layer alone, so they never touch a frame layout sets.
+    CFTimeInterval now = CACurrentMediaTime();
+    for (UIView *view in going) [self drift:view from:0 to:-kSwitchDrift / 2 at:now duration:kSwitchOut];
+    for (UIView *view in coming) [self drift:view from:kSwitchDrift to:0 at:now + comingDelay duration:kSwitchIn + 0.12];
+}
+
+- (void)drift:(UIView *)view from:(CGFloat)from to:(CGFloat)to at:(CFTimeInterval)start duration:(NSTimeInterval)duration {
+    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+    drift.fromValue = @(from);
+    drift.toValue = @(to);
+    drift.additive = YES;
+    drift.beginTime = start;
+    drift.duration = duration;
+    drift.fillMode = kCAFillModeBackwards;
+    drift.timingFunction = [CAMediaTimingFunction functionWithControlPoints:0.2 :0.8 :0.2 :1];
+    [view.layer addAnimation:drift forKey:@"sg.switchDrift"];
 }
 
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated {
@@ -881,7 +901,7 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)placeHead {
     CGFloat push = _queueMode ? _headPush : 0, room = MAX(1, _queue.headRoom);
     _head.transform = CGAffineTransformMakeTranslation(0, -push);
-    _head.alpha = MAX(0, 1 - push / (room * 0.7));
+    _head.alpha = MIN(1, MAX(0, 1 - push / (room * 0.7))) * (_queueMode ? _queue.headShown : 1);
 }
 
 - (void)refreshQueue {

@@ -2524,7 +2524,8 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)placeHeadPush {
     CGFloat push = _queueOpen ? _headPush : 0, room = MAX(1, _queueView.headRoom);
-    CGFloat shown = MAX(0, 1 - push / (room * 0.7));
+    // Pushed up, the row fades as it goes; pulled down by History, it fades as it reaches the list's foot.
+    CGFloat shown = MIN(1, MAX(0, 1 - push / (room * 0.7))) * (_queueOpen ? _queueView.headShown : 1);
     CGAffineTransform up = CGAffineTransformMakeTranslation(0, -push);
     _titleBlock.transform = up;
     _add.transform = up;

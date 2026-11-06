@@ -14,5 +14,4 @@ void SGShapeGlass(UIView *glass, CGFloat radius, BOOL capsule);
 // which the controller's own override does not reach. Call it after modalPresentationStyle is set.
 void SGPresentDark(UIViewController *controller);
 
-// The areas each look keeps transparent are its own: Native/Appearance/Repaint.h and
-// Redesigned/Kit/SGRRepaint.h.
+// The areas the redesign keeps transparent are its own: Redesigned/Kit/SGRRepaint.h.

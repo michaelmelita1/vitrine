@@ -1,7 +1,7 @@
 #!/bin/sh
-# Fails when a source file imports across the layers docs/tweaks.md lays out, so the native look and the
-# redesign stay apart: Core <- Settings <- Shared <- Native | Redesigned <- App. Native and Redesigned
-# never import each other; only App imports every layer. Run from tweak/Makefile before every build.
+# Fails when a source file imports across the layers docs/tweaks.md lays out, so what draws on Spotify's screens
+# stays apart from what does not: Core <- Settings <- Shared <- Redesigned <- App. Only App imports every layer. Run
+# from tweak/Makefile before every build.
 #   scripts/check-layers.sh [path to tweak/Sources]
 SOURCES=${1:-"$(dirname "$0")/../tweak/Sources"}
 cd "$SOURCES" || exit 1
@@ -19,11 +19,10 @@ forbid() {
     fi
 }
 
-forbid Core "Settings|Shared|Native|Redesigned|App"
-forbid Headers "Core|Settings|Shared|Native|Redesigned|App"
-forbid Diagnostics "Settings|Shared|Native|Redesigned|App"
-forbid Settings "Shared|Native|Redesigned|App"
-forbid Shared "Native|Redesigned|App"
-forbid Native "Redesigned|App"
-forbid Redesigned "Native|App"
+forbid Core "Settings|Shared|Redesigned|App"
+forbid Headers "Core|Settings|Shared|Redesigned|App"
+forbid Diagnostics "Settings|Shared|Redesigned|App"
+forbid Settings "Shared|Redesigned|App"
+forbid Shared "Redesigned|App"
+forbid Redesigned "App"
 exit $status

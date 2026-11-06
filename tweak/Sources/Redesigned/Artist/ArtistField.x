@@ -11,7 +11,7 @@
 // and the merch have their own tabs only so that they can be left out, so the strip goes and the Music list
 // stays. The strip sits in an AutoLayoutStackView, which traps when a view in it hides, so it goes invisible
 // and the pages under it move up into its place and stop paging, the way the native look's switch does it
-// (Native/Artist/Artist.x). With its switch off (SGRKeyArtistHideTabs) the strip and the paging stay Spotify's.
+// (as the native look's artist page did). With its switch off (SGRKeyArtistHideTabs) the strip and the paging stay Spotify's.
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Artist.h"

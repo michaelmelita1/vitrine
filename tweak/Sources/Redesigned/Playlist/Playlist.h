@@ -15,7 +15,7 @@
 //     PlaylistMenu.x    Sort and Mix, the two of the curation pills the ⋯ menu does not already offer,
 //                       put on that menu's own sheet
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI); the native look's do not then.
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

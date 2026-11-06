@@ -23,7 +23,7 @@ static const NSTimeInterval kBarDuration = 0.26;
 static const CGFloat kPressDamping = 0.62;
 // A response lands within the press feedback's budget, on a curve that is most of the way there at once.
 static const NSTimeInterval kRespondDuration = 0.2;
-// An exit is quicker still; Native/Player/PlayerGestures.x keeps its own copy of the value.
+// An exit is quicker still.
 static const NSTimeInterval kExitDuration = 0.15;
 
 UIColor *SGRPrimary(void) {

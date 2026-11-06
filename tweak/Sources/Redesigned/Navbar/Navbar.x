@@ -1,4 +1,4 @@
-// The redesign's copy of Native/Navbar/Navbar.x, composing the row the system tab bar mirrors (TabBar.x, SystemTabs.x).
+// The redesign's tab composition: the row the system tab bar mirrors (TabBar.x, SystemTabs.x).
 // Navbar: which tabs the bar shows, in what order, and tabs of the mod's own that open any
 // spotify: URI. Spotify keeps its four items (Home, Search, Library, Create) as the arranged
 // subviews of one stack view, but a tap on one of them is answered by counting the row off from

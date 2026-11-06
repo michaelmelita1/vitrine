@@ -11,7 +11,7 @@
 // Holding either side of the cover plays at kHoldSpeed until the finger lifts, and the speed set before
 // comes back. The middle third is left alone, and a hold that starts to move is a swipe to the next track.
 // It is a speed like the menu's, so with Pitch follows speed on (until switched off) it also plays an
-// octave higher, the way a record does. The native look's copy is in Native/Player/PlayerGestures.x.
+// octave higher, the way a record does.
 static const double kHoldSpeed = 2;
 static char kHoldKey, kBadgeGlassKey;
 

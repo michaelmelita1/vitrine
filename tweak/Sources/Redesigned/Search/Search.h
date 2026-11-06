@@ -9,7 +9,7 @@
 //                       scrim; and the page's layout pass, which measures that spacing
 //     SearchCards.x     each category card as Liquid Glass tinted by its own color, at the card radius, giving under a press
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI).
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

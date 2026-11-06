@@ -2,7 +2,6 @@
 #import "Settings/SGPageStyle.h"
 #import "Onboarding.h"
 #import "App/About/About.h"
-#import "App/Pages.h"
 #import "Shared/AdBlock/AdBlock.h"
 
 static const CGFloat kMargin = 24;
@@ -96,8 +95,8 @@ static UIView *tipsCard(NSArray<UIView *> *rows) {
     return card;
 }
 
-// One of the two looks, as a glass card: symbol, name, a line on what it brings, and a check
-// when it is the one picked. With an accessory instead, the card is a row for it (the ads switch).
+// A glass card: symbol, name, a line on what it brings, and a check when it is picked. With an accessory instead, the
+// card is a row for it (the ads switch).
 @interface SGLookCard : UIControl
 - (instancetype)initWithSymbol:(NSString *)symbol title:(NSString *)title subtitle:(NSString *)subtitle;
 - (instancetype)initWithSymbol:(NSString *)symbol title:(NSString *)title subtitle:(NSString *)subtitle accessory:(UIView *)accessory;
@@ -340,15 +339,8 @@ static BOOL adFree(void) {
 
 @implementation SGOnboardingController {
     SGTourLogo *_logo;
-    SGLookCard *_redesigned, *_legacy, *_adsCard;
+    SGLookCard *_adsCard;
     UISwitch *_ads;
-    UIStackView *_column;
-    // The lyrics tip's line changes with the look.
-    UILabel *_lyricsTip;
-    UIView *_note;
-    UIImageView *_noteIcon;
-    UILabel *_noteText;
-    UIButton *_report;
     UIButton *_primary;
     NSArray<UIView *> *_page;   // what comes in under the logo, in order
     BOOL _landed;
@@ -363,54 +355,16 @@ static BOOL adFree(void) {
     return self;
 }
 
-// Under the cards: what the picked look leaves out.
-- (UIView *)noteView {
-    _noteIcon = SGSymbolView(@"info.circle.fill", 15, UIImageSymbolWeightSemibold, 22);
-    _noteText = [UILabel new];
-    UIStackView *line = noteLine(_noteIcon, _noteText);
-
-    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
-    config.contentInsets = NSDirectionalEdgeInsetsMake(4, 32, 4, 0);
-    config.baseForegroundColor = SGGreen();
-    config.attributedTitle = [[NSAttributedString alloc] initWithString:@"Report a bug" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]}];
-    _report = [UIButton buttonWithConfiguration:config primaryAction:[UIAction actionWithHandler:^(UIAction *action) {
-        SGOpenURL([SGRepoURL stringByAppendingString:@"/issues"]);
-    }]];
-    _report.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
-
-    UIStackView *note = [[UIStackView alloc] initWithArrangedSubviews:@[line, _report]];
-    note.axis = UILayoutConstraintAxisVertical;
-    note.alignment = UIStackViewAlignmentLeading;
-    note.spacing = 2;
-    note.layoutMargins = UIEdgeInsetsMake(4, 4, 0, 4);
-    note.layoutMarginsRelativeArrangement = YES;
-    return note;
-}
-
-// The redesign is the look Vitrine is built around, so picking it needs no note. Legacy is told what it goes without.
-- (void)updateNote {
-    _noteText.text = @"Apple Music style lyrics, the player page and iOS's own tab bar come with the redesign only.";
-    _report.hidden = YES;
-    _note.hidden = _redesigned.selected;
-    // The ads card stands apart from the look's cards and its note, whichever of those comes last.
-    [_column setCustomSpacing:_note.hidden ? 32 : 12 afterView:_legacy];
-    // The tips of the picked look: the lyrics preview is the redesign's page's.
-    _lyricsTip.text = [(_redesigned.selected ? @"A live preview of the look, the sources in order, and lyrics even where Spotify has none."
-                                             : @"The sources in order, and lyrics even where Spotify has none.")
-                       stringByAppendingString:@"\nMod Settings > Lyrics"];
-}
-
 // What people miss in Mod Settings, as pointers only: the tour has no way into a page but holding Home.
 - (UIView *)tipsView {
-    UIStackView *lyrics = cardRow(@"quote.bubble", @"Lyrics", @"", nil);
-    // The row's text stack is its last arranged view, the gray line that stack's; updateNote writes the look's.
-    _lyricsTip = (UILabel *)((UIStackView *)lyrics.arrangedSubviews.lastObject).arrangedSubviews.lastObject;
+    UIStackView *lyrics = cardRow(@"quote.bubble", @"Lyrics", @"A live preview of the look, the sources in order, and lyrics even where "
+                                  @"Spotify has none.\nMod Settings > Lyrics", nil);
     BOOL liveActivity = NO;
     if (@available(iOS 17.0, *)) liveActivity = YES;
     UIStackView *airPods = cardRow(@"airpods.pro", liveActivity ? @"AirPods gestures, Live Activity" : @"AirPods gestures",
                                    liveActivity ? @"Nod twice or shake your head to control the music, with a chime; and the track on the "
-                                                  @"lock screen. Either look.\nMod Settings > AirPods gestures, Live Activity"
-                                                : @"Nod twice or shake your head to control the music, with a chime. Either look."
+                                                  @"lock screen.\nMod Settings > AirPods gestures, Live Activity"
+                                                : @"Nod twice or shake your head to control the music, with a chime."
                                                   @"\nMod Settings > AirPods gestures", nil);
     return tipsCard(@[lyrics, airPods]);
 }
@@ -425,25 +379,21 @@ static BOOL adFree(void) {
     UIView *strip = [UIView new];
     [strip addSubview:_logo];
 
-    BOOL glass = SGRedesignAvailable();
     UILabel *heading = [UILabel new];
-    heading.text = @"Pick your look.";
+    heading.text = @"Welcome to Vitrine.";
     heading.font = [UIFont systemFontOfSize:30 weight:UIFontWeightBold];
     heading.textColor = UIColor.whiteColor;
     heading.numberOfLines = 0;
-
-    NSString *redesign = glass ? @"Looks like Apple Music. Better lyrics, Live Activity." : @"Looks like Apple Music. Needs iOS 26.";
-    _redesigned = [[SGLookCard alloc] initWithSymbol:@"sparkles" title:@"Redesigned" subtitle:redesign];
-    _legacy = [[SGLookCard alloc] initWithSymbol:@"slider.horizontal.3" title:@"Legacy" subtitle:@"More options, still looks like Spotify."];
-    for (SGLookCard *card in @[_redesigned, _legacy]) [card addTarget:self action:@selector(picked:) forControlEvents:UIControlEventTouchUpInside];
-    // The first launch offers the redesign; below iOS 26 it cannot be picked (Core/SGUIMode.h).
-    // The tour again from the Mod page shows the stored look.
-    BOOL redesigned = SGFlag(SGKeyOnboardingSeen, NO) ? SGRedesignedUIStored() : glass;
-    _redesigned.selected = redesigned;
-    _legacy.selected = !redesigned;
-    _redesigned.enabled = glass;
-    if (!glass) _redesigned.alpha = 0.4;
-    _note = [self noteView];
+    // Below iOS 26 the look does not run (Core/SGUIMode.h): said once here, and in Mod Settings while it is so.
+    UILabel *lookText = [UILabel new];
+    lookText.text = SGRedesignAvailable() ? @"Spotify in Apple Music's style: iOS's own tab bar, a player page and Apple Music style lyrics."
+                                          : [NSString stringWithFormat:@"Vitrine's look needs iOS 26. On iOS %@ Spotify keeps its own; "
+                                                @"ads, lyrics sources and the rest below still work.", UIDevice.currentDevice.systemVersion];
+    UIStackView *lookNote = noteLine(SGSymbolView(SGRedesignAvailable() ? @"sparkles" : @"exclamationmark.triangle.fill", 15,
+                                                  UIImageSymbolWeightSemibold, 22), lookText);
+    lookNote.arrangedSubviews.firstObject.tintColor = SGRedesignAvailable() ? SGGrey() : UIColor.systemYellowColor;
+    lookNote.layoutMargins = UIEdgeInsetsMake(4, 4, 0, 4);
+    lookNote.layoutMarginsRelativeArrangement = YES;
 
     // Spotify without its ads: one switch for Hide ads, Hide upsells and Spoof Premium. Off leaves each as it
     // is; the tour again shows on only while all three are. They are read at launch, so on ends in a restart.
@@ -474,16 +424,13 @@ static BOOL adFree(void) {
     tipsHeading.textColor = UIColor.whiteColor;
     UIView *tips = [self tipsView];
 
-    _column = [[UIStackView alloc] initWithArrangedSubviews:@[strip, heading, _redesigned, _legacy, _note, _adsCard, adsNote, tipsHeading, tips]];
-    UIStackView *column = _column;
+    UIStackView *column = [[UIStackView alloc] initWithArrangedSubviews:@[strip, heading, lookNote, _adsCard, adsNote, tipsHeading, tips]];
     column.axis = UILayoutConstraintAxisVertical;
     column.spacing = 12;
     [column setCustomSpacing:28 afterView:strip];
-    [column setCustomSpacing:24 afterView:heading];
-    [column setCustomSpacing:32 afterView:_note];
+    [column setCustomSpacing:32 afterView:lookNote];
     [column setCustomSpacing:32 afterView:adsNote];
     column.translatesAutoresizingMaskIntoConstraints = NO;
-    [self updateNote];
 
     UIScrollView *scroll = [UIScrollView new];
     scroll.alwaysBounceVertical = YES;
@@ -530,7 +477,7 @@ static BOOL adFree(void) {
     [self refresh];
 
     // The tour opens on the logo alone; the page waits under it until the reeds land.
-    _page = @[heading, _redesigned, _legacy, _note, _adsCard, adsNote, tipsHeading, tips, _primary, footer];
+    _page = @[heading, lookNote, _adsCard, adsNote, tipsHeading, tips, _primary, footer];
     [_logo prepare];
     BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
     for (UIView *view in _page) {
@@ -557,28 +504,15 @@ static BOOL adFree(void) {
     }];
 }
 
-- (void)picked:(SGLookCard *)card {
-    if (card == _redesigned && !SGRedesignAvailable()) return;
-    _redesigned.selected = card == _redesigned;
-    _legacy.selected = card == _legacy;
-    [UIView animateWithDuration:0.25 animations:^{
-        [self updateNote];
-        self->_note.alpha = self->_note.hidden ? 0 : 1;
-        [self.view layoutIfNeeded];
-    }];
-    [self refresh];
-}
-
 - (void)toggleAds {
     [_ads setOn:!_ads.on animated:YES];
     _adsCard.accessibilityValue = _ads.on ? @"On" : @"Off";
     [self refresh];
 }
 
-// The look and the ad switches are read at launch, so a choice that differs from the running one ends the
-// tour in a restart.
+// The ad switches are read at launch, so turning them on ends the tour in a restart.
 - (BOOL)needsRestart {
-    return _redesigned.selected != SGRedesignedUI() || (_ads.on && !adFree());
+    return _ads.on && !adFree();
 }
 
 - (void)refresh {
@@ -590,7 +524,6 @@ static BOOL adFree(void) {
 
 - (void)finish {
     SGSetEnabled(SGKeyOnboardingSeen, YES);
-    SGSetRedesignedUI(_redesigned.selected);
     if (_ads.on) for (NSString *key in adKeys()) SGSetEnabled(key, YES);
     if (self.needsRestart) {
         SGRestartSpotify();

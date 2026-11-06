@@ -20,7 +20,7 @@
 // it for that reason. That color is now only what shows until the cover has been read (AlbumHeader.x
 // hands it over as it conceals the wash), and before either the field is the neutral one.
 //
-// The page is the album's by its identifier, which is how Native/Album/Album.x has told it apart since it
+// The page is the album's by its identifier, which is how the native look's album page (since removed) told it apart since it
 // shipped: the artist page is TemplateKit's TemplateView instead. A podcast's episode page is built from
 // this same template (trees/continuous/1.txt 2026-09-20: CreativeWorkTemplateView over Element_List cells
 // of EpisodePage_ModernEpisodePageImpl), so it is given the field too, and everything below that holds for

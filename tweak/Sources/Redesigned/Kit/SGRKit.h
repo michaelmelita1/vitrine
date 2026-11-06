@@ -1,7 +1,7 @@
 // The Redesign Kit: what every part of the redesign (Redesigned/<Part>/) builds on, so the screens share
 // one look and nothing is hand-rolled per screen. A screen imports this and Core/SGCore.h.
 //
-//     SGRedesign.h   Redesigned UI, the one switch, and the flags the redesigned screens force
+//     SGRedesign.h   the flags the redesigned screens force
 //     SGRTokens.h    colors, type, spacing, radii, motion, the accessibility settings
 //     SGRPalette.h   the artwork's edge color, the field color and the pre-blurred bitmaps
 //     SGRField.h     the artwork field behind a page
@@ -19,8 +19,8 @@
 //     SGRAccent.h    the redesign's accent color; its AMOLED black is SGRAmoled.x, always on
 //     Settings/SGMarquee.h  a title that glides when it is too long, every layer's, imported here for the screens
 //
-// Every hook file of the redesign starts its %ctor with `if (!SGRedesignedUI()) return;` and every one
-// of Native/ with `if (!SGNativeUI()) return;` (Core/SGUIMode.h), so the two looks never run together.
+// Every hook file of the redesign starts its %ctor with `if (!SGRedesignedUI()) return;` (Core/SGUIMode.h), so
+// nothing of it installs below iOS 26.
 #import "SGRedesign.h"
 #import "SGRTokens.h"
 #import "SGRPalette.h"

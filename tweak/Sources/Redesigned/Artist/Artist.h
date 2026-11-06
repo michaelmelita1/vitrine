@@ -15,7 +15,7 @@
 //     ArtistFollow.x    whether the artist is followed, from Spotify's collection, for Follow's glyph
 //     ArtistSettings.m  the Artists page of Mod Settings: the switches below
 //
-// Every hook installs only while Redesigned UI is on (SGRedesignedUI); the native look's do not then.
+// Every hook installs only where the redesign runs, iOS 26 and later (SGRedesignedUI).
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 

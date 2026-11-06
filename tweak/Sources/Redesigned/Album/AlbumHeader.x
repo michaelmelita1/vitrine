@@ -558,7 +558,7 @@ static SGRHeaderInfo *applyInfo(UIView *header, UIView *page, NSString **artist,
     if (shuffle) conceal(wrapperFor(shuffle, page));
 
     // Add arrives after the header has laid out on an album opened for the first time (the next time its state
-    // is cached and it is there from the start), in a row that lays nothing else out (Native/Album/Album.x): the
+    // is cached and it is there from the start), in a row that lays nothing else out (as the native look's album page did): the
     // row drew download on Play's right, or nothing, until the page was opened again (issue #19). So the row's
     // own pass is watched, a plain UIStackView, as the artist page's is, found from whichever of Spotify's
     // buttons is in it already.

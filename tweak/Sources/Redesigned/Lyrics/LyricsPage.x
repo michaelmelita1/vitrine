@@ -1,6 +1,5 @@
 // The redesign's full screen lyrics page, on glass over the redesigned player, which shows through it:
-// the lyrics card under the player reads as having grown to the screen. A copy of
-// Native/Lyrics/LyricsPage.x without its switch.
+// the lyrics card under the player reads as having grown to the screen.
 //
 // Page (trees/lyrics.txt): a page of its own, presented over the player by a
 // _UIOverFullscreenPresentationController, which is why the card's glass stops at the card's edge.

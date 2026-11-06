@@ -1,6 +1,6 @@
 // A double tap on the player, read against the grid Settings draws: the recognizer, what each cell does
-// and the playback controller it does it with. Which view of the player it goes on is each look's own
-// hookup (Native/Player/PlayerGestures.x), which calls SGGestureAttach.
+// and the playback controller it does it with. The view it goes on was the native look's hookup on Spotify's player,
+// which calls SGGestureAttach; with that look gone nothing attaches it, and Mod Settings no longer offers it.
 //
 // The player already answers a sideways swipe with the next track and a vertical drag with the
 // cards below, which leaves the double tap as the one gesture free to take.

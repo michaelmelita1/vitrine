@@ -60,7 +60,7 @@ void SGShareDiagnostics(void) {
         [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"unknown",
         UIDevice.currentDevice.systemVersion, machine.machine];
     [text appendFormat:@"look %@, hide ads %d, hide upsells %d, spoof premium %d, EeveeSpotify %d\n\n",
-        SGRedesignedUIStored() ? @"redesign" : @"native", SGHidden(SGKeyHideAds), SGHidden(SGKeyHideUpsells),
+        SGRedesignedUI() ? @"redesign" : @"Spotify's own (below iOS 26)", SGHidden(SGKeyHideAds), SGHidden(SGKeyHideUpsells),
         SGHidden(SGKeyFakePremium), SGEeveeSpotifyInjected()];
     [text appendString:@"== ads blocked (stopped of checked)\n"];
     for (NSString *label in SGAdBlockLabels()) {

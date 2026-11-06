@@ -57,7 +57,7 @@ UIViewController *SGLabsPage(void) {
             SGFlagRow(@"Fade out", @"ios-feature-sleeptimer.enable_fade_out"),
             SGFlagRow(@"One minute option", @"ios-feature-sleeptimer.enable_one_minute_option"),
             SGFlagRow(@"Options sheet", @"ios-feature-sleeptimer.use_options_sheet"),
-        ], @"Options sheet is always on in Redesigned UI."),
+        ], @"Options sheet is always on in the redesign."),
         SGSection(@"DJ", @[
             SGFlagRow(@"Auto mix", @"ios-playlistcuration-mats.auto_mix_enabled_for_dj"),
             SGFlagRow(@"Auto mix in the context menu", @"ios-playlistcuration-mats.dj_auto_mix_context_menu_enabled"),

@@ -61,7 +61,7 @@ static SGProblem version(void) {
 static NSArray<NSString *> *missingAppChanges(void) {
     NSMutableArray<NSString *> *missing = [NSMutableArray array];
     id compatibility = [NSBundle.mainBundle objectForInfoDictionaryKey:@"UIDesignRequiresCompatibility"];
-    if (SGRedesignAvailable() && SGRedesignedUIStored() && [compatibility isKindOfClass:NSNumber.class] && [compatibility boolValue])
+    if (SGRedesignedUI() && [compatibility isKindOfClass:NSNumber.class] && [compatibility boolValue])
         [missing addObject:@"the tab bar is drawn without its glass"];
     if (!SGLiveActivityAllowedByInstall()) [missing addObject:@"the Live Activity is missing"];
     if (!SGMusicHapticsListedByInstall())
@@ -77,6 +77,14 @@ static SGProblem appChanges(void) {
     return @[@"Installed without Vitrine's app changes",
              [NSString stringWithFormat:@"Some of what Vitrine does needs changes to the app that only its IPA build makes. Without them, %@. Build the IPA with Vitrine instead of injecting its .deb.",
                  joined(missingAppChanges(), @"and")]];
+}
+
+// Below iOS 26 nothing of the look installs (Core/SGUIMode.h): said in Mod Settings for as long as it is so.
+static SGProblem lookNeedsIOS26(void) {
+    return @[@"Vitrine's look needs iOS 26",
+             [NSString stringWithFormat:@"The redesign is built on iOS 26's Liquid Glass, so on iOS %@ Spotify keeps its own look. "
+                 @"What does not draw on Spotify's screens still works: ads and privacy, lyrics sources, Karaoke, Lossless, "
+                 @"AirPods gestures, the Live Activity and the rest of Mod Settings.", UIDevice.currentDevice.systemVersion]];
 }
 
 // One problem is the alert's title and message; several are a paragraph each under a count.
@@ -149,6 +157,8 @@ static NSArray<SGProblem> *installProblems(void) {
 // The rows stay while the install is so.
 NSArray<SGModRow *> *SGEnvironmentWarningRows(void) {
     NSMutableArray<SGModRow *> *rows = [NSMutableArray array];
+    if (!SGRedesignAvailable())
+        [rows addObject:SGWarningRow(@"The look needs iOS 26", @"Tap for what still works", ^{ tell(@[lookNeedsIOS26()]); })];
     if (SGEeveeSpotifyInjected())
         [rows addObject:SGWarningRow(@"EeveeSpotify is injected too", @"Tap for what that does", ^{ tell(@[eevee()]); })];
     if (otherVersion())

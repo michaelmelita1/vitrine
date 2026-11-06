@@ -104,7 +104,7 @@ static BOOL hasTranslations(NSArray<SGKaraokeLine *> *lines) {
 
 // Lines with no translation of their own take Musixmatch's community ones in the Lyrics page's language,
 // whichever source they came from, Spotify's own included, matched by their text. Only the redesign shows
-// translations, so the native look asks for none. The translated lines are copies kept in place of the
+// translations, so below iOS 26, where it does not run, none are asked for. The translated lines are copies kept in place of the
 // lines: the lyrics view measures lines off the main thread, and a new array is what tells it to look.
 // Musixmatch answers at once once it has answered, so lines kept again take the translations straight away.
 static void translate(NSString *track) {

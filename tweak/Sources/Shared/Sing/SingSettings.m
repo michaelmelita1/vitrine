@@ -213,7 +213,7 @@ UIViewController *SGSingSettingsPage(void) {
     SGModRow *button = SGSwitchRow(@"Toggle from lyrics", @"The mic in the corner of the lyrics", SGKeySingButton);
     button.defaultOn = SGSingOSSupported();
     button.changed = ^(BOOL on) { [NSNotificationCenter.defaultCenter postNotificationName:SGSingButtonDidChangeNotification object:nil]; };
-    button.visible = ^BOOL { return SGRedesignedUIStored(); };
+    button.visible = ^BOOL { return SGRedesignedUI(); };
     SGModRow *heat = SGOptionRow(@"Ignore heat warnings", @"Keeps Karaoke going on a hot iPhone, which then gets hotter", SGKeySingIgnoreHeat);
     SGModRow *memory = SGOptionRow(@"Ignore memory warnings", @"Keeps Karaoke going when iOS is low on memory, which may then close Spotify",
                                    SGKeySingIgnoreMemory);

@@ -19,7 +19,7 @@ void SGRedesignForceFlags(NSString *owner, NSDictionary<NSString *, id> *flags) 
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         SGRegisterFlagForcer(YES, ^id(NSString *key) { return SGRedesignedUI() ? forcedNow(key) : nil; },
-                             ^id(NSString *key) { return SGRedesignedUIStored() ? forcedNow(key) : nil; });
+                             ^id(NSString *key) { return SGRedesignedUI() ? forcedNow(key) : nil; });
     });
     os_unfair_lock_lock(&sg_flagsLock);
     NSMutableDictionary *all = [sg_flags mutableCopy] ?: [NSMutableDictionary dictionary];

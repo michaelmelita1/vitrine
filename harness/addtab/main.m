@@ -78,13 +78,12 @@ static void tap(UITableViewController *page, NSInteger section, NSInteger row) {
 }
 
 // The redesign's Tab bar page (Redesigned/Navbar/NavbarSettings.m) over a sample bar: Spotify's four tabs,
-// Liked Songs added after Search, Create hidden and Search split apart. `navbar` the page; `icons` Icons only
-// picked on its card; `links` scrolled to its end; `off` Custom tab bar switched off; `hide` Home's circle tapped; `edit` Liked Songs
-// tapped, which opens its sheet; `remove` Remove Tab on that sheet. Each step logs the preview and the list.
+// Liked Songs added after Search and Create hidden. `navbar` the page; `icons` its Icons only switch turned on;
+// `links` scrolled to its end; `hide` Home's circle tapped; `edit` Liked Songs tapped, which opens its sheet;
+// `remove` Remove Tab on that sheet. Each step logs the list.
 static void runNavbar(UIViewController *root, NSString *mode) {
     NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
     [store setBool:NO forKey:SGRKeyNavbarHideLabels];
-    [store removeObjectForKey:SGRKeyNavbar];
     SGRSetNavbarStock(@[@"Home", @"Search", @"Your Library", @"Create"]);
     SGRSetNavbarLayout(@[
         @{SGRNavbarID: @"Home", SGRNavbarTitle: @"Home"},
@@ -93,28 +92,25 @@ static void runNavbar(UIViewController *root, NSString *mode) {
         @{SGRNavbarID: @"Your Library", SGRNavbarTitle: @"Your Library"},
         @{SGRNavbarID: @"Create", SGRNavbarTitle: @"Create", SGRNavbarHidden: @YES},
     ]);
-    SGRSetNavbarSplit(@[@"Search"]);
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:SGRNavbarSettingsPage()];
     nav.modalPresentationStyle = UIModalPresentationFullScreen;
     nav.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [root presentViewController:nav animated:NO completion:nil];
     UITableViewController *page = (UITableViewController *)nav.topViewController;
     void (^log)(NSString *) = ^(NSString *step) {
-        UIView *preview = page.tableView.tableHeaderView.subviews.firstObject;
         NSMutableArray<NSString *> *rows = [NSMutableArray array];
-        for (NSInteger row = 0; row < [page.tableView numberOfRowsInSection:2]; row++) {
-            UITableViewCell *cell = [page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:2]];
+        for (NSInteger row = 0; row < [page.tableView numberOfRowsInSection:1]; row++) {
+            UITableViewCell *cell = [page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:1]];
             [rows addObject:[NSString stringWithFormat:@"%@ (%@)", [(UIListContentConfiguration *)cell.contentConfiguration text], cell.accessibilityValue]];
         }
-        NSLog(@"[harness] %@: preview \"%@\", tabs %@, labels hidden %d, custom %d", step, preview.accessibilityValue,
-              [rows componentsJoinedByString:@", "], [store boolForKey:SGRKeyNavbarHideLabels], [store objectForKey:SGRKeyNavbar] ? [store boolForKey:SGRKeyNavbar] : 1);
+        NSLog(@"[harness] %@: tabs %@, labels hidden %d", step, [rows componentsJoinedByString:@", "], [store boolForKey:SGRKeyNavbarHideLabels]);
     };
     after(1.0, ^{ log(@"opened"); });
     if ([mode isEqualToString:@"icons"]) {
         after(1.5, ^{
-            UIView *labels = [page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:1]].contentView.subviews.firstObject;
-            UIControl *iconsOnly = ((UIStackView *)labels).arrangedSubviews.lastObject;
-            [iconsOnly sendActionsForControlEvents:UIControlEventTouchUpInside];
+            UISwitch *iconsOnly = (UISwitch *)[page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]].accessoryView;
+            iconsOnly.on = YES;
+            [iconsOnly sendActionsForControlEvents:UIControlEventValueChanged];
             log(@"icons only");
         });
     } else if ([mode isEqualToString:@"links"]) {
@@ -122,21 +118,14 @@ static void runNavbar(UIViewController *root, NSString *mode) {
             UITableView *table = page.tableView;
             [table setContentOffset:CGPointMake(0, table.contentSize.height - table.bounds.size.height + table.adjustedContentInset.bottom) animated:NO];
         });
-    } else if ([mode isEqualToString:@"off"]) {
-        after(1.5, ^{
-            UISwitch *toggle = (UISwitch *)[page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]].accessoryView;
-            toggle.on = NO;
-            [toggle sendActionsForControlEvents:UIControlEventValueChanged];
-            log(@"custom off");
-        });
     } else if ([mode isEqualToString:@"hide"]) {
         after(1.5, ^{
-            UITableViewCell *home = [page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:2]];
+            UITableViewCell *home = [page.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:1]];
             for (UIView *v in home.contentView.subviews) if ([v isKindOfClass:UIButton.class]) [(UIButton *)v sendActionsForControlEvents:UIControlEventTouchUpInside];
             log(@"Home hidden");
         });
     } else if ([mode isEqualToString:@"edit"] || [mode isEqualToString:@"remove"]) {
-        after(1.5, ^{ tap(page, 2, 2); });
+        after(1.5, ^{ tap(page, 1, 2); });
         if ([mode isEqualToString:@"remove"]) {
             after(3.0, ^{ tap(topPage(page), 2, 0); });
             after(4.0, ^{
@@ -166,7 +155,7 @@ static void runNavbar(UIViewController *root, NSString *mode) {
     [self.window makeKeyAndVisible];
     NSArray<NSString *> *args = NSProcessInfo.processInfo.arguments;
     NSString *mode = args.count > 1 ? args[1] : @"sheet";
-    if ([@[@"navbar", @"icons", @"off", @"hide", @"edit", @"remove", @"links"] containsObject:mode]) {
+    if ([@[@"navbar", @"icons", @"hide", @"edit", @"remove", @"links"] containsObject:mode]) {
         runNavbar(root, mode);
         return;
     }

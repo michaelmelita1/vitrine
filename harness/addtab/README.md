@@ -19,16 +19,13 @@ Liked Songs with the SF Symbol music.mic added, the tab logged. The glyphs the e
 long the SF Symbol list took to read are logged on every launch.
 
 The redesign's Tab bar page (`Redesigned/Navbar/NavbarSettings.m`, with `NavbarLayout.m`) runs here too, over a
-sample bar: Spotify's four tabs, Liked Songs added after Search, Create hidden and Search split apart. `stubs.m`
+sample bar: Spotify's four tabs, Liked Songs added after Search, Create hidden. `stubs.m`
 draws Spotify's own tabs' glyphs as SF Symbols where TabBar.x reads them off the bar. Launch words: `navbar` the
-page; `icons` Icons only picked on its card; `links` the page scrolled to its end; `off` Custom tab bar switched
-off; `hide` Home's circle tapped; `edit` Liked Songs tapped, which opens Edit Tab; `remove` Remove Tab on that
-sheet, confirmed. Each step logs what the preview shows and what each tab row reads.
+page; `icons` its Icons only switch turned on; `links` the page scrolled to its end; `hide` Home's circle tapped; `edit` Liked Songs tapped, which opens Edit Tab; `remove` Remove Tab on that
+sheet, confirmed. Each step logs what each tab row reads.
 
-2026-10-06, iPhone 17 Pro on iOS 27.0: the preview shows Home, Liked Songs and Your Library on the main bar and
-Search on a bar of its own; Icons only stores the key and drops the names; Custom tab bar off shows Spotify's four
-tabs in Spotify's order; Home's circle hides it on the list and the preview; Remove Tab asks, then takes Liked
-Songs off the list, the preview and the stored layout.
+2026-11-06, iPhone 16 Pro Max on iOS 27.2: the page opens on Icons only and the list (Home, Search, Liked Songs,
+Your Library, Create hidden); Icons only stores the key; Home's circle hides it; a tap on Liked Songs opens Edit Tab.
 
 What it does not cover: Spotify's real Encore classes and router, the glyphs TabBar.x reads off Spotify's bar,
 a drag on the list, a real finger (the steps call the

@@ -1,7 +1,7 @@
-// Native redesign's player page (SystemPlayer.m): its Animated background, the clip drawn the way PR #192 drew the
-// redesigned player's, which the redesigned player itself no longer does (Redesigned/Player/PlayerMotion.x keeps main's).
-// The clip and its poster are PlayerMotion.x's (SGRPlayerMotionPreview hands them here under Native redesign); this file
-// only draws them. What follows is #192's description of the drawing.
+// The player page (SystemPlayer.m): its Animated background, the clip drawn the way PR #192 drew the redesigned
+// player's. The clip and its poster are Redesigned/Player/PlayerMotion.x's (SGRPlayerMotionPreview hands them here);
+// this file only draws them. What follows is #192's description of the drawing, from the redesigned player, since
+// removed.
 //
 // Animated artwork, the track's Canvas or Apple Music's animated cover behind the player,
 // the way the lock screen draws it (measured off recordings, 2026-10-22). A cover runs the width of the screen,
@@ -17,14 +17,8 @@
 // Tried and dropped: a still band (the poster's top, stretched or blurred) stood still while the clip moved; the
 // whole cover mirrored over the band put a dark shape of it there; fading the cover over the band drew both at
 // once, a gray stripe; and the foot dissolved into the album page's color drew no picture there at all.
-// The player's square cover goes while a clip plays, so a track without one keeps its cover over Fluid
-// (PlayerField.x keeps the field Fluid for this choice). The player's ⋯ menu switches between Animated
-// and Fluid at once (Shared/Player/SpeedPitch.h).
-//
-// The clip is a subview of the field, not of the background plane: the plane's layout brings the field to
-// the front on every pass, and a sibling would end up under it. Each of the field's layout passes attaches
-// it (SGRPlayerMotionFieldLaidOut), so a clip that came in before the player first opened, or a field
-// Spotify built again, gets it.
+// The player's square cover goes while a clip plays, so a track without one keeps its cover over Fluid. The
+// player's ⋯ menu switches between Animated and Fluid at once (Shared/Player/SpeedPitch.h).
 //
 // The clip holds still when the moving field does (SGRField.m): out of a window, with the app not in front,
 // while the player opens or closes, and while the song is paused. Under Reduce Motion and in Low Power Mode

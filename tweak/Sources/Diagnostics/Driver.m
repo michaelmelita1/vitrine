@@ -980,13 +980,6 @@ static NSDictionary<NSString *, SGCommand> *commands(void) {
                     return @{@"sing" : @(on)};
                 });
             },
-            @"landscape" : ^NSDictionary *(NSDictionary *p) {
-                BOOL on = [(p[@"value"] ?: p[@"arg"]) boolValue];
-                return onMain(^id {
-                    SGRPlayerShowLandscape(on);
-                    return @{@"landscape" : @(on)};
-                });
-            },
             @"play" : ^NSDictionary *(NSDictionary *p) {
                 return onMain(^id {
                     [requirePlayer() resume:nil];

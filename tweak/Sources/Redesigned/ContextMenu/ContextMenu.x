@@ -333,7 +333,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     // player. The pick fires a turn later, which the sheet takes while the menu is still fading.
     [session menuEnded];
     // The player's ⋯ is pressed for as long as its menu is up (the touch that opened it was canceled at once,
-    // as the menu came): its targets for the press (PlayerHeader.x's circle) are told now that it is let go.
+    // as the menu came): its targets for the press are told now that it is let go.
     if ([self isKindOfClass:SGRMenuFront.class]) [self sendActionsForControlEvents:UIControlEventTouchUpOutside];
 }
 

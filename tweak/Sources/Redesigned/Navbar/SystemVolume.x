@@ -1,31 +1,34 @@
-// Player redesign: a volume slider under the controls, as the Music app has. The row draws its own pill: it grows while
-// held, its glyphs move out, a drag anywhere on the row moves the volume by the finger's travel, and VoiceOver steps it.
+// The player page's volume row (SystemPlayer.m), with Sim Radio's elastic slider: the pill grows on a spring while held,
+// stretches past either end like a rubber band, and the speaker glyphs bounce at the ends.
 // Under it sits a hidden MPVolumeView whose slider the row reads and moves, so it is the system's volume: the hardware
-// buttons move it. A Connect device's own volume reaches Spotify, not iOS, so the row does not show it. No route
-// button: the footer's Connect glyph is the route.
-//
-// It sits in Spotify's bottom stack, outside its arranged views, between the controls and the footer row, so the
-// lyrics fade it with the rest of the stack (PlayerLyrics.x) and its touches stay inside the stack. The footer's
-// lowerRow (PlayerFooter.x) places it after the moves, and keeps the controls where Spotify put them to make the room.
-// The stack's own layout runs that pass again (SGRObserveLayout): the stack moves its arranged views around with no pass
-// of the footer (the lyrics, a track whose title wraps, a row that comes or goes), and the row stayed where the stack
-// once had them, over the controls (continuous/1.txt: the row at 188 of a stack whose controls end at 212).
+// buttons move it. A Connect device's own volume reaches Spotify, not iOS, so the row does not show it.
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
-#import "Player.h"
-#import "Redesigned/Navbar/SystemPlayer.h"
+#import "Redesigned/Player/Player.h"
+#import "SystemPlayer.h"
 
 // The row's height (the touch area) and the glyphs' point size and gap to the track.
 static const CGFloat kRowHeight = 32, kGlyphSize = 13, kGlyphGap = 10;
-// Half the footer glyphs' height: the row stops this far above their middle.
-static const CGFloat kGlyphsHalf = 14;
-// The track's height at rest and held, how far it grows past each end, how far the glyphs move out and by how much they
-// scale (each clamped to the room the row has on that side). Music's own held numbers are 18, 7, 9 and 1.08.
-static const CGFloat kTrackRest = 7, kTrackHeld = 12, kStretch = 5, kGlyphShift = 6, kGlyphHeldScale = 1.02;
+// How far a finger has to move sideways on the row before the pans above it are turned off: a touch that only comes down
+// on it, or the touch that opened the system tab bar's player page landing on it as the page appears, turns nothing off
+// (the phone's log, 2026-11-01: UIKit's zoom swipe close was turned off that way as the page opened).
+static const CGFloat kDragStart = 6;
+// While the pans are off, how often the row checks that a finger is still tracking it, and turns them back on if not.
+static const NSTimeInterval kSuspendCheck = 1;
+// After f728743/Sim-Radio-SwiftUI's ElasticSlider.swift and its .volume config (MIT, Copyright (c) 2025 Alexey Vorobyov;
+// its owner's pick, 2026-11-01): the track 7 high at rest and 17 held, growing 9 past each end while held with the glyphs
+// moving out as far (each clamped to the room the row has on that side), on SwiftUI's .smooth(duration: 0.3,
+// extraBounce: 0.3) both ways. Dragged past an end it stretches that way up to kMaxStretch, the other end pulling in by
+// kPullStretch of it and the track narrowing by up to kStretchNarrowing, the full stretch a finger's kMaxStretch /
+// kPushStretch past the end; it springs back on the let go. The speaker at an end bounces as the volume reaches it.
+static const CGFloat kTrackRest = 7, kTrackHeld = 17, kStretch = 9, kGlyphShift = 9, kGlyphHeldScale = 1;
+static const CGFloat kMaxStretch = 10, kPushStretch = 0.2, kPullStretch = 0.5, kStretchNarrowing = 4;
+static const NSTimeInterval kHeldSpring = 0.3;
+static const CGFloat kHeldBounce = 0.3;
 // White's opacity: the fill at rest and held, the empty part, the glyphs at rest (held they are full white).
 static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24, kGlyphRest = 0.68;
 
@@ -42,33 +45,32 @@ static UIImageView *glyph(NSString *symbol) {
     return view;
 }
 
-@interface SGRVolumeRow : UIControl
-// The footer row it was last placed against, for the stack's layout. Weak: the stack owns it.
-@property (nonatomic, weak) UIView *footer;
+@interface SGRSystemVolumeRow : UIControl
 - (UISlider *)systemSlider;
 - (void)systemSliderSet;
 @end
 
 // MPVolumeView makes its slider when it lays out and may make another later, for example after a route change, so the
 // row looks for it again after each of its layouts.
-@interface SGRVolumeView : MPVolumeView
+@interface SGRSystemVolumeView : MPVolumeView
 @end
 
-@implementation SGRVolumeView
+@implementation SGRSystemVolumeView
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    [(SGRVolumeRow *)self.superview systemSlider];
+    [(SGRSystemVolumeRow *)self.superview systemSlider];
 }
 
 @end
 
-@implementation SGRVolumeRow {
+@implementation SGRSystemVolumeRow {
     MPVolumeView *_system;
     UISlider *_systemSlider;
     UIView *_track, *_fill;
     UIImageView *_quiet, *_loud;
     CGFloat _value, _startValue, _startX, _trackMin, _trackMax;
+    CGFloat _stretch;   // -1 to 1: how far a drag past the low (negative) or high end stretches the track
     BOOL _held;
     CFTimeInterval _lastPush;
     NSHashTable<UIGestureRecognizer *> *_suspended;
@@ -77,7 +79,7 @@ static UIImageView *glyph(NSString *symbol) {
 - (instancetype)initWithFrame:(CGRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
     // Only plumbing: the slider inside moves the system's volume, nobody sees or touches the view.
-    _system = [SGRVolumeView new];
+    _system = [SGRSystemVolumeView new];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     _system.showsRouteButton = NO;
@@ -142,7 +144,12 @@ static UIImageView *glyph(NSString *symbol) {
         [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
         return;
     }
-    dispatch_async(dispatch_get_main_queue(), ^{ [self refreshFromSystem]; });
+    // The hidden slider takes the new volume a moment after the session reports it, and read at once it still says the old
+    // one, which refreshFromSystem prefers: read again once it has caught up. The slider's own catching up reaches the row
+    // through the UISlider hook below, installed while the row is on.
+    __weak SGRSystemVolumeRow *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf refreshFromSystem]; });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [weakSelf refreshFromSystem]; });
 }
 
 // Our own pushVolume sets the slider too, and refreshFromSystem skips that echo.
@@ -160,7 +167,7 @@ static UIImageView *glyph(NSString *symbol) {
 
 // The KVO the system sends as it settles falls inside the guard above, so the row reads it once the guard has passed.
 - (void)refreshAfterPush {
-    __weak SGRVolumeRow *weakSelf = self;
+    __weak SGRSystemVolumeRow *weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.65 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [weakSelf refreshFromSystem];
     });
@@ -182,27 +189,45 @@ static UIImageView *glyph(NSString *symbol) {
     return stack ? MAX(0, stack.bounds.size.width - CGRectGetMaxX(self.frame)) : 0;
 }
 
-// The track's frame for the state it is in: it grows past both ends while held.
+// ElasticSlider's leadingStretch and trailingStretch: the low end out by the stretch when pushed past it, else in by
+// kPullStretch of it; the high end the same way round.
+- (CGFloat)lowStretch {
+    CGFloat stretch = fabs(_stretch) * kMaxStretch;
+    return _stretch < 0 ? stretch : -stretch * kPullStretch;
+}
+
+- (CGFloat)highStretch {
+    CGFloat stretch = fabs(_stretch) * kMaxStretch;
+    return _stretch > 0 ? stretch : -stretch * kPullStretch;
+}
+
+// The track's frame for the state it is in: it grows past both ends while held, and stretches past one as it is pushed.
 - (void)syncTrack {
-    CGFloat height = _held ? kTrackHeld : kTrackRest;
-    CGFloat left = _held ? MIN(kStretch, [self roomLeft]) : 0, right = _held ? MIN(kStretch, [self roomRight]) : 0;
+    CGFloat height = _held ? kTrackHeld - fabs(_stretch) * kStretchNarrowing : kTrackRest;
+    CGFloat left = (_held ? MIN(kStretch, [self roomLeft]) : 0) + [self lowStretch];
+    CGFloat right = (_held ? MIN(kStretch, [self roomRight]) : 0) + [self highStretch];
     CGFloat scale = self.traitCollection.displayScale ?: 3;
     CGFloat top = round((CGRectGetMidY(self.bounds) - height / 2) * scale) / scale;
-    _track.frame = CGRectMake(_trackMin - left, top, MAX(0, _trackMax - _trackMin) + left + right, height);
+    _track.frame = CGRectMake(_trackMin - left, top, MAX(0, _trackMax - _trackMin + left + right), height);
     _track.layer.cornerRadius = height / 2;
     [self syncFill];
 }
 
-// The fill is a plain rectangle the pill's clipping rounds, so its right edge stays straight, as in Music.
+// The fill is a plain rectangle the pill's clipping rounds, so its right edge stays straight, as in Music: the value's
+// share of the track unstretched, carried with a stretch (ElasticSlider's fillWidth).
 - (void)syncFill {
     CGSize size = _track.bounds.size;
-    _fill.frame = CGRectMake(0, 0, size.width * _value, size.height);
+    CGFloat base = size.width - [self lowStretch] - [self highStretch];
+    CGFloat width = MIN(size.width, MAX(0, base * _value + [self highStretch] + ([self lowStretch] > 0 ? 0 : [self lowStretch])));
+    if (_value <= 0 && _stretch < 0) width = 0;
+    _fill.frame = CGRectMake(0, 0, width, size.height);
 }
 
 - (void)syncStyle {
     _fill.backgroundColor = [UIColor colorWithWhite:1 alpha:_held ? kFillHeld : kFillRest];
     CGFloat scale = _held ? kGlyphHeldScale : 1;
-    CGFloat left = _held ? MIN(kGlyphShift, [self roomLeft]) : 0, right = _held ? MIN(kGlyphShift, [self roomRight]) : 0;
+    CGFloat left = (_held ? MIN(kGlyphShift, [self roomLeft]) : 0) + [self lowStretch];
+    CGFloat right = (_held ? MIN(kGlyphShift, [self roomRight]) : 0) + [self highStretch];
     CGAffineTransform grown = CGAffineTransformMakeScale(scale, scale);
     _quiet.transform = CGAffineTransformConcat(grown, CGAffineTransformMakeTranslation(-left, 0));
     _loud.transform = CGAffineTransformConcat(grown, CGAffineTransformMakeTranslation(right, 0));
@@ -236,6 +261,12 @@ static UIImageView *glyph(NSString *symbol) {
     }
     [self systemSlider];
     [self refreshFromSystem];
+    // A row made afresh (the system tab bar's player page makes one each time it opens, SystemPlayer.m) meets a hidden
+    // slider made out of a window, which holds a value of its own until the volume view, now in one, brings it up to
+    // date: the row is told after it moves to the window, before its slider is (its owner, 2026-11-01). Read again then.
+    __weak SGRSystemVolumeRow *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf refreshFromSystem]; });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [weakSelf refreshFromSystem]; });
 }
 
 // Prevent the player from stealing volume swipe gesture.
@@ -250,9 +281,21 @@ static UIImageView *glyph(NSString *symbol) {
             [_suspended addObject:recognizer];
         }
     }
+    [self performSelector:@selector(checkSuspended) withObject:nil afterDelay:kSuspendCheck];
+}
+
+// A safety: should neither end nor cancel come, the pans above are never left off once no finger tracks the row.
+- (void)checkSuspended {
+    if (!_suspended) return;
+    if (self.isTracking && self.window) {
+        [self performSelector:@selector(checkSuspended) withObject:nil afterDelay:kSuspendCheck];
+        return;
+    }
+    [self restoreAncestorGestures];
 }
 
 - (void)restoreAncestorGestures {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(checkSuspended) object:nil];
     for (UIGestureRecognizer *recognizer in _suspended) recognizer.enabled = YES;
     _suspended = nil;
 }
@@ -273,19 +316,19 @@ static UIImageView *glyph(NSString *symbol) {
 - (void)setHeld:(BOOL)held {
     if (_held == held) return;
     _held = held;
-    if (held) {
-        [self suspendAncestorGestures];
-    } else {
+    // The pans above go off only once the finger drags (continueTrackingWithTouch:), and come back on with the let go.
+    if (!held) {
         [self restoreAncestorGestures];
         [self refreshAfterPush];
     }
+    // The stretch springs back with the let go.
+    if (!held) _stretch = 0;
     void (^apply)(void) = ^{ [self syncTrack]; [self syncStyle]; };
     UIViewAnimationOptions options = UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction;
-    if (held) {
-        [UIView animateWithDuration:0.32 delay:0 usingSpringWithDamping:0.85 initialSpringVelocity:0 options:options
-                         animations:apply completion:nil];
+    if (@available(iOS 17.0, *)) {
+        [UIView animateWithSpringDuration:kHeldSpring bounce:kHeldBounce initialSpringVelocity:0 delay:0 options:options animations:apply completion:nil];
     } else {
-        [UIView animateWithDuration:0.16 delay:0 options:options | UIViewAnimationOptionCurveEaseOut
+        [UIView animateWithDuration:kHeldSpring delay:0 usingSpringWithDamping:1 - kHeldBounce initialSpringVelocity:0 options:options
                          animations:apply completion:nil];
     }
 }
@@ -299,8 +342,23 @@ static UIImageView *glyph(NSString *symbol) {
 
 // Relative to where the finger came down: the value moves by the finger's travel over the track's length.
 - (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
-    CGFloat span = MAX(1, _trackMax - _trackMin);
-    [self setValue:_startValue + ([touch locationInView:self].x - _startX) / span fromUser:YES];
+    if (!_suspended && fabs([touch locationInView:self].x - _startX) > kDragStart) [self suspendAncestorGestures];
+    CGFloat span = MAX(1, _trackMax - _trackMin + 2 * kStretch);
+    CGFloat wanted = _startValue + ([touch locationInView:self].x - _startX) / span, before = _value;
+    [self setValue:wanted fromUser:YES];
+    // Past an end, the stretch (ElasticSlider's normalizedStretchingValue): the overshoot over kMaxStretch / kPushStretch.
+    CGFloat over = wanted < 0 ? wanted : wanted > 1 ? wanted - 1 : 0, most = kMaxStretch / span / kPushStretch;
+    CGFloat stretch = MIN(most, MAX(-most, over)) / most;
+    if (stretch != _stretch) {
+        _stretch = stretch;
+        [self syncTrack];
+        [self syncStyle];
+    }
+    // The speaker at the end the volume has just reached bounces (VolumeSlider's symbolEffect(.bounce)).
+    if (@available(iOS 17.0, *)) {
+        if (_value <= 0 && before > 0) [_quiet addSymbolEffect:[NSSymbolBounceEffect effect]];
+        if (_value >= 1 && before < 1) [_loud addSymbolEffect:[NSSymbolBounceEffect effect]];
+    }
     return YES;
 }
 
@@ -320,91 +378,33 @@ static UIImageView *glyph(NSString *symbol) {
 
 @end
 
-static char kVolumeKey, kPlayKey, kSettleKey;
-// Passes the footer's layout is asked for again while the row's place keeps changing, at most.
-static const NSUInteger kSettlePasses = 6;
-
-// Read at launch, as the player's other switches are: the footer asks on every layout pass.
-BOOL SGRPlayerVolumeOn(void) {
-    static BOOL on;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ on = SGEnabled(SGRKeyPlayerVolume); });
-    return on;
+UIControl *SGRPlayerMakeVolumeRow(void) {
+    return [SGRSystemVolumeRow new];
 }
 
-// The footer lays out before Spotify's bottom stack has arranged its views the first time the player opens (the
-// controls then stand near the stack's top), and nothing lays the footer out again once the stack has: the row was
-// placed against the controls' old place and stayed there, over their buttons. A row that moved asks the footer's
-// layout once more on the next turn of the run loop, which finds the settled places; one that did not move ends it.
-static void settle(UIView *stack, UIView *row, BOOL moved, CGRect frame) {
-    NSUInteger passes = [objc_getAssociatedObject(stack, &kSettleKey) unsignedIntegerValue];
-    if (!moved) {
-        if (passes) objc_setAssociatedObject(stack, &kSettleKey, @0, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        return;
-    }
-    if (passes >= kSettlePasses) return;
-    objc_setAssociatedObject(stack, &kSettleKey, @(passes + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (passes > 0) SGLog(@"redesign player: volume row placed again at %.0f (pass %lu)", frame.origin.y, (unsigned long)passes + 1);
-    __weak UIView *weakStack = stack, *weakRow = row;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIView *settledStack = weakStack, *settledRow = weakRow;
-        if (!settledStack.window || !settledRow.window) return;
-        [settledStack layoutIfNeeded];
-        SGRPlayerLowerRow(settledRow);
-    });
+void SGRPlayerVolumeRowLetGo(UIControl *row) {
+    if (![row isKindOfClass:SGRSystemVolumeRow.class]) return;
+    [(SGRSystemVolumeRow *)row restoreAncestorGestures];
 }
 
-BOOL SGRPlayerPlaceVolume(UIView *stack, UIView *controls, UIView *row, CGFloat margin) {
-    SGRVolumeRow *volume = objc_getAssociatedObject(stack, &kVolumeKey);
-    if (!SGRPlayerVolumeOn() || !controls) {
-        if (volume) volume.alpha = 0;
-        return NO;
-    }
-    if (!volume) {
-        volume = [SGRVolumeRow new];
-        objc_setAssociatedObject(stack, &kVolumeKey, volume, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        SGRObserveLayout(stack, ^(UIView *laidOut) {
-            SGRVolumeRow *placed = objc_getAssociatedObject(laidOut, &kVolumeKey);
-            UIView *footer = placed.footer;
-            if (footer.superview == laidOut) SGRPlayerLowerRow(footer);
-        });
-    }
-    if (volume.superview != stack) [stack addSubview:volume];
-    volume.footer = row;
-    // Halfway between the play button's bottom and the footer glyphs' top, each where it is drawn (convertRect: takes
-    // the moves' transforms in). Without the button there is nothing to stand under: a guess from the controls' unit
-    // put the row across the buttons on an iPhone 13 Pro with iOS 17 (issue #32) and took their taps, so no row.
-    UIView *play = SGRFindByIdentifier(controls, @"SPTNowPlayingPlayButton", &kPlayKey);
-    if (!play) {
-        static BOOL logged;
-        if (!logged) {
-            logged = YES;
-            SGLog(@"redesign player: no play button in %@, so no volume row", NSStringFromClass(controls.class));
-        }
-        volume.alpha = 0;
-        return NO;
-    }
-    CGFloat above = CGRectGetMaxY([play convertRect:play.bounds toView:stack]);
-    CGFloat below = [row convertPoint:CGPointMake(CGRectGetMidX(row.bounds), CGRectGetMidY(row.bounds)) toView:stack].y - kGlyphsHalf;
-    CGFloat height = kRowHeight, room = below - above;
-    CGRect frame = CGRectMake(margin, round((above + below - height) / 2), MAX(0, stack.bounds.size.width - 2 * margin), height);
-    BOOL moved = !CGRectEqualToRect(volume.frame, frame);
-    if (moved) volume.frame = frame;
-    settle(stack, row, moved, frame);
-    // The lyrics fade the stack's views by their alpha and bring back only the ones they faded.
-    // The track is 7pt of the row's 32: it fits with the glyphs' and buttons' own clearance around it.
-    BOOL fits = room >= height * 0.6;
-    if (!fits) volume.alpha = 0;
-    else if (volume.alpha < 0.01 && controls.alpha > 0.99) volume.alpha = 1;
-    return fits;
-}
-
-// MPVolumeSlider takes an outside change (AirPlay, Connect) through super's setValue:animated:, which sends no KVO, and
-// sends ValueChanged only when the change shows the system's HUD, which Spotify's own Connect HUD turns off.
-void SGRPlayerVolumeSliderSet(UISlider *slider) {
-    SGRSystemVolumeSliderSet(slider);   // Native redesign's player page has a row of its own (Redesigned/Navbar/SystemVolume.m)
+// An outside change of the system slider's (AirPlay, Connect). MPVolumeSlider takes one through super's
+// setValue:animated:, which sends no KVO, and sends ValueChanged only when the change shows the system's HUD, which
+// Spotify's own Connect HUD turns off.
+static void systemSliderSet(UISlider *slider) {
     UIView *row = slider.superview.superview;
-    if (![slider.superview isKindOfClass:SGRVolumeView.class] || ![row isKindOfClass:SGRVolumeRow.class]) return;
-    if (slider != ((SGRVolumeRow *)row).systemSlider) return;
-    dispatch_async(dispatch_get_main_queue(), ^{ [(SGRVolumeRow *)row systemSliderSet]; });
+    if (![slider.superview isKindOfClass:SGRSystemVolumeView.class] || ![row isKindOfClass:SGRSystemVolumeRow.class]) return;
+    if (slider != ((SGRSystemVolumeRow *)row).systemSlider) return;
+    dispatch_async(dispatch_get_main_queue(), ^{ [(SGRSystemVolumeRow *)row systemSliderSet]; });
+}
+
+%hook UISlider
+- (void)setValue:(float)value animated:(BOOL)animated {
+    %orig;
+    systemSliderSet(self);
+}
+%end
+
+%ctor {
+    if (!SGRedesignedUI() || !SGEnabled(SGRKeyPlayerVolume)) return;
+    %init;
 }

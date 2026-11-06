@@ -15,7 +15,7 @@
 // recognizer of the page's would compete with it. The lines' scroll view is the one exception, which the zoom's close
 // works with as with any scroll view at its top: the view lays the lines out for an offset of 0, so it is at its top
 // whenever it follows the song. The progress and the volume, the two sideways drags, turn the pans above them off
-// while a finger is on them, as the redesigned player's volume does (PlayerVolume.m).
+// while a finger is on them, as the redesigned player's volume did.
 //
 // The header's ⋯ (its owner, 2026-11-01) cannot open the redesigned player's menu: that menu is Spotify's own ⋯ sheet read
 // into a system menu (Redesigned/ContextMenu), and the sheet comes only from the ⋯ action of Spotify's player, which is
@@ -38,7 +38,7 @@
 // everything of its own, on its lyrics or queue if the page's are up, and comes back on what it showed.
 //
 // The Player page's settings reach it too (its owner, 2026-11-01): Volume (the row goes and the controls close up, read at
-// each open), Hide on the player's Shuffle and Repeat (by alpha in their slots, as PlayerControls.x hides them), the hold
+// each open), Shuffle and Repeat under Controls (by alpha in their slots, as the redesigned player hid them), the hold
 // on the cover for 2× (PlayerArtwork.x's, SGRPlayerAttachCoverHold). TODO ("aim to add at some point"): Switch to video is
 // not honoured here yet; the page has no video chip, and its row stays as it is meanwhile.
 //
@@ -99,11 +99,11 @@ static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24;
 // After a seek the state still reports the old place for a moment: the bar holds the new one meanwhile, so it does not
 // jump back and forth.
 static const CFTimeInterval kSeekHold = 1.5;
-// How far a finger moves along the bar before the pans above it go off (PlayerVolume.m's kDragStart).
+// How far a finger moves along the bar before the pans above it go off (the redesigned player's volume's kDragStart).
 static const CGFloat kScrubDragStart = 6;
 // The cover as the thumbnail it shrinks to while the lyrics are up, and the gap between it and the title beside it.
 static const CGFloat kThumbSide = 60, kThumbGap = 14;
-// The lyrics glyph, the redesigned player's footer's (PlayerFooter.x).
+// The lyrics glyph, the redesigned player's footer's.
 static NSString *const kLyricsSymbol = @"quote.bubble", *const kLyricsSymbolOpen = @"quote.bubble.fill";
 
 // A light disc `side` across with `symbol` in `config` cut out of it.
@@ -134,8 +134,8 @@ UIImageView *SGRSystemCutDisc(NSString *symbol) {
     return cutDisc(symbol);
 }
 // The bottom row's middle above the safe area's bottom, never less than the minimum above the screen's, and the route
-// line's middle under it: the redesigned player's footer's (PlayerFooter.x's kRowAboveSafeArea, kRowMinBottom and
-// kRouteLineDrop), which leave the line its room over the home indicator.
+// line's middle under it: the redesigned player's footer's (its kRowAboveSafeArea, kRowMinBottom and kRouteLineDrop),
+// which leave the line its room over the home indicator.
 static const CGFloat kRowAboveSafeArea = 32, kRowMinBottom = 34, kRouteLineDrop = 32;
 // The add button's glyph beside the title and artist, and its touch square.
 static const CGFloat kAddGlyph = 22, kAddSide = 44;
@@ -143,7 +143,7 @@ static const CGFloat kAddGlyph = 22, kAddSide = 44;
 // screen (2026-11-01): the volume's middle above the row's, the controls' above the volume's, the times' above the
 // controls', the progress bar's above the times'; the header's circles in from the sides and down from the safe area;
 // previous and next out from the middle as a share of the width between the margins; the bottom row's glyphs at a
-// fifth, half and four fifths of the width, as PlayerFooter.x places them (kLeading, kMiddle, kTrailing). The first three
+// fifth, half and four fifths of the width, as the redesigned player's footer placed them (kLeading, kMiddle, kTrailing). The first three
 // gaps are times controlsSpacing() (below).
 static const CGFloat kVolumeAboveRow = 38, kControlsAboveVolume = 58, kTimesAboveControls = 46, kScrubberAboveTimes = 17;
 static const CGFloat kHeaderSide = 16, kHeaderDrop = 2, kSkipShare = 0.25, kSkipGlyph = 32, kPlayGlyph = 44;
@@ -937,7 +937,7 @@ static const CGFloat kLitPadding = 7, kLitEnterScale = 0.8;
 // Spotify's Connect sheet. The first way is Spotify's own link to its device picker (kConnectURI), sent only when the
 // dispatcher's registry says a handler takes it (Shared/Navigation/Links.h's SGSpotifyURIRoute asks every handler as the
 // dispatcher would, so a link nothing takes never ends in Spotify's "Couldn't open link"). The second is the redesigned
-// player's footer's (PlayerFooter.x): the tap recognizer on Spotify's Connect holder is sent the tap a finger would have
+// player's footer's: the tap recognizer on Spotify's Connect holder is sent the tap a finger would have
 // made, as Spotify opens its sheet from that recognizer rather than from its button's actions (the phone's log,
 // 2026-10-30). The page has no Spotify footer, so that holder is the now playing bar's, which under the system tab bar
 // is at alpha 0 and takes no touches (NowPlayingBar.x), and can be missing altogether: the bar tucks its Connect item
@@ -992,7 +992,7 @@ static BOOL openSpotifyConnect(NSString **how) {
 
 // A tap opens the system's AirPlay picker, the Music app's; a press held opens Spotify's Connect sheet with a haptic, as
 // in the redesigned player's footer (its owner, 2026-10-30). The picker's own glyph is always the plain AirPlay one, so it
-// is drawn clear and the glyph over it is the output's device, the footer's (PlayerFooter.x's SGRPlayerOutputSymbol:
+// is drawn clear and the glyph over it is the output's device, the footer's (SystemOutput.x's SGRPlayerOutputSymbol:
 // AirPods by model, a HomePod, a Mac, EarPods...), drawn again as the footer says the output changed, and pressed as the
 // footer's is while a finger is on it (its owner, 2026-11-01).
 @interface SGRSystemRouteButton : AVRoutePickerView
@@ -1094,8 +1094,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the lines on their own
 
-// Sees every touch on the page and takes none, as the redesigned player's watcher does (PlayerLyrics.x's
-// SGRPlayerTouchWatcher): it holds the clock while a finger is down and starts it once the last one lifts. It never
+// Sees every touch on the page and takes none, as the redesigned player's touch watcher did:
+// it holds the clock while a finger is down and starts it once the last one lifts. It never
 // recognizes, so it stands in no one's way, the zoom's close included.
 @interface SGRSystemTouchWatcher : UIGestureRecognizer <UIGestureRecognizerDelegate>
 @property (nonatomic, readonly) BOOL touching;
@@ -1392,7 +1392,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         button.accessibilityElementsHidden = YES;
     }
 
-    // Dimmed until the track's lines are in, as the redesigned player's footer glyph is (PlayerFooter.x): syncLyrics.
+    // Dimmed until the track's lines are in, as the redesigned player's footer glyph was: syncLyrics.
     _lyrics = [SGRGlyphButton buttonWithSymbol:kLyricsSymbol pointSize:20 title:@"Lyrics"];
     _lyrics.glyph.tintColor = SGRSecondary();
     _lyrics.enabled = NO;
@@ -1404,8 +1404,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         NSString *how = nil;
         openSpotifyConnect(&how);
     };
-    // The output's name under the glyph, as the redesigned player's footer draws it (PlayerFooter.x's
-    // SGRPlayerPlaceRoute): the Music app's 15pt at about 68% white, semibold to read as its blended regular does, and
+    // The output's name under the glyph, as the redesigned player's footer drew it:
+    // the Music app's 15pt at about 68% white, semibold to read as its blended regular does, and
     // nothing on the phone's own speaker (its owner, 2026-11-01: "missing the text under the AirPlay icon").
     _routeLine = [UILabel new];
     _routeLine.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryLarge);
@@ -1690,7 +1690,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGFloat headerBottom = top + button;
 
     // From the bottom up: the row of three with the route line under it, the volume, the controls, the progress, the
-    // two lines. The row stands where the redesigned player's footer puts it (PlayerFooter.x's SGRPlayerLowerRow).
+    // two lines. The row stands where the redesigned player's footer put it.
     CGFloat rowMid = height - MAX(safe.bottom + kRowAboveSafeArea, kRowMinBottom);
     NSArray<UIView *> *row = @[_lyrics, _route, _queue];
     static const CGFloat shares[] = {0.2, 0.5, 0.8};
@@ -2802,7 +2802,7 @@ void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
     [self restartRest];
 }
 
-// The wake tap takes nothing from anything under it (PlayerLyrics.x's SGRPlayerWake): Sing's mic and a line the lines'
+// The wake tap takes nothing from anything under it, as the redesigned player's did: Sing's mic and a line the lines'
 // own tap would seek to keep their touches.
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     if (recognizer != _wake) return YES;

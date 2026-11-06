@@ -18,7 +18,7 @@ BOOL SGRAccentSwap(CGFloat *r, CGFloat *g, CGFloat *b);
 // on, read at launch.
 #define SGRKeyPlainCheck @"spotifyglass.redesign.plainCheck"
 BOOL SGRPlainCheckOn(void);
-// The plain checkmark's view, a template image: Follow the cover (Player/PlayerCoverAccent.x) sets its tint.
+// The plain checkmark's view, a template image, told by this identifier.
 #define SGRPlainCheckIdentifier @"spotifyglass.plainCheck"
 
 @class SGModRow;

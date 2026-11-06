@@ -1,18 +1,13 @@
-// Player redesign: the ⋯ opens the system menu (Redesigned/ContextMenu): Share, Add to playlist and Add to
-// queue in a row at its top, then the player's own items here, then More with the rest of Spotify's rows. The
-// player's items take over what Speed and pitch's block is on Spotify's sheet:
+// The player page's ⋯ items of the mod's own (Redesigned/Navbar/SystemPlayer.m):
 //
 //     Speed, Pitch & Reverb   opens the sliders in a popover from the ⋯ (SGPlayerShowSpeedPitchPanel): speed,
 //                             pitch, reverb and Pitch follows speed, as on Spotify's sheet (issue #14)
-//     Show Fluid Artwork, Show Animated Artwork, Show Visualizer
-//                             a button for each of the two the background is not, while it is one of the
-//                             three, named for what it switches to
+//     Artwork                 Fluid, Visualizer or Animated, while the background is one of the three
 //     Lyrics Source           a song's lyrics from another source than the one the order chose (issue #67), in a
 //                             popover from the ⋯ that asks every source and lists each as it answers
 //
 // The item says under its name what is not as Spotify plays it, so the menu reads as a settings summary.
 #import "Core/SGCore.h"
-#import "Redesigned/ContextMenu/ContextMenu.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Shared/Lyrics/Lyrics.h"
@@ -55,6 +50,7 @@ static UIAction *soundMenu(void) {
     open.subtitle = changed.count ? [changed componentsJoinedByString:@", "] : @"Normal";
     return open;
 }
+
 
 static NSString *sheetKind(void);
 
@@ -204,38 +200,8 @@ static UIAction *lyricsSourceItem(void) {
 
 // Buttons for the backgrounds the ⋯ switches between at once, while the background is one of them; `changed` runs after
 // a switch.
-static NSArray<UIMenuElement *> *backgroundItems(void (^changed)(void)) {
-    NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
-    if (SGPlayerMenuOffersAnimatedArtwork()) {
-        // Buttons named for what they do, not checkmarks: the HIG's changeable label for a toggled item.
-        NSArray<NSArray *> *backgrounds = @[
-            @[@(SGRPlayerBackgroundFluid), @"Show Fluid Artwork", @"drop"],
-            @[@(SGRPlayerBackgroundAnimated), @"Show Animated Artwork", @"play.rectangle.on.rectangle"],
-            @[@(SGRPlayerBackgroundVisualiser), @"Show Visualizer", @"waveform"],
-        ];
-        SGRPlayerBackgroundKind current = SGRPlayerBackground();
-        for (NSArray *background in backgrounds) {
-            SGRPlayerBackgroundKind kind = [background[0] integerValue];
-            if (kind == current) continue;
-            [items addObject:[UIAction actionWithTitle:background[1] image:symbol(background[2]) identifier:nil handler:^(UIAction *action) {
-                SGRPlayerMenuSetBackground(kind);
-                if (changed) changed();
-            }]];
-        }
-    }
-    return items;
-}
-
-static NSArray<UIMenuElement *> *playerItems(void) {
-    NSMutableArray<UIMenuElement *> *items = [NSMutableArray arrayWithObject:soundMenu()];
-    [items addObjectsFromArray:backgroundItems(nil)];
-    UIAction *lyrics = lyricsSourceItem();
-    if (lyrics) [items addObject:lyrics];
-    return items;
-}
-
-// What the player is playing, from its URI (spotify:track:…, spotify:episode:…, spotify:local:…): a podcast's
-// sheet has other rows than a song's.
+// What the player is playing, from its URI (spotify:track:…, spotify:episode:…, spotify:local:…): a podcast has no
+// lyrics to pick a source for.
 static NSString *sheetKind(void) {
     NSArray<NSString *> *parts = [SGURIString(SGPlayerState().track.URI) componentsSeparatedByString:@":"];
     return parts.count > 2 ? parts[1] : @"";
@@ -274,9 +240,4 @@ UIMenu *SGRPlayerMenuArtwork(void (^changed)(void)) {
     UIMenu *menu = [UIMenu menuWithTitle:@"Artwork" image:symbol(@"photo") identifier:nil options:0 children:items];
     menu.subtitle = currentName;
     return menu;
-}
-
-void SGRPlayerMenuWatch(UIView *button) {
-    sg_moreButton = button;
-    SGRSystemMenuWatch(button, ^NSArray<UIMenuElement *> *{ return playerItems(); }, ^NSString *{ return sheetKind(); });
 }

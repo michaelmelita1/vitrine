@@ -88,4 +88,4 @@ Rules:
   `alloc`/`init` through a cast `objc_msgSend` over-releases when `init` returns another object, so do both on
   `void *` and hand the result to `CFBridgingRelease`. A Logos hook on an `init…` that returns another object
   returns it with `CFBridgingRetain`, or the app crashes at launch. iOS 26's scroll edge effect blurs any header
-  that sits inside its own scroll view; hide that list's `topEdgeEffect` (`Redesigned/Player/PlayerScroll.x`).
+  that sits inside its own scroll view; hide that list's `topEdgeEffect`.

@@ -48,15 +48,13 @@ void SGRPlayerPressGlyphOnTouch(UIView *control);
 // SGRPlayerMotionPreview builds it under Native redesign.
 UIView *SGRSystemMotionPreviewOf(NSURL *file, UIImage *poster);
 
-// The page's volume row (SystemVolume.m, Sim Radio's elastic slider, which the redesigned player does not have), 32 pt
-// high, as wide as it is laid out; the pans above it turned back on, should it have any off, for a page that is closing;
-// and an outside change of the system's slider, which the redesigned player's UISlider hook passes on.
+// The page's volume row (SystemVolume.x, Sim Radio's elastic slider), 32 pt high, as wide as it is laid out; and the pans
+// above it turned back on, should it have any off, for a page that is closing.
 UIControl *SGRPlayerMakeVolumeRow(void);
 void SGRPlayerVolumeRowLetGo(UIControl *row);
-void SGRSystemVolumeSliderSet(UISlider *slider);
 
 // The page's progress bar, shared with the landscape player (SystemLandscape.m), drawn as the volume
-// row is (PlayerVolume.m): a thin pill that grows while held, moved by the finger's travel from where it came down. The
+// row is (SystemVolume.x): a thin pill that grows while held, moved by the finger's travel from where it came down. The
 // player seeks once the finger lets go.
 @interface SGRSystemScrubber : UIControl
 @property (nonatomic) CGFloat value;    // 0 to 1

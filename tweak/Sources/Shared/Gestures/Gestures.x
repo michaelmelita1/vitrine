@@ -1,6 +1,6 @@
 // A double tap on the player, read against the grid Settings draws: the recognizer, what each cell does
 // and the playback controller it does it with. Which view of the player it goes on is each look's own
-// hookup (Native/Player/PlayerGestures.x, Redesigned/Player/PlayerGestures.x), which call SGGestureAttach.
+// hookup (Native/Player/PlayerGestures.x), which calls SGGestureAttach.
 //
 // The player already answers a sideways swipe with the next track and a vertical drag with the
 // cards below, which leaves the double tap as the one gesture free to take.

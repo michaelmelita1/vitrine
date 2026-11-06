@@ -1,6 +1,6 @@
-// Player redesign: the Visualizer background, a calm spectrum of what is playing behind the player, in the
-// cover's colors, over the Fluid field held still (PlayerField.x keeps the field Fluid for this choice, as for
-// Animated, so the ⋯ menu moves between the three without a restart).
+// The Visualizer background, a calm spectrum of what is playing behind the player page (Redesigned/Navbar/
+// SystemPlayer.m, which puts SGRPlayerVisualiserPreview's view over its Fluid field), in the cover's colors. The ⋯
+// menu moves between Fluid, Animated and the Visualizer without a restart (SGRPlayerMenuSetBackground).
 //
 // The sound is Spotify's output as it plays, read on the render thread through the audio effects' notify
 // (SGAudioSetOutputReader, Shared/AudioEffects/AudioEffects.h) into SGRSpectrum.m's bands. Here, on the main
@@ -462,51 +462,8 @@ static void shape(CAShapeLayer *layer, const float *bands, CGFloat width, CGFloa
 
 #pragma mark - in the player
 
-static SGRVisualiserView *sg_view;
-
-BOOL SGRPlayerVisualiserShowing(void) {
-    return SGRPlayerBackground() == SGRPlayerBackgroundVisualiser;
-}
-
 UIView *SGRPlayerVisualiserPreview(void) {
     return [[SGRVisualiserView alloc] initWithFrame:CGRectZero];
-}
-
-// The hills from the top of the field to the foot of its bleed, standing on the screen's foot.
-static void layOut(SGRArtworkField *field) {
-    if (sg_view.superview != field) [field addSubview:sg_view];
-    else if (field.subviews.lastObject != sg_view) [field bringSubviewToFront:sg_view];
-    CGSize size = field.bounds.size;
-    CGFloat screen = field.window.bounds.size.height ?: size.height;
-    CGRect frame = CGRectMake(0, 0, size.width, MAX(size.height, screen) + field.bleed.bottom);
-    if (!CGRectEqualToRect(sg_view.frame, frame)) sg_view.frame = frame;
-    sg_view.baseline = screen;
-    sg_view.screenHeight = screen;
-}
-
-void SGRPlayerVisualiserUpdate(void) {
-    SGRArtworkField *field = SGRPlayerField();
-    // Not over an Animated artwork clip still playing: the Player page can change the choice under it, which the
-    // player takes up when it next starts.
-    BOOL wanted = SGRPlayerVisualiserShowing() && field && !SGRPlayerMotionShowing();
-    if (!wanted) {
-        SGRVisualiserView *old = sg_view;
-        sg_view = nil;
-        if (old.window) [old disappear:^{ [old removeFromSuperview]; }];
-        else [old removeFromSuperview];
-        return;
-    }
-    BOOL made = !sg_view;
-    if (made) sg_view = [[SGRVisualiserView alloc] initWithFrame:CGRectZero];
-    layOut(field);
-    if (made) {
-        [sg_view setBlurred:SGRPlayerLyricsOpen() animated:NO];
-        [sg_view appear:field.window != nil];
-        SGLog(@"redesign player: visualizer on the field");
-    } else {
-        BOOL open = SGRPlayerLyricsOpen();
-        if (open != sg_view.blurred) [sg_view setBlurred:open animated:sg_view.window != nil];
-    }
 }
 
 #pragma mark - the ⋯ menu's switch
@@ -518,6 +475,4 @@ void SGRPlayerMenuSetBackground(SGRPlayerBackgroundKind kind) {
     if (kind == SGRPlayerBackgroundAnimated || current == SGRPlayerBackgroundAnimated) SGPlayerMenuSetAnimatedArtwork(kind == SGRPlayerBackgroundAnimated);
     if (kind != SGRPlayerBackgroundAnimated) SGSetInt(SGRKeyPlayerBackground, kind);
     SGLog(@"redesign player: background switched to %@ from the menu", SGRPlayerBackgroundNames()[(NSUInteger)kind]);
-    SGRPlayerHoldField();
-    SGRPlayerVisualiserUpdate();
 }

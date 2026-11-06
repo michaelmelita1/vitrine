@@ -162,9 +162,6 @@ UIView *SGRPlayerEncoreGlyphIn(SGRGlyphButton *button, NSString *name);
 void SGRPlayerShowLandscape(BOOL show);
 // The playing track's lines came in, or turned out to be none: the landscape screen lays out for it.
 void SGRPlayerLandscapeLinesChanged(void);
-// The system tab bar's player page (Redesigned/Navbar/SystemPlayer.m) has its lyrics up, or not: turning the phone
-// sideways then brings the same landscape screen up over it, by the same rule as for the player's lyrics.
-void SGRPlayerSetPageLyricsOpen(BOOL open);
 
 // The animated artwork follows the lyrics: blurred behind them (PlayerMotion.x).
 void SGRPlayerMotionLyricsChanged(void);
@@ -182,6 +179,9 @@ BOOL SGRPlayerMotionShowing(void);
 // `arrived` runs once on the main queue when a call would return it, or when nothing was found (never when the
 // track changed). Without `arrived` it only answers with a clip already in.
 UIView *SGRPlayerMotionPreview(void (^arrived)(void));
+// The clip the player or the page has in for the shown track, and its first frame: NO while there is none (the landscape
+// player, Redesigned/Navbar/SystemLandscape.m, plays it itself).
+BOOL SGRPlayerMotionFile(NSURL **file, UIImage **poster);
 // YES when the page's lookup found no clip for `track` a moment ago: `arrived` runs then too, and the page shows Fluid at
 // once instead of keeping the last track's clip up while it waits (SystemPlayer.m's syncClipAnimated:).
 BOOL SGRPlayerMotionNoneFor(NSString *track);

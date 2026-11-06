@@ -22,6 +22,7 @@
 #import "SystemPlayerTransition.h"
 #import "Redesigned/Kit/SGRRepaint.h"
 #import "Settings/SGPage.h"
+#import "Redesigned/Artist/Artist.h"
 
 
 BOOL SGRSystemTabsOn(void) {
@@ -111,6 +112,10 @@ static const CGFloat kDeviceRoom = 80;
     CAGradientLayer *_fade;
     SGRGlyphButton *_play, *_next;
     UIView *_device;    // the output's device: a tap the AirPlay picker, a hold Spotify's Connect sheet
+    SGRGlyphButton *_like;   // the star (SGRKeyMiniPlayerLike): the song in Liked Songs or not
+    id _savedWatch;          // Spotify's collection state for the song shown (Artist.h's SGRCollectionWatchURI)
+    NSString *_savedURI;
+    BOOL _saved;
     NSString *_shownURI;
     BOOL _skipping;     // a swipe settled on a neighbour; the track it asked for has not come yet
     BOOL _hadTrack, _emptyPending;  // a track shown, and a look again pending before Not Playing
@@ -145,7 +150,9 @@ static const CGFloat kDeviceRoom = 80;
     // The Mini player page's Device button (its owner, 2026-11-01): the player page's AirPlay button, its glyph the
     // output's device, beside play.
     _device = SGRSystemMakeRouteButton(18, @"the mini player");
-    for (UIView *view in @[_cover, _text, _device, _play, _next]) [self addSubview:view];
+    _like = [SGRGlyphButton buttonWithSymbol:@"star" pointSize:18 title:@"Add to Liked Songs"];
+    _like.onTap = ^{ [weakSelf toggleSaved]; };
+    for (UIView *view in @[_cover, _text, _device, _like, _play, _next]) [self addSubview:view];
     UITapGestureRecognizer *open = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(opened)];
     open.delegate = self;
     [self addGestureRecognizer:open];
@@ -167,6 +174,39 @@ static const CGFloat kDeviceRoom = 80;
     [self registerForTraitChanges:@[UITraitTabAccessoryEnvironment.class] withAction:@selector(environmentChanged)];
     [self show:SGPlayerState()];
     return self;
+}
+
+// The song's place in Liked Songs, from Spotify's collection state, watched from a track change on (the player page's way).
+- (void)syncSaved {
+    NSString *uri = _shownURI;
+    BOOL saveable = [uri hasPrefix:@"spotify:track:"];
+    if (!saveable) {
+        if (_savedURI) [self setNeedsLayout];
+        _savedWatch = nil;
+        _savedURI = nil;
+        return;
+    }
+    if (![uri isEqualToString:_savedURI]) {
+        if (!_savedURI) [self setNeedsLayout];
+        _savedURI = uri;
+        __weak typeof(self) weakSelf = self;
+        _savedWatch = SGRCollectionWatchURI([NSURL URLWithString:uri], ^{ [weakSelf syncSaved]; });
+        [self showSaved:NO];
+    }
+    BOOL saved = NO;
+    if (SGRCollectionWatchSaved(_savedWatch, &saved)) [self showSaved:saved];
+}
+
+- (void)showSaved:(BOOL)saved {
+    _saved = saved;
+    [_like.glyph setSymbol:saved ? @"star.fill" : @"star" animated:self.window != nil];
+    _like.accessibilityLabel = saved ? @"Remove from Liked Songs" : @"Add to Liked Songs";
+}
+
+- (void)toggleSaved {
+    if (!_savedURI || !SGRCollectionSetSaved([NSURL URLWithString:_savedURI], !_saved)) return;
+    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    [self showSaved:!_saved];
 }
 
 - (void)environmentChanged {
@@ -197,25 +237,33 @@ static const CGFloat kDeviceRoom = 80;
     // Round over the bar too, as in the row (its owner, 2026-10-31).
     _cover.layer.cornerRadius = side / 2;
     CGFloat button = 36, right = size.width - 6;
-    // In the bar's row, play alone as the Music app has it; over the bar, next beside it unless the Mini player page's Skip
-    // button is off (its owner, 2026-11-01), the title taking its room.
-    BOOL next = !inlined && SGEnabled(SGRKeyMiniPlayerNext);
-    _next.hidden = !next;
-    if (next) {
-        _next.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
-        right -= button;
-    }
-    _play.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
-    right -= button;
-    // The AirPlay button before play while the Mini player page has it on, over the bar and in its row alike, while the
-    // title keeps room.
     CGFloat textX = CGRectGetMaxX(_cover.frame) + 10;
-    BOOL device = SGEnabled(SGRKeyMiniPlayerAirPlay) && right - button - 4 - textX >= kDeviceRoom;
-    _device.hidden = !device;
-    if (device) {
-        _device.frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
+    // The buttons in the Mini player page's order, laid from the right edge in (its owner, 2026-11-06). In the bar's row,
+    // play alone as the Music app has it; the AirPlay button and the star go first while the title would be left short.
+    NSArray<NSString *> *order = inlined ? @[SGRMiniButtonPlay] : SGRMiniPlayerButtons();
+    NSDictionary<NSString *, UIView *> *views = @{SGRMiniButtonAirPlay: _device, SGRMiniButtonStar: _like,
+                                                  SGRMiniButtonPlay: _play, SGRMiniButtonNext: _next};
+    NSMutableSet<NSString *> *shown = [NSMutableSet set];
+    // Room for the must-haves first (play, next), then the rest while the title keeps kDeviceRoom.
+    NSInteger fixed = 0;
+    for (NSString *key in order) if ([key isEqualToString:SGRMiniButtonPlay] || [key isEqualToString:SGRMiniButtonNext]) fixed++;
+    CGFloat room = right - fixed * button - 4 - textX;
+    for (NSString *key in order) {
+        if ([key isEqualToString:SGRMiniButtonPlay] || [key isEqualToString:SGRMiniButtonNext]) {
+            [shown addObject:key];
+            continue;
+        }
+        if ([key isEqualToString:SGRMiniButtonStar] && ![_savedURI hasPrefix:@"spotify:track:"]) continue;
+        if (room - button < kDeviceRoom) continue;
+        room -= button;
+        [shown addObject:key];
+    }
+    for (NSString *key in order.reverseObjectEnumerator) {
+        if (![shown containsObject:key]) continue;
+        views[key].frame = CGRectMake(right - button, round((size.height - button) / 2), button, button);
         right -= button;
     }
+    for (NSString *key in views) views[key].hidden = ![shown containsObject:key];
     right -= 4;
     CGFloat width = MAX(0, right - textX);
     // The text area starts the fade's width before the text, so the fade lies over nothing at rest: laid over the text,
@@ -269,6 +317,7 @@ static const CGFloat kDeviceRoom = 80;
     }
     _shownURI = uri;
     _current.track = state.track;
+    [self syncSaved];
     // Nothing playing, the Music app's way (its owner's screenshot, 2026-11-02): "Not Playing" by the note, next dimmed.
     BOOL empty = !hasTrack;
     if (empty) _current.title.text = @"Not Playing";
@@ -983,4 +1032,32 @@ static char kRedirectedKey;
 
 void SGRRefreshMiniPlayer(void) {
     if (@available(iOS 26.0, *)) [sg_tabs.mini setNeedsLayout];
+}
+
+
+NSArray<NSString *> *SGRMiniPlayerButtons(void) {
+    NSArray *stored = SGArray(SGRKeyMiniPlayerOrder);
+    NSArray<NSString *> *all = @[SGRMiniButtonAirPlay, SGRMiniButtonStar, SGRMiniButtonPlay, SGRMiniButtonNext];
+    if (![stored isKindOfClass:NSArray.class]) {
+        // Before any order was set: the switches that were (AirPlay and Skip on unless switched off, the star off).
+        NSMutableArray<NSString *> *on = [NSMutableArray array];
+        if (SGEnabled(SGRKeyMiniPlayerAirPlay)) [on addObject:SGRMiniButtonAirPlay];
+        if (SGFlag(SGRKeyMiniPlayerLike, NO)) [on addObject:SGRMiniButtonStar];
+        [on addObject:SGRMiniButtonPlay];
+        if (SGEnabled(SGRKeyMiniPlayerNext)) [on addObject:SGRMiniButtonNext];
+        return on;
+    }
+    NSMutableArray<NSString *> *on = [NSMutableArray array];
+    for (id key in stored) if ([key isKindOfClass:NSString.class] && [all containsObject:key] && ![on containsObject:key]) [on addObject:key];
+    if (![on containsObject:SGRMiniButtonPlay]) [on addObject:SGRMiniButtonPlay];
+    return on;
+}
+
+void SGRSetMiniPlayerButtons(NSArray<NSString *> *keys) {
+    NSMutableArray<NSString *> *on = [keys mutableCopy] ?: [NSMutableArray array];
+    // Play cannot be put away.
+    if (![on containsObject:SGRMiniButtonPlay]) [on addObject:SGRMiniButtonPlay];
+    [NSUserDefaults.standardUserDefaults setObject:on forKey:SGRKeyMiniPlayerOrder];
+    SGPrefsChanged();
+    SGRRefreshMiniPlayer();
 }

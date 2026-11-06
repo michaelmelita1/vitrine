@@ -581,6 +581,22 @@ static NSString *sg_noneTrack;
 static CFTimeInterval sg_noneAt;
 static const CFTimeInterval kNoneKept = 30;
 
+BOOL SGRPlayerMotionFile(NSURL **file, UIImage **poster) {
+    NSString *track = SGShownTrackNow().uri;
+    NSURL *found = nil;
+    UIImage *picture = nil;
+    if (sg_motionFile && (!track || [track isEqualToString:sg_shown])) {
+        found = sg_motionFile;
+        picture = sg_motionPoster;
+    } else if (sg_previewFile && track && [track isEqualToString:sg_previewTrack]) {
+        found = sg_previewFile;
+        picture = sg_previewPoster;
+    }
+    if (file) *file = found;
+    if (poster) *poster = picture;
+    return found != nil;
+}
+
 BOOL SGRPlayerMotionNoneFor(NSString *track) {
     return SGRSystemTabsOn() && track && [track isEqualToString:sg_noneTrack] && CACurrentMediaTime() - sg_noneAt < kNoneKept;
 }

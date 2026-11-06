@@ -30,6 +30,10 @@ extern NSString *const SGUpdateCheckedNotification;   // on the main thread, aft
 // in SG_VERSION) and off for a release; the row rechecks when it is flipped.
 #define SGKeyUpdateBetas @"spotifyglass.update.betas"
 BOOL SGBuildIsBeta(void);
+// Which build this is: the commit, plus the build time when it had uncommitted changes (scripts/build-stamp.sh).
+const char *SGBuildStamp(void);
+// The version with that stamp after it, as Mod Settings shows it.
+NSString *SGVersionWithBuild(void);
 BOOL SGUpdateIncludesBetas(void);
 
 NSArray<SGUpdateRelease *> *SGUpdateReleases(void);   // newest first that count for this build, empty until a check lands

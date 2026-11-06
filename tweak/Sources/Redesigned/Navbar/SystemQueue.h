@@ -32,6 +32,15 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 // moves when the controls go: only `controlsCover` goes to 0, and the rows under them show (its owner, 2026-11-03).
 @property (nonatomic) CGFloat controlsHeight;
 - (void)setControlsCover:(CGFloat)cover animated:(BOOL)animated;
+// Room above the chips for the page's head (the landscape player's title row): the chips start that far down and the
+// list scrolls them up, 1:1, until they reach the top, as the Music app's landscape queue pushes its title row out;
+// `onHeadPush` hears how far, 0 to headRoom. Touches above the chips go through. 0, the portrait page's, leaves all as it was.
+@property (nonatomic) CGFloat headRoom;
+// How far the page's head is pushed: up to headRoom as the list scrolls on, and below 0, down, as History is pulled into
+// view over it.
+@property (nonatomic, copy) void (^onHeadPush)(CGFloat push);
+// A track of History tapped: how many tracks back it lies, to step back to it.
+@property (nonatomic, copy) void (^onPickPast)(NSInteger steps);
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle;
 // The same with the whole queue's tracks to come, from Spotify's queue (SPTPlayerQueue's nextTracks), in place of the
@@ -39,4 +48,6 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 - (void)showState:(SPTPlayerState *)state upcoming:(NSArray *)upcoming from:(NSString *)contextTitle;
 // Back to the top of the list, for a fresh look as the queue opens.
 - (void)scrollToTop;
+// History from Spotify's whole queue (SPTPlayerQueue's prevTracks), in place of the state's two or three, oldest first.
+- (void)showPast:(NSArray *)past;
 @end

@@ -9,6 +9,9 @@
 // far more ahead on a long playlist; the Music app's list is a look ahead too).
 static const CGFloat kChipHeight = 34, kChipGap = 10, kChipsBelow = 14, kRowHeight = 56, kRowCover = 44, kRowCoverRadius = 6;
 static const CGFloat kSideMargin = 28, kListTopFade = 18, kListFootFade = 36;
+// History: its heading's height, the gap under its last track, and the most tracks it shows.
+static const CGFloat kHistoryHeading = 36, kHistoryBelow = 10;
+static const NSUInteger kHistoryMost = 20;
 static const NSUInteger kMostTracks = 60;
 
 static BOOL isTrack(id track) {
@@ -127,6 +130,15 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     UITableView *_list;
     CAGradientLayer *_listFade;
     CGFloat _controlsCover;   // how much of the list's foot the controls cover now (controlsHeight, or 0 in a drag)
+    CGFloat _headPush;        // how far the list's scroll has pushed the page's head up, 0 to headRoom
+    UIView *_chipsBar;        // with headRoom: the list's header, History, the head's room, then the chips, scrolling with it
+    UIView *_historyBox;      // History: the tracks played before this one, above the head, as the Music app has them
+    NSArray<SPTPlayerTrack *> *_history;   // oldest first, the one just played last
+    NSArray<NSString *> *_historyKey;
+    BOOL _pastFromQueue;
+    UIView *_pinnedHeading;   // the group heading held under the chips once its own has gone under them
+    NSString *_pinnedKey;     // what it was made for
+    CGFloat _pinnedBottom;    // where it ends, the top's fade beginning there; 0 with none      // History read from Spotify's whole queue: the state's few no longer stand in for it
     NSArray<SGRQueueGroup *> *_groups;
     NSArray<NSString *> *_shownURIs;   // the tracks last shown, so the same queue again is not laid out again
     NSArray *_upcoming;                // Spotify's whole list of tracks to come, when shown from it; nil from the state
@@ -179,7 +191,8 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     _list.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, CGFLOAT_MIN)];
     // The list fades out at its top edge, under the chips, as the lyrics' lines do at theirs.
     _listFade = [CAGradientLayer layer];
-    _listFade.colors = @[(id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.blackColor.CGColor, (id)UIColor.clearColor.CGColor];
+    _listFade.colors = @[(id)UIColor.clearColor.CGColor, (id)UIColor.clearColor.CGColor, (id)UIColor.blackColor.CGColor,
+                         (id)UIColor.blackColor.CGColor, (id)UIColor.clearColor.CGColor];
     _list.layer.mask = _listFade;
     _shuffle = [self chipWithImage:chipSymbol(@"shuffle") title:@"Shuffle"];
     _repeat = [self chipWithImage:chipSymbol(@"repeat") title:@"Repeat"];
@@ -421,22 +434,187 @@ static UIImage *chipSymbol(NSString *name) {
     [chips addObject:_automix];
     [chips addObject:_clear];
     CGFloat chipWidth = MAX(0, (size.width - 2 * kSideMargin - kChipGap * (chips.count - 1)) / chips.count);
+    // With headRoom the chips ride up with the list from under the head, and once at the top they stay there, the tracks
+    // passing under them (its owner, 2026-11-06: "i wanted the chips to be stuck on the top"); without, they stand over
+    // the list.
+    BOOL inList = _headRoom > 0;
+    CGFloat history = [self historyHeight], chipsTop = [self chipsY];
+    _historyBox.frame = CGRectMake(0, 0, size.width, history);
+    for (UIView *view in _historyBox.subviews) {
+        if (view.tag == 1) view.frame = CGRectMake(kSideMargin, 6, size.width - 2 * kSideMargin, kHistoryHeading - 6);
+        else if (view.tag > 100) view.frame = CGRectMake(0, kHistoryHeading + (_history.count - (view.tag - 100)) * kRowHeight, size.width, kRowHeight);
+    }
     [chips enumerateObjectsUsingBlock:^(UIView *chip, NSUInteger i, BOOL *stop) {
         chip.bounds = CGRectMake(0, 0, chipWidth, kChipHeight);
-        chip.center = CGPointMake(kSideMargin + i * (chipWidth + kChipGap) + chipWidth / 2, kChipHeight / 2);
+        chip.center = CGPointMake(kSideMargin + i * (chipWidth + kChipGap) + chipWidth / 2, chipsTop + kChipHeight / 2);
+        [self bringSubviewToFront:chip];
     }];
-    CGFloat listTop = kChipHeight + kChipsBelow - kListTopFade / 2;
+    CGFloat listTop = inList ? 0 : kChipHeight + kChipsBelow - kListTopFade / 2;
     _list.frame = CGRectMake(0, listTop, size.width, MAX(0, size.height - listTop));
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     _listFade.frame = _list.bounds;
+    _pinnedKey = nil;
+    [self placePinnedHeading];
     [self placeFade];
     [CATransaction commit];
+    [self padForHistory];
 }
 
-// The part under the controls is theirs: touches there go through to them while they show.
+// Room under a short list, so it scrolls far enough for the head to rest where it does with History above out of view.
+- (void)padForHistory {
+    if (_headRoom <= 0) return;
+    CGFloat pad = _list.tableFooterView.frame.size.height;
+    CGFloat content = _list.contentSize.height - pad;
+    CGFloat needed = [self historyHeight] + _list.bounds.size.height - _list.adjustedContentInset.top - _list.adjustedContentInset.bottom;
+    CGFloat want = MAX(0, ceil(needed - content));
+    if (fabs(want - pad) < 1) return;
+    _list.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, _list.bounds.size.width, want)];
+}
+
+// Where the chips stand in the view: under the head's room, less the scroll, never above the top.
+- (CGFloat)chipsY {
+    return _headRoom > 0 ? MAX(0, _headRoom - [self scrolled]) : 0;
+}
+
+// History's height over the head's room: its heading and its rows, nothing without them.
+- (CGFloat)historyHeight {
+    return _headRoom > 0 && _history.count ? kHistoryHeading + _history.count * kRowHeight + kHistoryBelow : 0;
+}
+
+// How far the list has scrolled from where the head stands at rest; less than 0 with History pulled down into view.
+- (CGFloat)scrolled {
+    return _list.contentOffset.y + _list.adjustedContentInset.top - [self historyHeight];
+}
+
+- (void)setHeadRoom:(CGFloat)room {
+    room = MAX(0, round(room));
+    if (room == _headRoom) return;
+    BOOL atTop = [self scrolled] <= 0.5;
+    BOOL was = _headRoom > 0;
+    _headRoom = room;
+    if (room > 0) {
+        if (!_chipsBar) _chipsBar = [UIView new];
+        // A header's height is read as it is set, so it is set again for a new one.
+        [self sizeChipsBar];
+    } else if (was) {
+        _list.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, CGFLOAT_MIN)];
+    }
+    UIEdgeInsets inset = _list.contentInset;
+    inset.top = room > 0 ? 0 : kListTopFade / 2;
+    _list.contentInset = inset;
+    if (atTop) [self scrollToTop];
+    [self pushHead];
+    [self setNeedsLayout];
+}
+
+// The list's header as tall as History, the head's room and the chips; set again for a new height, as a header's is read
+// as it is set.
+- (void)sizeChipsBar {
+    if (_headRoom <= 0) return;
+    CGFloat height = [self historyHeight] + _headRoom + kChipHeight + kChipsBelow - kListTopFade / 2;
+    if (_list.tableHeaderView == _chipsBar && _chipsBar.frame.size.height == height) return;
+    _chipsBar.frame = CGRectMake(0, 0, _list.bounds.size.width, height);
+    _list.tableHeaderView = _chipsBar;
+}
+
+// The tracks played before this one (Spotify's state's reverse, which its back button steps through), as History over
+// the head, pulled down into view as the Music app's is (its owner, 2026-11-06). Kept where the head was at rest.
+- (void)showHistory:(SPTPlayerState *)state {
+    if (_pastFromQueue) return;
+    id reverse = [state respondsToSelector:@selector(reverse)] ? state.reverse : nil;
+    [self showHistoryOf:reverse];
+}
+
+// The state holds only the last two or three (its owner, 2026-11-06: "history only shows 2"); Spotify's whole queue
+// holds more, as its own queue page shows them.
+- (void)showPast:(NSArray *)past {
+    if (![past isKindOfClass:NSArray.class]) return;
+    _pastFromQueue = YES;
+    if (_list.isTracking || _list.isDragging || _lifted) return;
+    [self showHistoryOf:past];
+}
+
+- (void)showHistoryOf:(id)reverse {
+    if (_headRoom <= 0) return;
+    NSMutableArray<SPTPlayerTrack *> *tracks = [NSMutableArray array];
+    NSMutableArray<NSString *> *key = [NSMutableArray array];
+    for (id track in [reverse isKindOfClass:NSArray.class] ? reverse : @[]) {
+        if (![track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")]) continue;
+        [tracks addObject:track];
+        [key addObject:SGURIString([(SPTPlayerTrack *)track URI]) ?: @""];
+    }
+    while (tracks.count > kHistoryMost) {
+        [tracks removeObjectAtIndex:0];
+        [key removeObjectAtIndex:0];
+    }
+    if ([key isEqualToArray:_historyKey ?: @[]]) return;
+    CGFloat scrolled = [self scrolled];
+    _history = tracks;
+    _historyKey = key;
+    if (!_historyBox) {
+        _historyBox = [UIView new];
+        [_chipsBar addSubview:_historyBox];
+    }
+    for (UIView *view in _historyBox.subviews.copy) [view removeFromSuperview];
+    if (tracks.count) {
+        UILabel *heading = [UILabel new];
+        heading.font = SGRFont(UIFontTextStyleHeadline, UIFontWeightBold, UIContentSizeCategoryExtraExtraLarge);
+        heading.textColor = SGRPrimary();
+        heading.text = @"History";
+        heading.tag = 1;
+        [_historyBox addSubview:heading];
+        [tracks enumerateObjectsUsingBlock:^(SPTPlayerTrack *track, NSUInteger i, BOOL *stop) {
+            SGRQueueRow *row = [[SGRQueueRow alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+            row.grip.hidden = YES;
+            row.title.text = track.trackTitle;
+            row.artist.text = track.artistName.length ? track.artistName : track.metadata[@"album_title"];
+            row.accessibilityLabel = [NSString stringWithFormat:@"%@, %@", track.trackTitle ?: @"", row.artist.text ?: @""];
+            row.accessibilityTraits = UIAccessibilityTraitButton;
+            NSString *uri = SGURIString(track.URI) ?: @"";
+            row.coverFor = uri;
+            __weak SGRQueueRow *weakRow = row;
+            SGRTrackPicture(track, ^(UIImage *image) {
+                SGRQueueRow *shown = weakRow;
+                if ([shown.coverFor isEqualToString:uri]) shown.cover.image = image;
+            });
+            // Back as many tracks as it lies behind this one.
+            NSInteger steps = (NSInteger)(tracks.count - i);
+            row.tag = 100 + steps;
+            [row addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(historyTapped:)]];
+            [self->_historyBox addSubview:row];
+        }];
+    }
+    [self sizeChipsBar];
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
+    [_list layoutIfNeeded];
+    [self padForHistory];
+    // Where it was: the head at rest stays at rest, History's new height above it.
+    _list.contentOffset = CGPointMake(0, scrolled + [self historyHeight] - _list.adjustedContentInset.top);
+    [self pushHead];
+}
+
+- (void)historyTapped:(UITapGestureRecognizer *)tap {
+    NSInteger steps = tap.view.tag - 100;
+    if (steps > 0 && _onPickPast) _onPickPast(steps);
+}
+
+// The list's scroll from where the head rests pushes the page's head up with it, as far as its room, and down with
+// History pulled into view.
+- (void)pushHead {
+    CGFloat push = MIN(_headRoom, [self scrolled]);
+    if (push == _headPush) return;
+    _headPush = push;
+    if (_onHeadPush) _onHeadPush(push);
+}
+
+// The part under the controls is theirs: touches there go through to them while they show; so is what is above the chips,
+// the head's.
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (_controlsCover > 0 && point.y > self.bounds.size.height - _controlsCover) return nil;
+    // Where the page's head shows now, the touch is its.
+    if (_headRoom > 0 && point.y >= -_headPush && point.y < _headRoom - _headPush) return nil;
     return [super hitTest:point withEvent:event];
 }
 
@@ -446,9 +624,14 @@ static UIImage *chipSymbol(NSString *name) {
     CGFloat height = _list.bounds.size.height;
     if (height <= 0) return;
     CGFloat end = MAX(0, height - _controlsCover);
-    CGFloat edge = MIN(0.3, kListTopFade / height);
-    CGFloat stop = end / height, start = MAX(edge, (end - kListFootFade) / height);
-    _listFade.locations = @[@0, @(edge), @(start), @(stop)];
+    // The top's fade below the chips, and below the heading held under them, once they stand at the top, so tracks pass
+    // out of sight there rather than under them (its owner, 2026-11-06: "the fade is a bit too close it overlaps");
+    // lower, what is above them (History, the head's room) shows whole.
+    CGFloat pinned = _headRoom > 0 && [self chipsY] <= 0 ? MAX([self pinTop], _pinnedBottom) : 0;
+    CGFloat from = MIN(0.5, MAX(0, pinned) / height);
+    CGFloat edge = MIN(from + 0.3, from + kListTopFade / height);
+    CGFloat stop = MAX(edge, end / height), start = MIN(stop, MAX(edge, (end - kListFootFade) / height));
+    _listFade.locations = @[@0, @(from), @(edge), @(start), @(stop)];
 }
 
 - (void)setControlsHeight:(CGFloat)height {
@@ -491,11 +674,61 @@ static UIImage *chipSymbol(NSString *name) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     _listFade.frame = _list.bounds;
+    if (_headRoom > 0) {
+        CGFloat y = [self chipsY];
+        for (UIView *chip in @[_automix, _shuffle, _repeat, _clear]) chip.center = CGPointMake(chip.center.x, y + kChipHeight / 2);
+        [self placePinnedHeading];
+        [self placeFade];
+    }
     [CATransaction commit];
+    if (_headRoom > 0) [self pushHead];
+}
+
+// Where a group's heading is held: just under the chips.
+- (CGFloat)pinTop {
+    return [self chipsY] + kChipHeight + 6;
+}
+
+// The group whose heading has gone up under the chips has it held there, as a list's headings stay at its top, until
+// the next group's heading pushes it up and out (its owner, 2026-11-06: pin Continue Playing and Autoplay too).
+- (void)placePinnedHeading {
+    _pinnedBottom = 0;
+    if (_headRoom <= 0 || !_groups.count || [self chipsY] > 0) {
+        _pinnedHeading.hidden = YES;
+        return;
+    }
+    CGFloat top = [self pinTop], offset = _list.contentOffset.y, next = CGFLOAT_MAX;
+    NSInteger section = -1;
+    for (NSInteger i = 0; i < (NSInteger)_groups.count; i++) {
+        CGFloat y = [_list rectForHeaderInSection:i].origin.y - offset + _list.frame.origin.y;
+        if (y < top) section = i;
+        else {
+            next = y;
+            break;
+        }
+    }
+    if (section < 0) {
+        _pinnedHeading.hidden = YES;
+        return;
+    }
+    SGRQueueGroup *group = _groups[(NSUInteger)section];
+    NSString *key = [NSString stringWithFormat:@"%@\n%@", group.heading ?: @"", group.note ?: @""];
+    CGFloat height = [self tableView:_list heightForHeaderInSection:section];
+    if (!_pinnedHeading || ![key isEqualToString:_pinnedKey]) {
+        [_pinnedHeading removeFromSuperview];
+        _pinnedHeading = [self tableView:_list viewForHeaderInSection:section];
+        _pinnedHeading.userInteractionEnabled = NO;
+        _pinnedKey = key;
+        [self insertSubview:_pinnedHeading aboveSubview:_list];
+    }
+    CGFloat y = MIN(top, next - height);
+    _pinnedHeading.frame = CGRectMake(0, y, self.bounds.size.width, height);
+    _pinnedHeading.hidden = NO;
+    _pinnedBottom = y + height;
 }
 
 - (void)scrollToTop {
-    [_list setContentOffset:CGPointMake(0, -_list.adjustedContentInset.top) animated:NO];
+    [_list setContentOffset:CGPointMake(0, [self historyHeight] - _list.adjustedContentInset.top) animated:NO];
 }
 
 - (void)showState:(SPTPlayerState *)state from:(NSString *)contextTitle {
@@ -503,6 +736,7 @@ static UIImage *chipSymbol(NSString *name) {
 }
 
 - (void)showState:(SPTPlayerState *)state upcoming:(NSArray *)upcoming from:(NSString *)contextTitle {
+    if (!(_list.isTracking || _list.isDragging || _lifted)) [self showHistory:state];
     SPTPlayerOptions *options = [state respondsToSelector:@selector(options)] ? state.options : nil;
     _repeatContext = options.repeatingContext;
     [self syncCrossfade];
@@ -568,6 +802,8 @@ static UIImage *chipSymbol(NSString *name) {
     _shownURIs = @[signature];
     _groups = groups;
     [_list reloadData];
+    [_list layoutIfNeeded];
+    [self padForHistory];
     [self syncClear];
 }
 
@@ -853,6 +1089,8 @@ static UIImage *chipSymbol(NSString *name) {
     _shownURIs = nil;
     if (_groups.count) [_list deleteSections:[NSIndexSet indexSetWithIndex:index] withRowAnimation:UITableViewRowAnimationFade];
     else [_list reloadData];
+    [_list layoutIfNeeded];
+    [self padForHistory];
     [self syncClear];
     if (self.onReorder) self.onReorder(_upcoming);
 }
@@ -884,6 +1122,7 @@ static UIImage *chipSymbol(NSString *name) {
     if (emptied && !_groups.count) [_list reloadData];
     else if (emptied) [_list deleteSections:[NSIndexSet indexSetWithIndex:(NSUInteger)path.section] withRowAnimation:UITableViewRowAnimationFade];
     else [_list deleteRowsAtIndexPaths:@[path] withRowAnimation:UITableViewRowAnimationFade];
+    [self padForHistory];
     [self syncClear];
     if (self.onReorder) self.onReorder(_upcoming);
 }

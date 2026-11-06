@@ -115,9 +115,9 @@ static UIViewPropertyAnimator *makeAnimator(void) {
 // the corners NowPlayingBackground gives it, the page moved down with the card's top and cut to it, fading in as the
 // mini player's row on the card's top fades out (CompactNowPlaying's opacity and RegularNowPlaying's).
 - (void)showShut:(BOOL)shut {
-    CGRect card = shut ? _sourceRect : _fullRect;
     UIViewController *page = _page;
     UIView *view = page.view;
+    CGRect card = shut ? _sourceRect : _fullRect;
     CGFloat radius = shut ? _sourceRect.size.height / 2 : screenCornerRadius();
     _material.frame = card;
     _material.layer.cornerRadius = radius;
@@ -161,6 +161,13 @@ static UIViewPropertyAnimator *makeAnimator(void) {
         [_host addSubview:view];
     } else if (view.superview != _host && _host) {
         [_host addSubview:view];
+    }
+    // Closing, what lies under the page is laid out now, before the card moves: the app turned under the page lays it
+    // out only once it shows, and the first close in landscape went over black (its owner's recording, 2026-11-06).
+    if (!_presenting) {
+        UIView *under = [context viewForKey:UITransitionContextToViewKey] ?: [context viewControllerForKey:UITransitionContextToViewControllerKey].view;
+        [under setNeedsLayout];
+        [under layoutIfNeeded];
     }
     if (!_mask) {
         _mask = [UIView new];

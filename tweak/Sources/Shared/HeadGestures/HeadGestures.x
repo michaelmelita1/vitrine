@@ -514,3 +514,9 @@ double SGHeadGesturesLearnFrom(NSArray<NSData *> *motions, SGHeadAxis axis) {
     observer = [SGHeadGesturesObserver new];
     SGAddPlayerStateObserver(observer);
 }
+
+id SGCollectionPlatformKept(void) {
+    @synchronized (NSObject.class) {
+        return sg_platform;
+    }
+}

@@ -132,8 +132,7 @@ static UIViewController *lyricsPage(void) {
     if (redesigned) {
         [sections addObjectsFromArray:@[
             SGSection(@"Display", @[SGRLyricsTextSizesRow(), SGLyricsWordTimingRow(), SGLyricsRomanisedRow(), SGLyricsRomanisedReplaceRow(),
-                SGRLyricsHideRow(),
-                SGSwitchRow(@"Landscape lyrics", @"Turn the phone with the lyrics open", SGRKeyLyricsLandscape)]),
+                SGRLyricsHideRow()]),
             timing,
             SGSection(@"Translation", [[[@[SGLyricsTranslationLanguageRow(), SGTranslateEverySongRow()] arrayByAddingObjectsFromArray:SGOnDeviceTranslatorRows()]
                                           arrayByAddingObjectsFromArray:SGAITranslatorRows()] arrayByAddingObject:SGSavedTranslationsRow()]),
@@ -189,6 +188,13 @@ UIViewController *SGPlayerSettingsPage(void) {
     // Native redesign puts these in the player page's Controls section, as switches that show them (Redesigned/Player/
     // PlayerSettings.m), so the section is not repeated here.
     if (!nativeRedesign) [sections addObject:SGSection(native ? nil : @"Hide on the player", hidden)];
+    // Landscape: the redesigned player's lyrics screen, or under Native redesign the whole app turning with the phone and
+    // the landscape player in the player page (Redesigned/Navbar/SystemTurn.m; its owner, 2026-11-06).
+    if (!native) {
+        [sections addObject:SGSection(nil, @[nativeRedesign
+            ? SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)
+            : SGSwitchRow(@"Landscape lyrics", @"Turn the phone with the lyrics open", SGRKeyLyricsLandscape)])];
+    }
 
     [sections addObject:SGNotedSection(@"Lossless", @[
         SGOptionRow(@"Lossless files", @"Your own FLACs in place of Spotify's stream", SGKeyLossless),

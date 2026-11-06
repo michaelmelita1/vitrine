@@ -4,6 +4,7 @@
 //
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
+#import "Redesigned/Kit/SGRGlyph.h"
 
 @interface SGRSystemPlayerPage : UIViewController
 // Built with the lyrics up or not as the last page was left, read as it is built: a page built ahead (SystemTabs.x)
@@ -53,3 +54,106 @@ UIView *SGRSystemMotionPreviewOf(NSURL *file, UIImage *poster);
 UIControl *SGRPlayerMakeVolumeRow(void);
 void SGRPlayerVolumeRowLetGo(UIControl *row);
 void SGRSystemVolumeSliderSet(UISlider *slider);
+
+// The page's progress bar, shared with the landscape player (SystemLandscape.m), drawn as the volume
+// row is (PlayerVolume.m): a thin pill that grows while held, moved by the finger's travel from where it came down. The
+// player seeks once the finger lets go.
+@interface SGRSystemScrubber : UIControl
+@property (nonatomic) CGFloat value;    // 0 to 1
+@property (nonatomic, readonly) BOOL held;
+@property (nonatomic, copy) void (^onMove)(CGFloat value);
+@property (nonatomic, copy) void (^onRelease)(CGFloat value);
+// The times under the bar, moved in with it at rest and out to its ends held (ElasticSlider's bottom labels).
+@property (nonatomic, weak) UIView *leadingLabel, *trailingLabel;
+- (void)letGoOfPans;
+@end
+
+// Native redesign's landscape player (SystemLandscape.m): made in the lines' view or the player's, switched between them,
+// told the track's lines came in or are none, and asked where its cover stands and where one flying in lands (YES when
+// the cover is what shows, NO while the clip stands in its place).
+UIViewController *SGRSystemMakeLandscape(BOOL lyrics, BOOL queue);
+void SGRSystemLandscapeSetLyrics(UIViewController *screen, BOOL lyrics, BOOL animated);
+// The queue up in the landscape player or not, as the page's is.
+void SGRSystemLandscapeSetQueue(UIViewController *screen, BOOL queue, BOOL animated);
+// What the landscape player shows: its lyrics, its queue, or neither (its player view).
+void SGRSystemLandscapeShowing(UIViewController *screen, BOOL *lyrics, BOOL *queue);
+// The screen turning in: its clip held on the frame it has and the screen drawn once, flat, until it has.
+void SGRSystemLandscapeSetTurning(UIViewController *screen, BOOL turning);
+void SGRSystemLandscapeLinesChanged(UIViewController *screen);
+BOOL SGRSystemLandscapeTurnCover(UIViewController *screen, UIImageView **cover, CGRect *target);
+
+// The page's control button, shared with the landscape player (SystemLandscape.m): its press, play and pause's turn,
+// the skips' step and the lit disc.
+@interface SGRSystemControlButton : SGRGlyphButton
+// The glyph's scale and opacity while held (shuffle and repeat).
+@property (nonatomic) CGFloat heldScale, heldAlpha;
+// Previous, play and pause, and next: PlayerButton.swift's press (above) instead.
+@property (nonatomic) BOOL transport;
+// Steps the double arrow along as ForwardLabel.swift does: 1 forward (next), -1 back (previous).
+- (void)stepArrow:(NSInteger)direction;
+// Play and pause turned the way SwiftUI's .replace (down-up) does in Sim Radio's PlayerButton.swift: the old symbol
+// shrinks and fades into the middle while the new one grows out of it. Drawn on two plain pictures of the symbols, each
+// its own size about the button's middle, not by UIKit's symbol replace, which on the phone drew the new symbol grown and
+// 6 pt off the middle at the swap's start whatever variant it was asked for (its owner's recordings and the phone's log,
+// 2026-11-02). The glyph itself waits out the swap unseen, at rest. The same symbol again is a no-op.
+- (void)turnToSymbol:(NSString *)symbol animated:(BOOL)animated;
+
+// On, the lyrics' and the queue's look (its owner, 2026-11-02): the glyph cut out of a light disc, the page showing
+// through; off, the plain glyph in `plain`. The disc comes and goes with a fade and a small scale (the fade alone under
+// Reduce Motion). A new symbol on the glyph (repeat's one) is cut again by the next call.
+- (void)setLit:(BOOL)lit plain:(UIColor *)plain animated:(BOOL)animated;
+@end
+
+// For the landscape player's queue: what the track plays from, for the queue's note, and a move in it handed back to
+// Spotify (`done` runs a moment later, to show what Spotify kept).
+@class SPTPlayerState;
+NSString *SGRSystemContextTitle(SPTPlayerState *state);
+void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void));
+// Shuffle on or off, and repeat through off, the playlist or album, the track, as the page's buttons do; the landscape
+// player's queue chips run them too.
+void SGRSystemToggleShuffle(void);
+// The Music app's badge on the queue button (its owner's screenshots, 2026-11-06): a small lit disc (the lyrics and queue buttons' light disc, glyph cut out) at its top right with
+// shuffle or repeat in it while one is on and hidden from the controls. Shown with a symbol, hidden with nil; placed on
+// `button` (a 44 pt square), whose subview it is.
+UIView *SGRSystemMakeOptionBadge(UIView *button);
+void SGRSystemShowOptionBadge(UIView *badge, NSString *symbol, BOOL animated);
+// Which to show: shuffle first (its owner, 2026-11-06), then repeat (repeat.1 for the track), each only when hidden.
+NSString *SGRSystemOptionBadgeSymbol(SPTPlayerState *state, BOOL shuffleHidden, BOOL repeatHidden);
+// Back `steps` tracks, to one of the queue's History: from the playing track's start, one back at a time, each once the
+// last has landed.
+void SGRSystemStepBack(NSInteger steps);
+void SGRSystemCycleRepeat(void);
+
+// A light disc with `symbol` cut out of it, hidden until shown: the page's lyrics and queue buttons' lit state, and the
+// landscape player's lyrics button's.
+UIImageView *SGRSystemCutDisc(NSString *symbol);
+
+// The page's turn onto the landscape player and back (SystemTurn.m): its own window and animation. The page says when it
+// is up (nil as it goes, which takes the screen down at once), whether its lyrics are, and hands over its cover, the
+// view to hide while a copy flies, with the image in it (nil while it shows none).
+@protocol SGRSystemTurnPage
+- (UIView *)landscapeTurnCover:(UIImage **)image;
+// The landscape player is going: the page shows what it showed (lyrics, the queue or neither), at once, before the turn
+// back draws the page.
+- (void)landscapeLeftShowingLyrics:(BOOL)lyrics queue:(BOOL)queue;
+// The page's ⋯ items for the landscape player's ⋯: their sheets and popovers from `anchor` and `presenter`, and
+// `changed` run after the ⋯ switches the background.
+- (NSArray<UIMenuElement *> *)landscapeMenuItemsFrom:(UIView *)anchor presenter:(UIViewController *)presenter changed:(void (^)(void))changed;
+@end
+// The page's ⋯ items for the landscape player, empty with no page up.
+NSArray<UIMenuElement *> *SGRSystemTurnMenuItems(UIView *anchor, UIViewController *presenter, void (^changed)(void));
+void SGRSystemTurnSetPage(UIViewController<SGRSystemTurnPage> *page);
+void SGRSystemTurnSetLyrics(BOOL open);
+void SGRSystemTurnSetQueue(BOOL open);
+// The landscape player the page holds while the app is turned, or nil.
+void SGRSystemTurnSetEmbedded(UIViewController *screen);
+void SGRSystemTurnLinesChanged(void);
+// Shown or put away by hand, as the phone turning does (the harness).
+void SGRSystemTurnShow(BOOL show);
+// For the landscape player: which way its window may face, the scene's turn as it comes, and Exit Full Screen (back to
+// portrait, shut until the phone has stood upright).
+UIInterfaceOrientationMask SGRSystemTurnMask(UIViewController *screen);
+void SGRSystemTurnWillTransition(UIViewController *screen, CGSize size, id<UIViewControllerTransitionCoordinator> coordinator);
+void SGRSystemTurnBack(void);
+// The landscape player swiped down: it goes at once and the player page closes under it, the phone left turned.
+void SGRSystemTurnClose(void);

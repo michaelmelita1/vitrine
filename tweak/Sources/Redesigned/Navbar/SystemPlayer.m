@@ -34,9 +34,9 @@
 // seeks, a scroll back, a pause or VoiceOver brings it all back. The recognizers for that are taps and a watcher that
 // never recognizes, so the zoom's close keeps the only vertical drag.
 //
-// Turned sideways with the lyrics up, the redesign's landscape lyrics screen comes up over the page, by its own rule
-// (PlayerLandscape.x, told through SGRPlayerSetPageLyricsOpen); the page itself stays portrait (its owner, 2026-11-01:
-// left to turn, it stretched into a broken landscape layout).
+// Turned sideways, the landscape player (SystemLandscape.m, iOS 27.3's) turns in over the page, its lyrics up if the
+// page's are (SystemTurn.m, told through SGRSystemTurnSetPage and SGRSystemTurnSetLyrics); the page itself stays portrait
+// (its owner, 2026-11-01: left to turn, it stretched into a broken landscape layout).
 //
 // The Player page's settings reach it too (its owner, 2026-11-01): Volume (the row goes and the controls close up, read at
 // each open), Hide on the player's Shuffle and Repeat (by alpha in their slots, as PlayerControls.x hides them), the hold
@@ -130,12 +130,16 @@ static UIImageView *cutDisc(NSString *symbol) {
     view.alpha = 0;
     return view;
 }
+
+UIImageView *SGRSystemCutDisc(NSString *symbol) {
+    return cutDisc(symbol);
+}
 // The bottom row's middle above the safe area's bottom, never less than the minimum above the screen's, and the route
 // line's middle under it: the redesigned player's footer's (PlayerFooter.x's kRowAboveSafeArea, kRowMinBottom and
 // kRouteLineDrop), which leave the line its room over the home indicator.
 static const CGFloat kRowAboveSafeArea = 32, kRowMinBottom = 34, kRouteLineDrop = 32;
 // The add button's glyph beside the title and artist, and its touch square.
-static const CGFloat kAddGlyph = 28, kAddSide = 44;
+static const CGFloat kAddGlyph = 22, kAddSide = 44;
 // The layout from the bottom row up, the redesigned player's as its owner's screenshots of the two show it, on a 440x956
 // screen (2026-11-01): the volume's middle above the row's, the controls' above the volume's, the times' above the
 // controls', the progress bar's above the times'; the header's circles in from the sides and down from the safe area;
@@ -168,7 +172,7 @@ typedef NS_ENUM(NSInteger, SGRSystemLyrics) { SGRSystemLyricsUnknown, SGRSystemL
 // The lyrics were up when the page last closed: the next one opens on them, as the Music app does.
 static BOOL sgr_lyricsLeftOpen;
 
-static char kCloseGlassKey, kMoreGlassKey, kConnectKey;
+static char kConnectKey;
 
 static BOOL isTrack(id track) {
     return [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
@@ -279,17 +283,6 @@ NSInteger SGRTrackMoved(SPTPlayerState *state, NSString *from) {
 
 #pragma mark - the progress
 
-// The progress bar, drawn as the volume row is (PlayerVolume.m): a thin pill that grows while held, moved by the finger's
-// travel from where it came down. The player seeks once the finger lets go.
-@interface SGRSystemScrubber : UIControl
-@property (nonatomic) CGFloat value;    // 0 to 1
-@property (nonatomic, readonly) BOOL held;
-@property (nonatomic, copy) void (^onMove)(CGFloat value);
-@property (nonatomic, copy) void (^onRelease)(CGFloat value);
-// The times under the bar, moved in with it at rest and out to its ends held (ElasticSlider's bottom labels).
-@property (nonatomic, weak) UIView *leadingLabel, *trailingLabel;
-- (void)letGoOfPans;
-@end
 
 @implementation SGRSystemScrubber {
     UIView *_track, *_fill;
@@ -453,14 +446,13 @@ static const NSTimeInterval kTransportSpring = 0.5;
 static const NSTimeInterval kForwardDuration = 0.6;
 static const CGFloat kForwardEase = 2.2, kForwardAway = 6.02, kForwardDrift = 0.23;
 static const CGFloat kForwardMoveShare = 0.52, kForwardBackStart = 0.15, kForwardBackGray = 0.5;
-// The gaps from the bottom row up to the times, times the redesigned player's (kVolumeAboveRow and the rest): its
-// owner's, tuned on the phone (2026-11-02), and adjustable from the ⋯ menu's Controls Spacing, kept under the key.
-static const CGFloat kControlsSpacingDefault = 1.35, kControlsSpacingLeast = 0.8, kControlsSpacingMost = 1.6;
-static NSString *const kControlsSpacingKey = @"spotifyglass.redesign.navbar.player.controlsGap";
-
-// Through the prefs memo (Core/SGPrefs.h), so a layout reads no defaults.
+// The gaps from the bottom row up to the times, times the redesigned player's (kVolumeAboveRow and the rest), fixed by the
+// phone's size (its owner, 2026-11-06): 1.3 on a Plus or Pro Max (926 pt tall and up), 1.1 on a mini or smaller (812 pt
+// and less), 1.2 between. No longer set from the ⋯ menu.
 static CGFloat controlsSpacing(void) {
-    return MIN(kControlsSpacingMost, MAX(kControlsSpacingLeast, SGDouble(kControlsSpacingKey, kControlsSpacingDefault)));
+    CGSize screen = UIScreen.mainScreen.bounds.size;
+    CGFloat tall = MAX(screen.width, screen.height);
+    return tall >= 926 ? 1.3 : tall <= 812 ? 1.1 : 1.2;
 }
 
 #pragma mark - the skip's arrow
@@ -635,25 +627,6 @@ static CGFloat frontTriangleStart(UIImage *arrow, CGRect drawn, CGFloat width, C
 }
 @end
 
-@interface SGRSystemControlButton : SGRGlyphButton
-// The glyph's scale and opacity while held (shuffle and repeat).
-@property (nonatomic) CGFloat heldScale, heldAlpha;
-// Previous, play and pause, and next: PlayerButton.swift's press (above) instead.
-@property (nonatomic) BOOL transport;
-// Steps the double arrow along as ForwardLabel.swift does: 1 forward (next), -1 back (previous).
-- (void)stepArrow:(NSInteger)direction;
-// Play and pause turned the way SwiftUI's .replace (down-up) does in Sim Radio's PlayerButton.swift: the old symbol
-// shrinks and fades into the middle while the new one grows out of it. Drawn on two plain pictures of the symbols, each
-// its own size about the button's middle, not by UIKit's symbol replace, which on the phone drew the new symbol grown and
-// 6 pt off the middle at the swap's start whatever variant it was asked for (its owner's recordings and the phone's log,
-// 2026-11-02). The glyph itself waits out the swap unseen, at rest. The same symbol again is a no-op.
-- (void)turnToSymbol:(NSString *)symbol animated:(BOOL)animated;
-
-// On, the lyrics' and the queue's look (its owner, 2026-11-02): the glyph cut out of a light disc, the page showing
-// through; off, the plain glyph in `plain`. The disc comes and goes with a fade and a small scale (the fade alone under
-// Reduce Motion). A new symbol on the glyph (repeat's one) is cut again by the next call.
-- (void)setLit:(BOOL)lit plain:(UIColor *)plain animated:(BOOL)animated;
-@end
 
 // The play and pause turn (turnToSymbol:): the scale the symbols leave to and come from, the old one's way out, the new
 // one's spring in (SwiftUI's replace, about a third of a second, a little bounce) and how far into the way out it starts.
@@ -1177,7 +1150,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the page
 
-@interface SGRSystemPlayerPage () <SGPlayerStateObserver, UIGestureRecognizerDelegate>
+@interface SGRSystemPlayerPage () <SGPlayerStateObserver, UIGestureRecognizerDelegate, SGRSystemTurnPage>
 @end
 
 @implementation SGRSystemPlayerPage {
@@ -1233,6 +1206,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     id _spotifyQueue;             // Spotify's queue as last fetched (SPTPlayerQueue), handed back with a track moved
     NSArray<NSString *> *_spotifyQueueKey;   // the playing track's and the tracks to come's URIs at that fetch
     SGRSystemQueueView *_queueView;   // out of the page while closed
+    UIView *_optionBadge;             // shuffle or repeat on the queue button, while on and hidden from the controls
+    UIViewController *_landscapeScreen;   // the landscape player over the page while the app is turned
+    CGFloat _headPush;                // how far the queue's scroll has pushed the thumbnail row up, 0 to its headRoom
+    CGFloat _shownPush;               // the push the row's alpha was last set for
     UIImageView *_queueBubble;        // the queue button's light disc while the queue is open, the Music app's
     UIImageView *_lyricsBubble;       // the lyrics button's, while the lyrics are up
     BOOL _alone;      // the lines have the page to themselves
@@ -1355,9 +1332,9 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _speed.hidden = YES;
     [_speed addTarget:self action:@selector(speedTapped) forControlEvents:UIControlEventTouchUpInside];
     // The add button beside the title, where Spotify's player has its own (InformationElementsUnit's
-    // Components.UI.AddToButton, kept by the redesigned player): a plus while the track is not in Liked Songs, the
-    // accent's filled tick once it is (a plain tick with Plain checkmark on, SGRPlainCheck.x).
-    _add = [SGRGlyphButton buttonWithSymbol:@"plus.circle" pointSize:kAddGlyph title:@"Add to Liked Songs"];
+    // Components.UI.AddToButton, kept by the redesigned player): the Music app's star, as the landscape player has it,
+    // filled once the track is in Liked Songs (its owner, 2026-11-06: the star in place of the tick).
+    _add = [SGRGlyphButton buttonWithSymbol:@"star" pointSize:kAddGlyph title:@"Add to Liked Songs"];
     _add.glyph.tintColor = SGRPrimary();
     _add.onTap = ^{ [weakSelf toggleSaved]; };
 
@@ -1446,6 +1423,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queue.glyph.tintColor = SGRSecondary();
     _queueBubble = cutDisc(@"list.bullet");
     [_queue insertSubview:_queueBubble atIndex:0];
+    _optionBadge = SGRSystemMakeOptionBadge(_queue);
     _lyricsBubble = cutDisc(kLyricsSymbolOpen);
     [_lyrics insertSubview:_lyricsBubble atIndex:0];
     _queueView = [SGRSystemQueueView new];
@@ -1457,6 +1435,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView.onShuffle = ^{ [weakSelf toggleShuffle]; };
     _queueView.onRepeat = ^{ [weakSelf cycleRepeat]; };
     _queueView.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
+    _queueView.onHeadPush = ^(CGFloat push) { [weakSelf pushHead:push]; };
+    _queueView.onPickPast = ^(NSInteger steps) { SGRSystemStepBack(steps); };
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
@@ -1470,6 +1450,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _lines.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     // Sing's mic stays with the lines on their own, as in the redesigned player (PlayerLyrics.x).
     _lines.keepsSing = YES;
+    // The mic over the lines, not a clear row of its own under them, as the landscape player has it (its owner, 2026-11-06).
+    _lines.rowOverLines = YES;
     // As the redesigned player's lines: a scroll on through them leaves them on their own, not under VoiceOver, which
     // keeps the controls up, nor under a sheet; a scroll back brings the rest back (PlayerLyrics.x's browsingBegan).
     _lines.browsingBegan = ^(BOOL onward) {
@@ -1537,15 +1519,51 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     return UIStatusBarStyleLightContent;
 }
 
-// Portrait only. Sideways, the redesign's landscape lyrics screen comes up over the page in a window of its own while
-// the lyrics are up (PlayerLandscape.x); the page itself, left to turn, laid its controls out stretched (its owner,
-// 2026-11-01).
+// Turned by iOS with the rest of the app (SystemTurn.m), the landscape player standing in the page while it is sideways
+// (its owner, 2026-11-06); portrait alone with the landscape player switched off, as its stretched controls are no look.
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskPortrait;
+    return SGEnabled(SGRKeyLyricsLandscape) ? UIInterfaceOrientationMaskAllButUpsideDown : UIInterfaceOrientationMaskPortrait;
 }
 
-- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
-    return UIInterfaceOrientationPortrait;
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [self syncLandscapeFor:size coordinator:coordinator];
+}
+
+// Sideways, the landscape player in the page over everything of its own, crossfaded in as iOS turns the scene, with the
+// page's lyrics or queue up in it; upright again, out the same way, the page left on what it showed.
+- (void)syncLandscapeFor:(CGSize)size coordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    BOOL sideways = size.width > size.height && SGEnabled(SGRKeyLyricsLandscape);
+    UIViewController *screen = _landscapeScreen;
+    if (sideways && !screen) {
+        screen = SGRSystemMakeLandscape(_lyricsOpen, _queueOpen);
+        [self addChildViewController:screen];
+        screen.view.frame = (CGRect){CGPointZero, size};
+        screen.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:screen.view];
+        [screen didMoveToParentViewController:self];
+        _landscapeScreen = screen;
+        SGRSystemTurnSetEmbedded(screen);
+        if (coordinator) {
+            screen.view.alpha = 0;
+            [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) { screen.view.alpha = 1; } completion:nil];
+        }
+    } else if (!sideways && screen) {
+        BOOL lyrics = NO, queue = NO;
+        SGRSystemLandscapeShowing(screen, &lyrics, &queue);
+        _landscapeScreen = nil;
+        SGRSystemTurnSetEmbedded(nil);
+        [self landscapeLeftShowingLyrics:lyrics queue:queue];
+        void (^remove)(void) = ^{
+            [screen willMoveToParentViewController:nil];
+            [screen.view removeFromSuperview];
+            [screen removeFromParentViewController];
+        };
+        if (coordinator) {
+            [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) { screen.view.alpha = 0; }
+                                         completion:^(id<UIViewControllerTransitionCoordinatorContext> context) { remove(); }];
+        } else remove();
+    }
 }
 
 - (void)dealloc {
@@ -1565,7 +1583,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     [NSRunLoop.mainRunLoop addTimer:_timer forMode:NSRunLoopCommonModes];
     [self tick];
     [self syncRouteLine];
-    SGRPlayerSetPageLyricsOpen(_lyricsOpen);
+    SGRSystemTurnSetLyrics(_lyricsOpen);
+    SGRSystemTurnSetQueue(_queueOpen);
     // The progress bar and the volume take no touch until the open has landed, so the touch that opened the page, still
     // down or landing on them as it appears, cannot turn UIKit's swipe close off (the phone's log, 2026-11-01). Only the
     // open: back from a swipe close let go, or from what covered it, the page takes touches at once.
@@ -1592,6 +1611,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // Animated's clip is looked up only while the page is in a window (SGRPlayerMotionPreview).
     if (_background == SGRPlayerBackgroundAnimated && !_motion) [self syncClipAnimated:YES];
     [self restartRest];
+    // Up: turning the phone brings the landscape player (SystemTurn.m), as the Music app's does from iOS 27.3.
+    SGRSystemTurnSetPage(self);
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -1608,8 +1629,31 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // Never a pan above left off as the page goes: UIKit's swipe close among them.
     [_scrubber letGoOfPans];
     SGRPlayerVolumeRowLetGo(_volume);
-    SGRPlayerSetPageLyricsOpen(NO);
-    SGRPlayerShowLandscape(NO);
+    SGRSystemTurnSetLyrics(NO);
+    SGRSystemTurnSetQueue(NO);
+    SGRSystemTurnSetEmbedded(nil);
+    SGRSystemTurnSetPage(nil);
+}
+
+// The cover for the turn onto the landscape player (SystemTurn.m): the holder, with its shadow, hidden while a copy
+// flies. None while the clip stands in its place or nothing is in it.
+- (void)landscapeLeftShowingLyrics:(BOOL)lyrics queue:(BOOL)queue {
+    // At once: the turn back draws the page next.
+    [UIView performWithoutAnimation:^{
+        if (queue) [self setQueueOpen:YES];
+        else if (lyrics && SGRPlayerLyricsAvailable()) [self setLyricsOpen:YES];
+        else {
+            [self setQueueOpen:NO];
+            [self setLyricsOpen:NO];
+        }
+        [self.view layoutIfNeeded];
+    }];
+}
+
+- (UIView *)landscapeTurnCover:(UIImage **)image {
+    if (!_cover.image || _coverHolder.hidden || _coverHolder.alpha < 0.01 || _cover.hidden || _cover.alpha < 0.01) return nil;
+    *image = _cover.image;
+    return _coverHolder;
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -1628,6 +1672,12 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGRect bounds = self.view.bounds;
+    // Opened with the phone already sideways, or a size that came without a transition: the landscape player as it is.
+    [self syncLandscapeFor:bounds.size coordinator:nil];
+    if (_landscapeScreen) {
+        _landscapeScreen.view.frame = bounds;
+        [self.view bringSubviewToFront:_landscapeScreen.view];
+    }
     UIEdgeInsets safe = self.view.safeAreaInsets;
     CGFloat width = bounds.size.width, height = bounds.size.height, inner = MAX(0, width - 2 * kMargin);
     _backdrop.frame = bounds;
@@ -1638,12 +1688,11 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _motion.frame = bounds;
     _visualiser.frame = bounds;
 
-    // The header: the close button at the leading edge, the ⋯ its mirror at the trailing edge, the album between them.
+    // The header: the album alone. No close button (its owner, 2026-11-06: the chevron off; the page closes with a swipe
+    // down, as the Music app's), and the ⋯ beside the star in the title's row, below.
     CGFloat top = safe.top + kHeaderDrop, button = SGRGlassCircleSize;
     _close.frame = CGRectMake(kHeaderSide, top, button, button);
-    SGRGlassInside(_close, &kCloseGlassKey, SGRGlassCircleSize);
-    _more.frame = CGRectMake(width - kHeaderSide - button, top, button, button);
-    SGRGlassInside(_more, &kMoreGlassKey, SGRGlassCircleSize);
+    _close.hidden = YES;
     _context.frame = CGRectMake(kHeaderSide + button + 8, top, MAX(0, width - 2 * (kHeaderSide + button + 8)), button);
     CGFloat headerBottom = top + button;
 
@@ -1704,17 +1753,28 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // The queue runs down behind the controls, its last track resting just above them (SGRSystemQueueView's
     // controlsHeight), so a drag that puts the controls away resizes nothing and the list never jumps (its owner,
     // 2026-11-03).
-    CGRect whole = CGRectMake(0, stageTop, width, MAX(0, height - safe.bottom - stageTop));
-    _queueView.controlsHeight = MAX(0, whole.size.height - stage.size.height);
+    // It starts at the thumbnail row's top, that row's room above its chips, which its scroll pushes up into as the Music
+    // app's queue pushes its row out (its owner's recording, 2026-11-06).
+    CGFloat headTop = CGRectGetMinY(thumb) - 6;
+    CGRect whole = CGRectMake(0, headTop, width, MAX(0, height - safe.bottom - headTop));
+    _queueView.controlsHeight = MAX(0, CGRectGetMaxY(whole) - CGRectGetMaxY(stage));
     _queueView.frame = whole;
+    _queueView.headRoom = stageTop - headTop;
     [_queueView setControlsCover:_queueDragging ? 0 : _queueView.controlsHeight animated:self.view.window != nil];
     // The add button at the trailing margin, its glyph's edge on it, centered on the title and artist; they end before it.
-    CGFloat addInset = (kAddSide - kAddGlyph) / 2, textRight = width - kMargin - (_add.hidden ? 0 : kAddSide - addInset + 8);
+    // The ⋯ at the trailing margin, the star before it, as the Music app's row has them (its owner, 2026-11-06).
+    CGFloat addInset = (kAddSide - kAddGlyph) / 2, moreRight = width - kMargin + (kAddSide - 20) / 2;
+    CGFloat addRight = moreRight - kAddSide + 4;
+    CGFloat textRight = (_add.hidden ? addRight + addInset : addRight - kAddSide + addInset) - 8;
     BOOL topRow = _lyricsOpen || _queueOpen;
     CGFloat textX = topRow ? CGRectGetMaxX(thumb) + kThumbGap : kMargin;
     CGFloat textY = topRow ? round(CGRectGetMidY(thumb) - (titleHeight + artistHeight) / 2) : titleY;
     CGFloat textWidth = MAX(0, textRight - textX);
-    _titleBlock.frame = CGRectMake(textX - kTitleFade, textY, textWidth + 2 * kTitleFade, titleHeight + artistHeight);
+    // By bounds and center, not frame: the queue's push moves the block by its transform, which a frame set over it undid,
+    // leaving the title behind as History pushed the row down (its owner's recording, 2026-11-06).
+    CGRect titleRect = CGRectMake(textX - kTitleFade, textY, textWidth + 2 * kTitleFade, titleHeight + artistHeight);
+    _titleBlock.bounds = (CGRect){CGPointZero, titleRect.size};
+    _titleBlock.center = CGPointMake(CGRectGetMidX(titleRect), CGRectGetMidY(titleRect));
     _title.frame = _besideTitle.frame = CGRectMake(0, 0, textWidth + kTitleFade, titleHeight);
     _artist.frame = _besideArtist.frame = CGRectMake(0, titleHeight, textWidth + kTitleFade, artistHeight);
     [CATransaction begin];
@@ -1727,7 +1787,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     }
     [CATransaction commit];
     _add.bounds = CGRectMake(0, 0, kAddSide, kAddSide);
-    _add.center = CGPointMake(width - kMargin - kAddSide / 2 + addInset, round(textY + (titleHeight + artistHeight) / 2));
+    CGFloat titleMid = round(textY + (titleHeight + artistHeight) / 2);
+    _add.center = CGPointMake(addRight - kAddSide / 2, titleMid);
+    _more.bounds = CGRectMake(0, 0, kAddSide, kAddSide);
+    _more.center = CGPointMake(moreRight - kAddSide / 2, titleMid);
     _speed.bounds = CGRectMake(0, 0, 56, 44);
     _speed.center = _shuffle.center;
     _thumb = thumb;
@@ -1736,6 +1799,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGFloat scale = side > 0 ? kThumbSide / side : 1;
     _cover.layer.cornerRadius = topRow ? SGRRadiusThumb / scale : SGRRadiusArtwork;
     _coverHolder.transform = [self coverTransform];
+    [self placeHeadPush];
     // The hold for 2× on the cover, as on the player's.
     SGRPlayerAttachCoverHold(_coverHolder);
 }
@@ -1747,7 +1811,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     if ((_lyricsOpen || _queueOpen) && side > 0) {
         CGFloat scale = kThumbSide / side;
         CGPoint center = _coverHolder.center;
-        CGAffineTransform move = CGAffineTransformMakeTranslation(round(CGRectGetMidX(_thumb) - center.x), round(CGRectGetMidY(_thumb) - center.y));
+        CGFloat push = _queueOpen ? _headPush : 0;
+        CGAffineTransform move = CGAffineTransformMakeTranslation(round(CGRectGetMidX(_thumb) - center.x), round(CGRectGetMidY(_thumb) - center.y - push));
         return CGAffineTransformScale(move, scale, scale);
     }
     CGFloat scale = _pausedShown && !SGRReduceMotion() ? kPausedScale : 1;
@@ -1787,11 +1852,22 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     return [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:children];
 }
 
-// The ⋯, laid out as the redesigned player's (Redesigned/ContextMenu): Share at the top, the player's own items (Speed, Pitch & Reverb, Lyrics Source, the Artwork submenu), then More (its
+// The ⋯: Share, Go to Album and Go to Artist in the row at the top; the Artwork submenu and the sleep timer; then More, with Speed, Pitch & Reverb, Lyrics Source and the artist's concerts (its owner, 2026-11-06). Before (its
 // owner's screenshots and picks, 2026-11-02). Spotify's player is not behind the page, so its sheet's rows are not
 // read here. Add to Playlist, Add to Queue, Start a Jam, SongDNA and Song credits come from that sheet alone: its links
 // are refused and its mini player has no menu to read (the phone's log, 2026-11-02), so they are left out for now.
 - (NSArray<UIMenuElement *> *)menuItems {
+    return [self menuItemsFrom:_more presenter:self landscape:NO changed:nil];
+}
+
+// The landscape player's ⋯ (SystemLandscape.m) shows the same, from its own button and screen: Share and the sheets
+// come up over it and Go to opens once the page has turned back.
+- (NSArray<UIMenuElement *> *)landscapeMenuItemsFrom:(UIView *)anchor presenter:(UIViewController *)presenter changed:(void (^)(void))changed {
+    return [self menuItemsFrom:anchor presenter:presenter landscape:YES changed:changed];
+}
+
+- (NSArray<UIMenuElement *> *)menuItemsFrom:(UIView *)anchor presenter:(UIViewController *)presenter landscape:(BOOL)landscape
+                                    changed:(void (^)(void))landscapeChanged {
     SPTPlayerTrack *track = isTrack(SGPlayerState().track) ? SGPlayerState().track : nil;
     NSString *uri = SGURIString(track.URI);
     NSArray<NSString *> *parts = [uri componentsSeparatedByString:@":"];
@@ -1800,12 +1876,26 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     __weak typeof(self) weakSelf = self;
     NSMutableArray<UIMenuElement *> *menu = [NSMutableArray array];
 
-    // The row of three.
+    // The row of three: Share, Go to Album and Go to Artist (its owner, 2026-11-06).
     NSMutableArray<UIMenuElement *> *row = [NSMutableArray array];
     if ((song || [kind isEqualToString:@"episode"]) && parts[2].length) {
         NSURL *link = [NSURL URLWithString:[NSString stringWithFormat:@"https://open.spotify.com/%@/%@", kind, parts[2]]];
         [row addObject:[UIAction actionWithTitle:@"Share" image:[UIImage systemImageNamed:@"square.and.arrow.up"] identifier:nil
-                                         handler:^(UIAction *action) { [weakSelf share:link]; }]];
+                                         handler:^(UIAction *action) { [weakSelf share:link from:presenter]; }]];
+    }
+    // The album from the track's metadata (album_uri, beside the album_title the header reads; a key of the player's
+    // metadata in the 9.1.90 binary) and the artist from the track itself (Headers/SPTPlayer.h's artistURI).
+    id album = track.metadata[@"album_uri"];
+    NSString *albumURI = [album isKindOfClass:NSString.class] && [album hasPrefix:@"spotify:album:"] ? album : nil;
+    if (albumURI) {
+        [row addObject:[UIAction actionWithTitle:@"Go to\nAlbum" image:[UIImage systemImageNamed:@"square.stack"] identifier:nil
+                                         handler:^(UIAction *action) { [weakSelf closeAndOpen:albumURI landscape:landscape]; }]];
+    }
+    NSString *artistURI = SGURIString(track.artistURI);
+    BOOL artist = [artistURI hasPrefix:@"spotify:artist:"];
+    if (artist) {
+        [row addObject:[UIAction actionWithTitle:@"Go to\nArtist" image:[UIImage systemImageNamed:@"music.microphone"] identifier:nil
+                                         handler:^(UIAction *action) { [weakSelf closeAndOpen:artistURI landscape:landscape]; }]];
     }
     if (row.count) {
         UIMenu *top = [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:row];
@@ -1813,89 +1903,27 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         [menu addObject:top];
     }
 
-    // The player's own.
-    NSMutableArray<UIMenuElement *> *own = [SGRPlayerMenuPageItems(_more, ^{ [weakSelf reloadBackgroundAnimated:YES]; }) mutableCopy];
-    UIMenu *artwork = SGRPlayerMenuArtwork(^{ [weakSelf reloadBackgroundAnimated:YES]; });
+    // The player's own: the backgrounds and the sleep timer.
+    void (^changed)(void) = ^{
+        [weakSelf reloadBackgroundAnimated:YES];
+        if (landscapeChanged) landscapeChanged();
+    };
+    NSMutableArray<UIMenuElement *> *own = [NSMutableArray array];
+    UIMenu *artwork = SGRPlayerMenuArtwork(changed);
     if (artwork) [own addObject:artwork];
-    // The sleep timer on the top level, with the player's own (its owner, 2026-11-02).
     [own addObject:[self sleepTimerMenu]];
-    [own addObject:[UIAction actionWithTitle:@"Controls Spacing" image:[UIImage systemImageNamed:@"arrow.up.and.down"] identifier:nil
-                                     handler:^(UIAction *action) { [weakSelf showSpacing]; }]];
     [menu addObject:inlineGroup(own)];
 
-    // More: the album, the artist and the artist's concerts.
-    NSMutableArray<UIMenuElement *> *more = [NSMutableArray array];
-    // The album from the track's metadata (album_uri, beside the album_title the header reads; a key of the player's
-    // metadata in the 9.1.90 binary) and the artist from the track itself (Headers/SPTPlayer.h's artistURI).
-    id album = track.metadata[@"album_uri"];
-    NSString *albumURI = [album isKindOfClass:NSString.class] && [album hasPrefix:@"spotify:album:"] ? album : nil;
-    if (albumURI) {
-        [more addObject:[UIAction actionWithTitle:@"Go to Album" image:[UIImage systemImageNamed:@"square.stack"] identifier:nil
-                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:albumURI]; }]];
-    }
-    NSString *artistURI = SGURIString(track.artistURI);
-    if ([artistURI hasPrefix:@"spotify:artist:"]) {
-        [more addObject:[UIAction actionWithTitle:@"Go to Artist" image:[UIImage systemImageNamed:@"music.microphone"] identifier:nil
-                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:artistURI]; }]];
+    // More: Speed, Pitch & Reverb and Lyrics Source (the player's page items), then the artist's concerts.
+    NSMutableArray<UIMenuElement *> *more = [SGRPlayerMenuPageItems(anchor, changed) mutableCopy];
+    if (artist) {
         // Spotify's concerts page of an artist ("spotify:artist:%s%cconcerts" in the 9.1.90 binary).
         NSString *concerts = [artistURI stringByAppendingString:@":concerts"];
         [more addObject:[UIAction actionWithTitle:@"Go to Artist Concerts" image:[UIImage systemImageNamed:@"ticket"] identifier:nil
-                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:concerts]; }]];
+                                          handler:^(UIAction *action) { [weakSelf closeAndOpen:concerts landscape:landscape]; }]];
     }
-    [menu addObject:[UIMenu menuWithTitle:@"More" image:[UIImage systemImageNamed:@"ellipsis.circle"] identifier:nil options:0 children:more]];
+    if (more.count) [menu addObject:[UIMenu menuWithTitle:@"More" image:[UIImage systemImageNamed:@"ellipsis.circle"] identifier:nil options:0 children:more]];
     return menu;
-}
-
-// Controls Spacing: one slider in a sheet over the page, the page laid out again as it moves, with Reset.
-- (void)showSpacing {
-    UIViewController *panel = [UIViewController new];
-    panel.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1];
-    panel.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-    UIStackView *stack = [UIStackView new];
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 14;
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [panel.view addSubview:stack];
-    [NSLayoutConstraint activateConstraints:@[
-        [stack.leadingAnchor constraintEqualToAnchor:panel.view.leadingAnchor constant:24],
-        [stack.trailingAnchor constraintEqualToAnchor:panel.view.trailingAnchor constant:-24],
-        [stack.topAnchor constraintEqualToAnchor:panel.view.topAnchor constant:28],
-    ]];
-    UILabel *heading = [UILabel new];
-    heading.text = @"Controls Spacing";
-    heading.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
-    heading.textColor = UIColor.whiteColor;
-    UILabel *label = [UILabel new];
-    label.textColor = [UIColor colorWithWhite:1 alpha:0.8];
-    label.font = [UIFont monospacedDigitSystemFontOfSize:15 weight:UIFontWeightMedium];
-    UISlider *slider = [UISlider new];
-    slider.minimumValue = kControlsSpacingLeast;
-    slider.maximumValue = kControlsSpacingMost;
-    slider.value = controlsSpacing();
-    slider.accessibilityLabel = @"Controls spacing";
-    void (^show)(void) = ^{ label.text = [NSString stringWithFormat:@"%.2f×", slider.value]; };
-    show();
-    __weak typeof(self) weakSelf = self;
-    [slider addAction:[UIAction actionWithHandler:^(UIAction *action) {
-        SGSetDouble(kControlsSpacingKey, slider.value);
-        show();
-        [weakSelf.view setNeedsLayout];
-    }] forControlEvents:UIControlEventValueChanged];
-    UIButton *reset = [UIButton buttonWithType:UIButtonTypeSystem];
-    [reset setTitle:@"Reset" forState:UIControlStateNormal];
-    [reset addAction:[UIAction actionWithHandler:^(UIAction *action) {
-        [NSUserDefaults.standardUserDefaults removeObjectForKey:kControlsSpacingKey];
-        SGPrefsChanged();
-        slider.value = kControlsSpacingDefault;
-        show();
-        [weakSelf.view setNeedsLayout];
-    }] forControlEvents:UIControlEventTouchUpInside];
-    for (UIView *view in @[heading, label, slider, reset]) [stack addArrangedSubview:view];
-    if (panel.sheetPresentationController) {
-        panel.sheetPresentationController.detents = @[[UISheetPresentationControllerDetent customDetentWithIdentifier:nil resolver:^CGFloat(id context) { return 220; }]];
-        panel.sheetPresentationController.prefersGrabberVisible = YES;
-    }
-    [self presentViewController:panel animated:YES completion:nil];
 }
 
 // The mod's sleep timer (Shared/Player/SleepTimer.h), what it is set to under its name.
@@ -1928,6 +1956,10 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 }
 
 - (void)share:(NSURL *)link {
+    [self share:link from:self];
+}
+
+- (void)share:(NSURL *)link from:(UIViewController *)presenter {
     UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[link] applicationActivities:nil];
     // A sheet from the foot of the screen, as the Music app's Share is (its owner's screenshot, 2026-11-02), not a
     // popover off the ⋯: no anchor on a phone, the screen's middle elsewhere, where a popover needs one.
@@ -1936,11 +1968,24 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         share.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds), 1, 1);
     }
     SGPresentDark(share);
-    [self presentViewController:share animated:YES completion:nil];
+    [presenter presentViewController:share animated:YES completion:nil];
 }
 
 // A page of Spotify's opens in its navigation under the page, so the page closes first, as the Music app's player does
 // for Go to Album.
+- (void)closeAndOpen:(NSString *)uri landscape:(BOOL)landscape {
+    if (!landscape) {
+        [self closeAndOpen:uri];
+        return;
+    }
+    // From the landscape player: turned back to the page first, then closed as from the page.
+    SGRSystemTurnBack();
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakSelf closeAndOpen:uri];
+    });
+}
+
 - (void)closeAndOpen:(NSString *)uri {
     [self dismissViewControllerAnimated:YES completion:^{ SGOpenSpotifyURI([NSURL URLWithString:uri]); }];
 }
@@ -1974,15 +2019,14 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)showSaved:(BOOL)saved animated:(BOOL)animated {
     _savedShown = saved;
-    NSString *symbol = !saved ? @"plus.circle" : SGRPlainCheckOn() ? @"checkmark" : @"checkmark.circle.fill";
-    [_add.glyph setSymbol:symbol animated:animated && self.view.window];
-    UIColor *tint = saved ? SGRPlayerLitColor() : SGRPrimary();
+    [_add.glyph setSymbol:saved ? @"star.fill" : @"star" animated:animated && self.view.window];
+    UIColor *tint = SGRPrimary();
     if (![_add.glyph.tintColor isEqual:tint]) _add.glyph.tintColor = tint;
     _add.accessibilityLabel = saved ? @"Remove from Liked Songs" : @"Add to Liked Songs";
 }
 
 // Spotify's add button saves to Liked Songs, with its own confirmation; this one does that, and takes the track out
-// again from the tick, where Spotify's opens its Add to playlist sheet, which nothing here can reach. The glyph turns at
+// again from the filled star, where Spotify's opens its Add to playlist sheet, which nothing here can reach. The glyph turns at
 // once and the collection's own answer follows.
 - (void)toggleSaved {
     NSString *uri = _savedTrack;
@@ -2253,6 +2297,13 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     }
     _shuffle.accessibilityValue = shuffling ? @"On" : @"Off";
     _repeat.accessibilityValue = track ? @"Track" : context ? @"On" : @"Off";
+    [self syncOptionBadge];
+}
+
+// The badge on the queue button, not while the queue is open: its chips show the same.
+- (void)syncOptionBadge {
+    NSString *symbol = _queueOpen ? nil : SGRSystemOptionBadgeSymbol(SGPlayerState(), _shuffleOff, _repeatOff);
+    SGRSystemShowOptionBadge(_optionBadge, symbol, _shownOnce && self.view.window);
 }
 
 - (void)tick {
@@ -2417,6 +2468,34 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (!dragging) for (UIView *skip in @[_previous, _next]) skip.userInteractionEnabled = isTrack(SGPlayerState().track);
 }
 
+// The queue's scroll pushes the thumbnail row (the thumbnail, the title and artist, the add button) up and out, fading
+// as it goes, as far as it has pushed its chips; closed, the row is in place.
+- (void)pushHead:(CGFloat)push {
+    _headPush = push;
+    _coverHolder.transform = [self coverTransform];
+    [self placeHeadPush];
+}
+
+- (void)placeHeadPush {
+    CGFloat push = _queueOpen ? _headPush : 0, room = MAX(1, _queueView.headRoom);
+    CGFloat shown = MAX(0, 1 - push / (room * 0.7));
+    CGAffineTransform up = CGAffineTransformMakeTranslation(0, -push);
+    _titleBlock.transform = up;
+    _add.transform = up;
+    _more.transform = up;
+    // Only the queue's: the lyrics' rest fades the row by its own alpha (fadingViews), the thumbnail's own staying put.
+    if (_queueOpen || push != _shownPush) {
+        _titleBlock.alpha = shown;
+        _add.alpha = shown;
+        _more.alpha = shown;
+    }
+    _shownPush = push;
+    _cover.alpha = shown;
+    // The shadow, which is the holder's, goes with the thumbnail, or it stayed behind as a dark square as the row went
+    // (its owner's recording, 2026-11-06).
+    _coverHolder.layer.shadowOpacity = 0.35f * (float)MIN(1, shown);
+}
+
 - (void)toggleQueue {
     [self setQueueOpen:!_queueOpen];
 }
@@ -2426,6 +2505,31 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
     NSMutableArray<NSString *> *key = [NSMutableArray arrayWithObject:SGURIString(SGPlayerState().track.URI) ?: @""];
     for (id item in next) [key addObject:[item respondsToSelector:@selector(URI)] ? (SGURIString([item URI]) ?: @"") : @""];
     return key;
+}
+
+NSString *SGRSystemContextTitle(SPTPlayerState *state) {
+    return contextTitle(state, isTrack(state.track) ? state.track : nil);
+}
+
+// The landscape player's queue (SystemLandscape.m) hands a move back the same way, checked against Spotify's queue as it
+// is now: the same track playing and the same tracks to come, in any order, so only a move goes back.
+void SGRSystemHandQueueBack(NSArray *upcoming, void (^done)(void)) {
+    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+    if (![player respondsToSelector:@selector(fetchQueue:on:)] || ![player respondsToSelector:@selector(setQueue:)]) return;
+    NSArray *moved = [queueKey(upcoming) sortedArrayUsingSelector:@selector(compare:)];
+    [player fetchQueue:^(id queue) {
+        NSArray *next = [queue respondsToSelector:@selector(nextTracks)] ? [(id<SPTPlayerQueue>)queue nextTracks] : nil;
+        if ([next isKindOfClass:NSArray.class] && [[queueKey(next) sortedArrayUsingSelector:@selector(compare:)] isEqualToArray:moved]
+            && [queue respondsToSelector:@selector(setNextTracks:)]) {
+            @try {
+                [(id<SPTPlayerQueue>)queue setNextTracks:upcoming];
+                [player setQueue:queue];
+            } @catch (NSException *e) {
+                @try { [(id<SPTPlayerQueue>)queue setNextTracks:next]; } @catch (NSException *again) {}
+            }
+        }
+        if (done) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), done);
+    } on:dispatch_get_main_queue()];
 }
 
 // A track moved or taken out in the page's queue: Spotify's queue fetched again, and only if it is still the one the
@@ -2478,6 +2582,7 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
         if (![next isKindOfClass:NSArray.class]) return;
         me->_spotifyQueueKey = queueKey(next);
         [me->_queueView showState:SGPlayerState() upcoming:next from:from];
+        if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queueView showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
     } on:dispatch_get_main_queue()];
 }
 
@@ -2494,6 +2599,7 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
     if (_shownOnce && self.view.window) SGRAnimate(SGRMotionFade, mark, nil);
     else mark();
     button.accessibilityValue = open ? @"Shown" : nil;
+    [self syncOptionBadge];
 }
 
 // The queue comes in the lyrics' place in the same layout spring: the cover shrinks to the thumbnail as the title rises
@@ -2501,8 +2607,16 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
 // once it has faded out.
 - (void)setQueueOpen:(BOOL)open {
     if (open == _queueOpen) return;
-    if (open && _lyricsOpen) [self setLyricsOpen:NO];
+    // Straight from the lyrics: they close as if the queue were up already, so the thumbnail stays the thumbnail rather
+    // than growing back toward the cover for a moment (its owner's recording, 2026-11-06).
+    if (open && _lyricsOpen) {
+        _queueOpen = YES;
+        [self setLyricsOpen:NO];
+        _queueOpen = NO;
+    }
     _queueOpen = open;
+    _headPush = 0;
+    if (self.view.window) SGRSystemTurnSetQueue(open);
     UIView *view = self.view, *queue = _queueView;
     if (open) {
         [self refreshQueue];
@@ -2552,10 +2666,15 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
 - (void)setLyricsOpen:(BOOL)open {
     if (open == _lyricsOpen) return;
     // One or the other in the lyrics' place: the queue gives way to the lyrics.
-    if (open && _queueOpen) [self setQueueOpen:NO];
+    // Straight from the queue, the same way.
+    if (open && _queueOpen) {
+        _lyricsOpen = YES;
+        [self setQueueOpen:NO];
+        _lyricsOpen = NO;
+    }
     if (!open) [self setAlone:NO animated:NO];
     _lyricsOpen = open;
-    if (self.view.window) SGRPlayerSetPageLyricsOpen(open);
+    if (self.view.window) SGRSystemTurnSetLyrics(open);
     [self blurBackground:open || _queueOpen animated:self.view.window != nil];
     if (open) [self restartRest];
     else [self stopRest];
@@ -2573,7 +2692,7 @@ static NSArray<NSString *> *queueKey(NSArray *next) {
     // Over a clip the cover only shows as the thumbnail: it goes at once as the lyrics close, rather than growing back to
     // full size before the clip takes over, and comes in only as it settles into the thumbnail's place as they open (its
     // owner's recording, 2026-11-01: the cover's way to the animated artwork was awkward).
-    BOOL overClip = _motion && view.window && !SGRReduceMotion();
+    BOOL overClip = _motion && view.window && !SGRReduceMotion() && !_queueOpen;
     if (overClip) {
         UIView *cover = _coverHolder;
         CGFloat alpha = open ? 1 : 0;
@@ -2957,6 +3076,15 @@ static NSString *speedLabel(double speed) {
 }
 
 - (void)toggleShuffle {
+    SGRSystemToggleShuffle();
+}
+
+- (void)cycleRepeat {
+    SGRSystemCycleRepeat();
+}
+@end
+
+void SGRSystemToggleShuffle(void) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerState *state = SGPlayerState();
     if (!player || !state || !SGRSystemOptionAllowed(state, NO)) return;
@@ -2964,7 +3092,7 @@ static NSString *speedLabel(double speed) {
 }
 
 // Off, then the playlist or album, then the track, then off again, the way Spotify's button goes (HeadGestures.x).
-- (void)cycleRepeat {
+void SGRSystemCycleRepeat(void) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerOptions *options = SGPlayerState().options;
     if (!player || !options || !SGRSystemOptionAllowed(SGPlayerState(), YES)) return;
@@ -2977,4 +3105,78 @@ static NSString *speedLabel(double speed) {
         [player setRepeatingContext:YES];
     }
 }
-@end
+
+static void stepBackFrom(NSString *from, NSInteger steps, NSInteger waited) {
+    SPTPlayerState *state = SGPlayerState();
+    NSString *now = SGURIString(state.track.URI) ?: @"";
+    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+    if (!player) return;
+    // Not landed yet: looked at again shortly, for two seconds at most.
+    if ([now isEqualToString:from]) {
+        if (waited >= 20) return;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ stepBackFrom(from, steps, waited + 1); });
+        return;
+    }
+    if (steps <= 0) return;
+    [player skipToPreviousTrackWithOptions:nil];
+    stepBackFrom(now, steps - 1, 0);
+}
+
+void SGRSystemStepBack(NSInteger steps) {
+    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+    if (!player || steps <= 0) return;
+    // From the start, or the first back only restarts a track under way.
+    [player seekTo:0];
+    NSString *from = SGURIString(SGPlayerState().track.URI) ?: @"";
+    [player skipToPreviousTrackWithOptions:nil];
+    stepBackFrom(from, steps - 1, 0);
+}
+
+UIView *SGRSystemMakeOptionBadge(UIView *button) {
+    CGFloat side = 21;
+    UIView *badge = [[UIView alloc] initWithFrame:CGRectMake(0, 0, side, side)];
+    badge.backgroundColor = UIColor.clearColor;
+    badge.layer.cornerRadius = side / 2;
+    badge.userInteractionEnabled = NO;
+    badge.isAccessibilityElement = NO;
+    badge.alpha = 0;
+    UIImageView *glyph = [UIImageView new];
+    glyph.tintColor = UIColor.whiteColor;
+    glyph.contentMode = UIViewContentModeCenter;
+    glyph.frame = badge.bounds;
+    glyph.tag = 1;
+    [badge addSubview:glyph];
+    // Over the glyph's top right, as the Music app has it.
+    badge.center = CGPointMake(22 + 20.5, 22 - 17.5);
+    badge.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleBottomMargin;
+    button.clipsToBounds = NO;
+    [button addSubview:badge];
+    return badge;
+}
+
+void SGRSystemShowOptionBadge(UIView *badge, NSString *symbol, BOOL animated) {
+    UIImageView *glyph = [badge viewWithTag:1];
+    if (symbol) {
+        UIImageSymbolConfiguration *look = [UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightBold];
+        // Lit as the lyrics and queue buttons are: their light disc with the glyph cut out (its owner, 2026-11-06).
+        glyph.image = cutDiscImage(symbol, look, badge.bounds.size.width);
+    }
+    CGFloat alpha = symbol ? 1 : 0;
+    if (badge.alpha == alpha) return;
+    void (^change)(void) = ^{
+        badge.alpha = alpha;
+        badge.transform = symbol ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.6, 0.6);
+    };
+    if (animated) SGRAnimate(SGRMotionRespond, change, nil);
+    else change();
+}
+
+NSString *SGRSystemOptionBadgeSymbol(SPTPlayerState *state, BOOL shuffleHidden, BOOL repeatHidden) {
+    SPTPlayerOptions *options = [state respondsToSelector:@selector(options)] ? state.options : nil;
+    if (shuffleHidden && SGRSystemOptionAllowed(state, NO) && options.shufflingContext) return @"shuffle";
+    if (repeatHidden && SGRSystemOptionAllowed(state, YES)) {
+        if (options.repeatingTrack) return @"repeat.1";
+        if (options.repeatingContext) return @"repeat";
+    }
+    return nil;
+}

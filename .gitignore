@@ -27,3 +27,4 @@ notes/
 .zsign_cache/
 .phone.env
 .claude/worktrees/
+tweak/Sources/App/About/SGBuildStamp.m

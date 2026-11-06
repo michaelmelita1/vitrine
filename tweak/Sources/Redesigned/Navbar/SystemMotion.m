@@ -107,7 +107,11 @@ static const CGFloat kTopBlurTop = 0.6, kTopBlurEdge = 0.133, kTopBlurHold = 0.1
 // Seconds a clip may be on screen in front without drawing a frame before it is given up.
 static const NSTimeInterval kGiveUp = 5;
 // The dim's floor and ceiling, and what the lyrics add to it.
-static const CGFloat kDimLeast = 0.10, kDimMost = 0.80, kDimLyrics = 0.15;
+static const CGFloat kDimLeast = 0.10, kDimMost = 0.80, kDimLyrics = 0.05;
+// Under the lyrics and the queue, the landscape player's blur (SystemLandscape.m's kBlurRadius and kWashSaturation): a
+// plain blur with the colors raised, not the system's material, which greyed the clip and darkened it (its owner,
+// 2026-11-06: "washed out and dark").
+static const CGFloat kLyricsBlurRadius = 72, kLyricsSaturation = 1.5;
 // The dim is whole only where the text is, from where the blur under the controls is whole down; above, it eases
 // off to nothing by this share of the screen below the clip's top, so the cover reads as bright as the lock screen
 // draws it. Behind the lyrics, which run the whole height, it is whole throughout.
@@ -198,6 +202,8 @@ static CGFloat brightEnd(NSData *luminances) {
     NSMutableData *_luminances;   // of the frames measured so far
     BOOL _lyricsUp;
     UIVisualEffectView *_seamBlur, *_lyricsBlur;
+    UIView *_lyricsWash;     // the landscape player's blur, over the clip while the lyrics or the queue are up; nil where
+                             // the system has no backdrop filters, the material then
     CGFloat _aspect;
     BOOL _timing;   // the give-up's count is running
 }
@@ -261,6 +267,21 @@ static UIBlurEffect *blurEffect(void) {
     _lyricsBlur = [[UIVisualEffectView alloc] initWithEffect:nil];
     _lyricsBlur.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self addSubview:_lyricsBlur];
+    Class backdrop = NSClassFromString(@"CABackdropLayer");
+    id gaussian = [NSClassFromString(@"CAFilter") filterWithType:@"gaussianBlur"];
+    id saturate = [NSClassFromString(@"CAFilter") filterWithType:@"colorSaturate"];
+    if (backdrop && gaussian && saturate) {
+        [gaussian setValue:@(kLyricsBlurRadius) forKey:@"inputRadius"];
+        [gaussian setValue:@YES forKey:@"inputNormalizeEdges"];
+        [saturate setValue:@(kLyricsSaturation) forKey:@"inputAmount"];
+        _lyricsWash = [UIView new];
+        _lyricsWash.userInteractionEnabled = NO;
+        _lyricsWash.alpha = 0;
+        CALayer *layer = [backdrop layer];
+        layer.filters = @[gaussian, saturate];
+        [_lyricsWash.layer addSublayer:layer];
+        [self addSubview:_lyricsWash];
+    }
 
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     for (NSNotificationName name in @[UIApplicationDidBecomeActiveNotification, UIApplicationWillResignActiveNotification,
@@ -309,6 +330,8 @@ static UIBlurEffect *blurEffect(void) {
     _topBlur.maskView.frame = bounds;
     _topBlur.hidden = top == 0;
     _lyricsBlur.frame = bounds;
+    _lyricsWash.frame = bounds;
+    _lyricsWash.layer.sublayers.firstObject.frame = bounds;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     _still.frame = CGRectMake(0, top, width, height);
@@ -484,13 +507,17 @@ static CATransform3D flipAbout(CGFloat y, CGFloat stretch) {
         self->_seamBlur.effect = nil;
         self->_topBlur.effect = nil;
         self->_lyricsBlur.effect = nil;
+        self->_lyricsWash.alpha = 0;
     }, ^(BOOL finished) { done(); });
 }
 
 // The lyrics' blur, and their share of the dim, which a layer's own animation carries over the same fade.
 - (void)setBlurred:(BOOL)blurred animated:(BOOL)animated {
     _lyricsUp = blurred;
-    void (^apply)(void) = ^{ self->_lyricsBlur.effect = blurred ? blurEffect() : nil; };
+    void (^apply)(void) = ^{
+        if (self->_lyricsWash) self->_lyricsWash.alpha = blurred ? 1 : 0;
+        else self->_lyricsBlur.effect = blurred ? blurEffect() : nil;
+    };
     [CATransaction begin];
     [CATransaction setDisableActions:!animated];
     [CATransaction setAnimationDuration:SGRCrossfade];

@@ -12,7 +12,7 @@
 // so one that went off is not followed again.
 //
 // It stands aside while the mod's own timer runs, which has the gain then, and while Spotify's own fade is
-// forced on (ios-feature-sleeptimer.enable_fade_out, the Labs page's Fade out): with it, Spotify's
+// forced on (ios-feature-sleeptimer.enable_fade_out, the Player page's Sleep timer fades out): with it, Spotify's
 // DuckHandlerImpl ducks the core's volume itself (a DuckRequest of a volume and a fade_duration_ms). Off in
 // the flag table 9.1.78 ships; a fade that sounds twice as deep means the server turned it on.
 //

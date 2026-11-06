@@ -12,7 +12,7 @@ static UIViewController *blank(NSString *title) {
 
 #define PAGE(name) UIViewController *name(void) { return blank(@#name); }
 PAGE(SGAboutPage) PAGE(SGAdsSettingsPage) PAGE(SGAllFlagsPage) PAGE(SGArtistBlockSettingsPage) PAGE(SGDSPSettingsPage) PAGE(SGAutoMixSettingsPage)
-PAGE(SGGesturesSettingsPage) PAGE(SGRMiniPlayerSettingsPage) PAGE(SGHeadGesturesSettingsPage) PAGE(SGHomeSettingsPage) PAGE(SGLabsPage)
+PAGE(SGGesturesSettingsPage) PAGE(SGRMiniPlayerSettingsPage) PAGE(SGHeadGesturesSettingsPage) PAGE(SGHomeSettingsPage)
 PAGE(SGListeningStatsPage) PAGE(SGLiveActivitySettingsPage) PAGE(SGLockScreenWidgetPage) PAGE(SGNavbarSettingsPage)
 PAGE(SGNowPlayingBarSettingsPage) PAGE(SGQueueSettingsPage) PAGE(SGRAlbumSettingsPage) PAGE(SGRArtistSettingsPage)
 PAGE(SGRNavbarSettingsPage) PAGE(SGRHomeSettingsPage)

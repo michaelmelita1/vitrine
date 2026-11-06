@@ -2,7 +2,7 @@
 // grouped by what they are as the system Settings app groups its own, in cards with no headings: what the
 // app looks like (Appearance, Tab bar), the screens a page of its own changes (Home, Player, Lyrics, Albums and
 // Artists), the features that work on any iOS (Sing, Spatial voice, Audio effects, AutoMix, Live Activity, AirPods gestures, Listening
-// stats), the system's side (Lock screen, Vibrations; Premium, ads & privacy), the advanced pages (Labs, All flags, a
+// stats), the system's side (Lock screen, Vibrations; Premium, ads & privacy), the advanced pages (All flags, a
 // searchable list of every flag with an override per flag) and Mod, the build, its updates and links. The
 // same row leads the side drawer's list (trees/test6.txt), above Your plan, so the page is a tap from
 // Home, and holding Home on the tab bar opens it too. The tweaks read the switches when they run, so a
@@ -101,7 +101,6 @@ static UIViewController *modSettingsPage(void) {
             pageRow(@"Premium, ads & privacy", @"hand.raised.fill", UIColor.systemBlueColor, ^UIViewController *{ return SGAdsSettingsPage(); }),
         ]),
         SGSection(nil, @[
-            pageRow(@"Labs", @"testtube.2", UIColor.systemGreenColor, ^UIViewController *{ return SGLabsPage(); }),
             pageRow(@"All flags", @"flag.fill", UIColor.systemOrangeColor, ^UIViewController *{ return SGAllFlagsPage(); }),
         ]),
         SGSection(nil, @[mod]),

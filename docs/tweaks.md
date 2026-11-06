@@ -97,7 +97,7 @@ Shared:
     Privacy/      telemetry blocking and its counters, and the tracking taken off shared open.spotify.com links
                   (CleanLinks.x over the cleaner in CleanLinks.m)
     ArtistBlock/  tracks by blocked artists skipped as they start (ArtistSkip.x), the list and the Blocked artists page under Player
-    Flags/        Spotify's remote-config flags: the provider hook, the generated table, the All flags page and the Labs page;
+    Flags/        Spotify's remote-config flags: the provider hook, the generated table, the All flags page;
                   the provider pins 9.1.88's ios-reprise-liquid-glass-override.mode to default (after an All flags
                   override) and logs the server's own value once, as a force_disabled would take the glass off the redesign.
                   It also pins 9.1.90's ios-navigationui-tabbar-impl.is_liquid_glass_tab_bar_enabled off.
@@ -760,7 +760,7 @@ they change. Its main page groups the rows by what they are, in cards with no he
 under the signing and environment warnings (below iOS 26 one says the look needs 26): Appearance and Tab bar, with a
 restart note; Home, Player, Lyrics, Albums and Artists; Karaoke, Spatial voice (where the iPhone reads headphone
 motion), Audio effects, AutoMix, Live Activity, AirPods gestures and Listening stats; Lock screen, Vibrations and Premium, ads &
-privacy; Labs and All flags; Mod. It is checked in the simulator
+privacy; All flags; Mod. It is checked in the simulator
 against harness/mod-settings/. The Appearance page has (the redesign is always black) the Accent color
 preset, a pull-down of Spotify, Apple Music and Custom read off the color stored (a color set before the presets
 existed reads as Custom, Apple Music's red as Apple Music), and Accent color, the hex and a swatch of the color in
@@ -842,8 +842,7 @@ applying as it changes; the row reads out Off, On or how many effects are on. Th
 (EeveeSpotify's Hide ads and Hide upsells, and
 an Ad and upsell flags page under them, every switch there forcing a flag Spotify ships on to off;
 Spoof Premium; Block telemetry; Clean shared links; then what the ad
-blocking and the telemetry blocking have stopped) and Labs (features Spotify built and did not ship,
-AI Chat (Martini) first). Last, All flags, Spotify's remote-config flags with a search field and an
+blocking and the telemetry blocking have stopped). Last, All flags, Spotify's remote-config flags with a search field and an
 Auto / Off / On control per flag (a text field for the number and text ones), and Mod: Updates
 (the row reads out where the build stands and opens the changelog of everything newer than it, read
 from the releases Release Please cuts, with Check now, the release to get, all the releases and Tell

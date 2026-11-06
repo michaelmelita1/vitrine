@@ -72,6 +72,10 @@ UIViewController *SGPlayerSettingsPage(void) {
     // (Redesigned/Player/SystemTurn.m; its owner, 2026-11-06).
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObjects:SGSection(nil, pages),
         SGSection(nil, @[SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)]), nil];
+    // Spotify's own sleep timer fade, a flag it built and did not ship (Shared/Player/SpotifySleepTimer.m stands aside
+    // while it is on). The only one kept of the Labs page that was.
+    [sections addObject:SGNotedSection(nil, @[SGFlagRow(@"Sleep timer fades out", @"ios-feature-sleeptimer.enable_fade_out")],
+                                       @"Spotify's own fade as the sleep timer ends. Applies after you restart Spotify.")];
 
     // The page leads with a card of the player and the background's control, then its own rows.
     return SGRPlayerSettingsPage(sections);

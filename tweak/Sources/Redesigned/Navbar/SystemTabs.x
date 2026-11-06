@@ -17,6 +17,7 @@
 #import "Redesigned/Kit/SGRKit.h"
 #import "Navbar.h"
 #import "Shared/Player/PlayerState.h"
+#import "Shared/Haptics/Haptics.h"
 #import "Redesigned/Player/SystemPlayer.h"
 #import "Redesigned/Player/SystemPlayerTransition.h"
 #import "Settings/SGPage.h"
@@ -105,6 +106,7 @@ static const CGFloat kDeviceRoom = 80;
     BOOL _saved;
     NSString *_shownURI;
     BOOL _skipping;     // a swipe settled on a neighbour; the track it asked for has not come yet
+    BOOL _swipePast;    // the swipe is past where letting go skips
     BOOL _hadTrack, _emptyPending;  // a track shown, and a look again pending before Not Playing
 }
 
@@ -133,7 +135,10 @@ static const CGFloat kDeviceRoom = 80;
     _play = [SGRGlyphButton buttonWithSymbol:@"play.fill" pointSize:20 title:@"Play"];
     _play.onTap = ^{ [weakSelf togglePlay]; };
     _next = [SGRGlyphButton buttonWithSymbol:@"forward.fill" pointSize:20 title:@"Next"];
-    _next.onTap = ^{ [(id)SGPlayer() skipToNextTrackWithOptions:nil]; };
+    _next.onTap = ^{
+        SGPlayFeedback(SGFeedbackSkip);
+        [(id)SGPlayer() skipToNextTrackWithOptions:nil];
+    };
     // The Mini player page's Device button (its owner, 2026-11-01): the player page's AirPlay button, its glyph the
     // output's device, beside play.
     _device = SGRSystemMakeRouteButton(18, @"the mini player");
@@ -192,7 +197,7 @@ static const CGFloat kDeviceRoom = 80;
 
 - (void)toggleSaved {
     if (!_savedURI || !SGRCollectionSetSaved([NSURL URLWithString:_savedURI], !_saved)) return;
-    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    SGPlayFeedback(SGFeedbackAdd);
     [self showSaved:!_saved];
 }
 
@@ -363,10 +368,17 @@ static const CGFloat kDeviceRoom = 80;
         case UIGestureRecognizerStateChanged: {
             CGFloat moved = ((x < 0 && !hasNext) || (x > 0 && !hasPrevious)) ? x / 4 : x;
             _strip.transform = CGAffineTransformMakeTranslation(moved, 0);
+            // A tick as the drag passes where letting go skips (Vibrations > Controls).
+            BOOL past = ((x < 0 && hasNext) || (x > 0 && hasPrevious)) && fabs(x) > step * kSwipeDistance;
+            if (past != _swipePast) {
+                _swipePast = past;
+                if (past) SGPlayFeedback(SGFeedbackDetent);
+            }
             break;
         }
         case UIGestureRecognizerStateEnded:
         case UIGestureRecognizerStateCancelled: {
+            _swipePast = NO;
             CGFloat speed = [swipe velocityInView:self].x;
             // The way the finger went, or for a short flick the way it was moving; flicked back against the drag, none.
             NSInteger way = fabs(x) > 12 ? (x < 0 ? -1 : 1) : (speed < 0 ? -1 : 1);
@@ -419,6 +431,7 @@ static const CGFloat kDeviceRoom = 80;
     id player = SGPlayer();
     SPTPlayerState *state = SGPlayerState();
     if (!player) return;
+    SGPlayFeedback(state.isPaused ? SGFeedbackPlay : SGFeedbackPause);
     if (state.isPaused) [player resume:nil];
     else [player pause:nil];
 }

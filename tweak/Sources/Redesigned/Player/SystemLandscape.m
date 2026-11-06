@@ -15,6 +15,7 @@
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
+#import "Shared/Haptics/Haptics.h"
 #import "Player.h"
 #import "Redesigned/Artist/Artist.h"
 #import "SystemPlayer.h"
@@ -66,6 +67,8 @@ static const CGFloat kLinesScale = 1;
 static const CGFloat kPausedScale = 0.84;
 // The title's swipe, as the portrait page's (SystemPlayer.m): how far or fast it skips, the gap between the two tracks'
 // titles, and the soft edge the block cuts them through.
+// A column switch: what goes fades out over kSwitchOut, what comes fades in over kSwitchIn once it has nearly gone.
+static const NSTimeInterval kSwitchOut = 0.14, kSwitchIn = 0.32;
 static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitlePageGap = 24, kTitleFade = 14;
 
 // A layer for views that takes no touch of its own, only its subviews'.
@@ -134,6 +137,7 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     CAGradientLayer *_titleFade;
     SGMarqueeLabel *_besideTitle, *_besideArtist;   // the track the swipe brings in
     BOOL _titleSkipping;
+    BOOL _titlePast;   // the swipe is past where letting go skips
     NSString *_titleSkipFrom;
     CGFloat _headPush;            // how far it has, 0 to the queue's headRoom
     BOOL _queueDragging;          // a track lifted in the queue: the foot is away and the list runs to the screen's foot
@@ -142,6 +146,8 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     UIView *_route;
     NSTimer *_tick;
     BOOL _lyricsMode;
+    BOOL _staging;                                      // a column switch is being laid out (switchColumnAnimated:)
+    NSMapTable<UIView *, NSNumber *> *_stagedAlphas;    // the alphas it wants, by view
     id _savedWatch;
     NSString *_savedTrack;
     BOOL _saved;
@@ -709,17 +715,17 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)applyMode {
     BOOL lines = _lyricsMode && !_bare && !_queueMode, queue = _queueMode;
     for (UIView *view in @[_scrubber, _elapsed, _remaining, _controls, _volume]) {
-        view.alpha = lines || queue ? 0 : 1;
+        [self setPanel:view alpha:lines || queue ? 0 : 1];
         view.userInteractionEnabled = !lines && !queue;
     }
     for (UIView *button in @[_shuffle, _repeat]) {
         BOOL off = button == _shuffle ? _shuffleOff : _repeatOff;
-        button.alpha = lines || queue || off ? 0 : 1;
+        [self setPanel:button alpha:lines || queue || off ? 0 : 1];
         button.userInteractionEnabled = !lines && !queue && !off;
     }
-    _stage.alpha = lines ? 1 : 0;
+    [self setPanel:_stage alpha:lines ? 1 : 0];
     _stage.userInteractionEnabled = lines;
-    _queue.alpha = queue ? 1 : 0;
+    [self setPanel:_queue alpha:queue ? 1 : 0];
     _queue.userInteractionEnabled = queue;
     [self placeHead];
     [self syncOptionBadge];
@@ -738,18 +744,59 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     _lyricsButton.accessibilityValue = lines ? @"Shown" : nil;
 }
 
+// The column's views (the player's controls, the lines, the queue) as applyMode wants them: at once, or while a switch
+// is staged, kept as they are and their alpha noted for the switch to play.
+- (void)setPanel:(UIView *)view alpha:(CGFloat)alpha {
+    if (_staging) {
+        [_stagedAlphas setObject:@(alpha) forKey:view];
+        return;
+    }
+    view.alpha = alpha;
+}
+
+// A switch between the player, the lines and the queue, as the Music app's: what goes fades out quickly and is gone
+// before what comes fades in, so the two are never drawn over each other, while the head and the column move on the
+// layout's spring (its owner, 2026-11-06: the crossfade had the lines over the controls and was over in a few frames).
+// The controls come back with the switch, and setControlsShown: lays the column out too, so the staging starts before it.
+- (void)switchColumnAnimated:(BOOL)animated {
+    void (^layout)(void) = ^{
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    };
+    if (!animated || !self.view.window || SGRReduceMotion()) {
+        [self setControlsShown:YES];
+        if (animated && self.view.window) SGRAnimateLayout(self.view, layout, nil);
+        else layout();
+        return;
+    }
+    _staging = YES;
+    _stagedAlphas = [NSMapTable strongToStrongObjectsMapTable];
+    [self setControlsShown:YES];
+    SGRAnimate(SGRMotionLayout, layout, nil);
+    _staging = NO;
+    NSMapTable<UIView *, NSNumber *> *targets = _stagedAlphas;
+    _stagedAlphas = nil;
+    NSMutableArray<UIView *> *going = [NSMutableArray array], *coming = [NSMutableArray array];
+    for (UIView *view in targets) {
+        CGFloat target = [targets objectForKey:view].doubleValue;
+        if (target < view.alpha) [going addObject:view];
+        else if (target > view.alpha) [coming addObject:view];
+    }
+    UIViewAnimationOptions options = UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState;
+    [UIView animateWithDuration:kSwitchOut delay:0 options:options | UIViewAnimationOptionCurveEaseIn animations:^{
+        for (UIView *view in going) view.alpha = [targets objectForKey:view].doubleValue;
+    } completion:nil];
+    [UIView animateWithDuration:kSwitchIn delay:going.count ? kSwitchOut * 0.8 : 0 options:options | UIViewAnimationOptionCurveEaseOut animations:^{
+        for (UIView *view in coming) view.alpha = [targets objectForKey:view].doubleValue;
+    } completion:nil];
+}
+
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated {
     if (lyrics == _lyricsMode && !_queueMode && self.isViewLoaded) return;
     _lyricsMode = lyrics;
     _queueMode = NO;
     if (!self.isViewLoaded) return;
-    [self setControlsShown:YES];
-    void (^change)(void) = ^{
-        [self.view setNeedsLayout];
-        [self.view layoutIfNeeded];
-    };
-    if (animated && self.view.window) SGRAnimateLayout(self.view, change, nil);
-    else change();
+    [self switchColumnAnimated:animated];
     [self restartRest];
 }
 
@@ -757,7 +804,8 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     [self setLyricsMode:!(_lyricsMode && !_queueMode) animated:YES];
 }
 
-// The queue in the column, in the lines' place; again, back to what was there. It never rests.
+// The queue in the column, in the lines' place; again, back to the player. It takes the lyrics' place for good, so the
+// queue tapped again closes to the player rather than back to the lyrics (its owner, 2026-11-06). It never rests.
 - (void)toggleQueueMode {
     [self setQueueMode:!_queueMode animated:YES];
 }
@@ -765,18 +813,13 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)setQueueMode:(BOOL)queue animated:(BOOL)animated {
     if (queue == _queueMode) return;
     _queueMode = queue;
+    if (queue) _lyricsMode = NO;
     if (!self.isViewLoaded) return;
     if (_queueMode) {
         [self refreshQueue];
         [_queue scrollToTop];
     }
-    [self setControlsShown:YES];
-    void (^change)(void) = ^{
-        [self.view setNeedsLayout];
-        [self.view layoutIfNeeded];
-    };
-    if (animated && self.view.window) SGRAnimateLayout(self.view, change, nil);
-    else change();
+    [self switchColumnAnimated:animated];
     [self restartRest];
 }
 
@@ -894,6 +937,13 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
             _besideArtist.text = beside.artistName ?: @"";
             _besideTitle.hidden = _besideArtist.hidden = !beside;
             [self placeTitlePagesAt:beside ? x : x / 4 way:way step:step];
+            // A tick as the drag passes where letting go skips (Vibrations > Controls), as the page's.
+            BOOL past = beside && fabs(x) > step * kTitleSwipeDistance;
+            if (swipe.state == UIGestureRecognizerStateBegan) _titlePast = NO;
+            if (past != _titlePast) {
+                _titlePast = past;
+                if (past) SGPlayFeedback(SGFeedbackDetent);
+            }
             break;
         }
         case UIGestureRecognizerStateEnded:
@@ -1028,7 +1078,7 @@ static NSString *landscapeTime(double seconds) {
 
 - (void)toggleSaved {
     if (!_savedTrack || !SGRCollectionSetSaved([NSURL URLWithString:_savedTrack], !_saved)) return;
-    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    SGPlayFeedback(SGFeedbackAdd);
     [self showSaved:!_saved];
     [self restartRest];
 }
@@ -1144,6 +1194,7 @@ static NSString *landscapeTime(double seconds) {
 - (void)togglePlay {
     id<SPTPlayer> player = self.player;
     BOOL resume = SGPlayerState().isPaused;
+    SGPlayFeedback(resume ? SGFeedbackPlay : SGFeedbackPause);
     if (resume) [player resume:nil];
     else [player pause:nil];
     [_play turnToSymbol:resume ? @"pause.fill" : @"play.fill" animated:YES];
@@ -1152,12 +1203,14 @@ static NSString *landscapeTime(double seconds) {
 }
 
 - (void)previous {
+    SGPlayFeedback(SGFeedbackSkip);
     [self.player skipToPreviousTrackWithOptions:nil];
     [_previous stepArrow:-1];
     [self restartRest];
 }
 
 - (void)next {
+    SGPlayFeedback(SGFeedbackSkip);
     [self.player skipToNextTrackWithOptions:nil];
     [_next stepArrow:1];
     [self restartRest];

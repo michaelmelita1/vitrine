@@ -67,10 +67,6 @@ static const CGFloat kLinesScale = 1;
 static const CGFloat kPausedScale = 0.84;
 // The title's swipe, as the portrait page's (SystemPlayer.m): how far or fast it skips, the gap between the two tracks'
 // titles, and the soft edge the block cuts them through.
-// A column switch: what goes fades out over kSwitchOut, what comes fades in over kSwitchIn once it has nearly gone.
-static const NSTimeInterval kSwitchOut = 0.14, kSwitchIn = 0.32;
-// How far what comes drifts up into place, in points (what goes lifts half as far).
-static const CGFloat kSwitchDrift = 14;
 static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitlePageGap = 24, kTitleFade = 14;
 
 // A layer for views that takes no touch of its own, only its subviews'.
@@ -148,8 +144,6 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     UIView *_route;
     NSTimer *_tick;
     BOOL _lyricsMode;
-    BOOL _staging;                                      // a column switch is being laid out (switchColumnAnimated:)
-    NSMapTable<UIView *, NSNumber *> *_stagedAlphas;    // the alphas it wants, by view
     id _savedWatch;
     NSString *_savedTrack;
     BOOL _saved;
@@ -719,17 +713,17 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)applyMode {
     BOOL lines = _lyricsMode && !_bare && !_queueMode, queue = _queueMode;
     for (UIView *view in @[_scrubber, _elapsed, _remaining, _controls, _volume]) {
-        [self setPanel:view alpha:lines || queue ? 0 : 1];
+        view.alpha = lines || queue ? 0 : 1;
         view.userInteractionEnabled = !lines && !queue;
     }
     for (UIView *button in @[_shuffle, _repeat]) {
         BOOL off = button == _shuffle ? _shuffleOff : _repeatOff;
-        [self setPanel:button alpha:lines || queue || off ? 0 : 1];
+        button.alpha = lines || queue || off ? 0 : 1;
         button.userInteractionEnabled = !lines && !queue && !off;
     }
-    [self setPanel:_stage alpha:lines ? 1 : 0];
+    _stage.alpha = lines ? 1 : 0;
     _stage.userInteractionEnabled = lines;
-    [self setPanel:_queue alpha:queue ? 1 : 0];
+    _queue.alpha = queue ? 1 : 0;
     _queue.userInteractionEnabled = queue;
     [self placeHead];
     [self syncOptionBadge];
@@ -748,69 +742,16 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     _lyricsButton.accessibilityValue = lines ? @"Shown" : nil;
 }
 
-// The column's views (the player's controls, the lines, the queue) as applyMode wants them: at once, or while a switch
-// is staged, kept as they are and their alpha noted for the switch to play.
-- (void)setPanel:(UIView *)view alpha:(CGFloat)alpha {
-    if (_staging) {
-        [_stagedAlphas setObject:@(alpha) forKey:view];
-        return;
-    }
-    view.alpha = alpha;
-}
-
-// A switch between the player, the lines and the queue, as the Music app's: what goes fades out quickly and is gone
-// before what comes fades in, so the two are never drawn over each other, while the head and the column move on the
-// layout's spring (its owner, 2026-11-06: the crossfade had the lines over the controls and was over in a few frames).
-// The controls come back with the switch, and setControlsShown: lays the column out too, so the staging starts before it.
+// A switch between the player, the lines and the queue: one crossfade on the layout's spring, the head moving with it,
+// as it was before the switch was staged (its owner's recordings, 2026-11-06: the 12:51 build's was the smoother).
 - (void)switchColumnAnimated:(BOOL)animated {
-    void (^layout)(void) = ^{
+    [self setControlsShown:YES];
+    void (^change)(void) = ^{
         [self.view setNeedsLayout];
         [self.view layoutIfNeeded];
     };
-    if (!animated || !self.view.window || SGRReduceMotion()) {
-        [self setControlsShown:YES];
-        if (animated && self.view.window) SGRAnimateLayout(self.view, layout, nil);
-        else layout();
-        return;
-    }
-    _staging = YES;
-    _stagedAlphas = [NSMapTable strongToStrongObjectsMapTable];
-    [self setControlsShown:YES];
-    SGRAnimate(SGRMotionLayout, layout, nil);
-    _staging = NO;
-    NSMapTable<UIView *, NSNumber *> *targets = _stagedAlphas;
-    _stagedAlphas = nil;
-    NSMutableArray<UIView *> *going = [NSMutableArray array], *coming = [NSMutableArray array];
-    for (UIView *view in targets) {
-        CGFloat target = [targets objectForKey:view].doubleValue;
-        if (target < view.alpha) [going addObject:view];
-        else if (target > view.alpha) [coming addObject:view];
-    }
-    UIViewAnimationOptions options = UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState;
-    NSTimeInterval comingDelay = going.count ? kSwitchOut * 0.8 : 0;
-    [UIView animateWithDuration:kSwitchOut delay:0 options:options | UIViewAnimationOptionCurveEaseIn animations:^{
-        for (UIView *view in going) view.alpha = [targets objectForKey:view].doubleValue;
-    } completion:nil];
-    [UIView animateWithDuration:kSwitchIn delay:comingDelay options:options | UIViewAnimationOptionCurveEaseOut animations:^{
-        for (UIView *view in coming) view.alpha = [targets objectForKey:view].doubleValue;
-    } completion:nil];
-    // Movement, as the portrait page's switch has in its cover and title: what goes lifts a little as it fades, what
-    // comes drifts up into place. Additive animations on the layer alone, so they never touch a frame layout sets.
-    CFTimeInterval now = CACurrentMediaTime();
-    for (UIView *view in going) [self drift:view from:0 to:-kSwitchDrift / 2 at:now duration:kSwitchOut];
-    for (UIView *view in coming) [self drift:view from:kSwitchDrift to:0 at:now + comingDelay duration:kSwitchIn + 0.12];
-}
-
-- (void)drift:(UIView *)view from:(CGFloat)from to:(CGFloat)to at:(CFTimeInterval)start duration:(NSTimeInterval)duration {
-    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
-    drift.fromValue = @(from);
-    drift.toValue = @(to);
-    drift.additive = YES;
-    drift.beginTime = start;
-    drift.duration = duration;
-    drift.fillMode = kCAFillModeBackwards;
-    drift.timingFunction = [CAMediaTimingFunction functionWithControlPoints:0.2 :0.8 :0.2 :1];
-    [view.layer addAnimation:drift forKey:@"sg.switchDrift"];
+    if (animated && self.view.window) SGRAnimateLayout(self.view, change, nil);
+    else change();
 }
 
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated {
@@ -1292,6 +1233,15 @@ static NSString *landscapeTime(double seconds) {
 }
 
 - (void)setControlsShown:(BOOL)shown {
+    // Already up: the clock starts over and nothing is laid out again. A second layout here, on the response's quick
+    // curve, ran over a switch's spring and had it over in a few frames (its owner's recordings, 2026-11-06).
+    if (shown && !_resting && !_shield.superview) {
+        [_rest invalidate];
+        _rest = nil;
+        _hide.enabled = YES;
+        [self restartRest];
+        return;
+    }
     [_rest invalidate];
     _rest = nil;
     _hide.enabled = shown;

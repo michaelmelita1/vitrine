@@ -11,12 +11,6 @@
 UIColor *SGRAccentColor(void);   // nil while Spotify's own green is kept
 NSInteger SGRAccentRGB(void);    // the color in effect, 0xRRGGBB, Spotify's green included
 
-// Plain checkmark (SGRPlainCheck.x): a saved song's circled tick as a plain checkmark in the accent. Off until switched
-// on, read at launch.
-#define SGRKeyPlainCheck @"spotifyglass.redesign.plainCheck"
-BOOL SGRPlainCheckOn(void);
-// The plain checkmark's view, a template image, told by this identifier.
-#define SGRPlainCheckIdentifier @"spotifyglass.plainCheck"
 
 @class SGModRow;
 NSArray<SGModRow *> *SGRAppearanceRows(void);   // the accent color, for the Appearance page

@@ -29,6 +29,8 @@
 #import "Home.h"
 
 static const CGFloat kCardShare = 0.6, kFooter = 76, kSmallest = 80, kHeading = 40;
+// Kept over the cards with the heading gone, so the page header's profile pill does not touch them (its owner, 2026-11-06).
+static const CGFloat kTopGap = 12;
 // A card this wide or wider is one drawn large: Spotify's widest is 153.
 static const CGFloat kLargeCard = 200;
 static const CGFloat kFooterTop = 12, kFooterGap = 2;
@@ -70,7 +72,7 @@ static CGFloat targetWidth(void) {
 // section's header is a boundary item (kind UICollectionElementKindSectionHeader, 39pt tall over the cards on
 // 9.1.90, extending the section); it is made again not extending the section, so it takes no room and lies over the
 // cards' top instead, where it stays in the shelf's visible rect, and so alive with the Show all the header's menu
-// offers, transparent and without touches (the shelf's layout pass). The section's top inset goes the same way. What
+// offers, transparent and without touches (the shelf's layout pass). The section's top inset becomes kTopGap. What
 // they took together is the band the shelf's cell loses (kOffsetKey, read as the cell is measured).
 static void headingAside(NSCollectionLayoutSection *made, UICollectionViewLayout *layout) {
     NSMutableArray<NSCollectionLayoutBoundarySupplementaryItem *> *items = [NSMutableArray array];
@@ -91,8 +93,9 @@ static void headingAside(NSCollectionLayoutSection *made, UICollectionViewLayout
     }
     made.boundarySupplementaryItems = items;
     NSDirectionalEdgeInsets insets = made.contentInsets;
-    insets.top = 0;
+    insets.top = kTopGap;
     made.contentInsets = insets;
+    band -= kTopGap;
     if (layout) objc_setAssociatedObject(layout, &kOffsetKey, band > 0 ? @(band) : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 

@@ -21,20 +21,10 @@
 // unset or 0 takes whatever translation the source has.
 #define SGKeyLyricsTranslationLanguage @"spotifyglass.lyricsTranslationLanguage"
 
-// A page a credit names someone on: "Uploader: name" and the address it opens.
-@interface SGLyricsLink : NSObject
-@property (nonatomic, copy) NSString *title;
-@property (nonatomic, copy) NSURL *url;
-@end
-
 // What a source answers with, and what the chain merges several of into one.
 @interface SGLyricsResult : NSObject
 // What the credit names: the source's name, unless it gave a fuller credit of its own.
 @property (nonatomic, copy) NSString *provider;
-// Who made the lines, linked from the credit; and whether the source's terms ask for the credit to
-// show wherever its lines do, Show source or not.
-@property (nonatomic, copy) NSArray<SGLyricsLink *> *creditLinks;
-@property (nonatomic) BOOL creditRequired;
 // The source of the text Spotify's own page shows, when it is not the one the lines came from.
 @property (nonatomic, copy) NSString *pageProvider;
 @property (nonatomic) BOOL synced;                // the lines have starts of their own
@@ -112,13 +102,6 @@ extern NSString *const SGLyricsOwnRequestKey;
 // The name of the source the lines shown for the track came from, nil until they arrive.
 NSString *SGLyricsCreditFor(NSString *trackID);
 void SGLyricsSetCredit(NSString *trackID, NSString *name);
-// What the walk learned of a credit, by its text: whether it must show, and the links it carries.
-// SGLyricsCreditLinks takes the credit or any text holding it, as Spotify's "Lyrics provided by ..."
-// does. Main queue.
-BOOL SGLyricsCreditRequired(NSString *credit);
-NSArray<SGLyricsLink *> *SGLyricsCreditLinks(NSString *text);
-// Opens one link at once; two or more as an action sheet held to `from`.
-void SGLyricsOpenCreditLinks(NSArray<SGLyricsLink *> *links, UIView *from);
 // Turns an install's old Musixmatch switches into an order. Called once, before anything reads one.
 void SGLyricsMigrateLegacyKeys(void);
 
@@ -178,7 +161,6 @@ SGLyricsResult *SGMusixmatchRichsyncResult(id body);
 extern SGLyricsAsk SGUnisonAsk;
 extern SGLyricsAsk SGNetEaseAsk;
 extern SGLyricsAsk SGLrcLibAsk;
-extern SGLyricsAsk SGSpicyLyricsAsk;
 extern SGLyricsAsk SGQQMusicAsk;
 extern SGLyricsAsk SGKuGouAsk;
 extern SGLyricsAsk SGGeniusAsk;
@@ -226,18 +208,6 @@ NSInteger SGLyricsSongRank(NSString *title, NSString *artist, NSString *songTitl
 NSDictionary<NSString *, NSString *> *SGGeniusSearchQuery(NSString *title, NSString *artist);
 NSNumber *SGGeniusSongIn(NSDictionary *response, NSString *title, NSString *artist);
 
-// SpicyLyrics.m. Its key in the order; whether the user's own API key is in the Keychain; what keeps
-// it from answering, for its row on the sources page ("Needs a key", why the key was refused), nil
-// while nothing does; the Lyrics page's row that sets or removes the key; and an API response as
-// lines, nil when it has none.
-extern NSString *const SGSpicyLyricsKey;
-BOOL SGSpicyLyricsKeySet(void);
-// Removes the key from the Keychain (Mod > Clear Keychain).
-void SGSpicyLyricsForgetKey(void);
-NSString *SGSpicyLyricsStatus(void);
-@class SGModRow;
-SGModRow *SGSpicyLyricsKeyRow(void);
-SGLyricsResult *SGSpicyLyricsResult(id root);
 
 UIViewController *SGLyricsSourcesPage(void);   // the ordered list on the Lyrics page
 

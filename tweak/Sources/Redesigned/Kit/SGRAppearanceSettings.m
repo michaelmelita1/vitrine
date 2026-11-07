@@ -40,7 +40,6 @@ NSArray<SGModRow *> *SGRAppearanceRows(void) {
     return @[
         SGWithSymbol(menu, @"paintpalette"),
         SGWithSymbol(colour, @"eyedropper"),
-        SGWithSymbol(SGOptionRow(@"Plain checkmark", @"A saved song's tick without its circle, in the accent", SGRKeyPlainCheck), @"checkmark"),
         SGWithSymbol(SGSwitchRow(@"Full bleed covers", @"Album and playlist covers across the top. Off, a square cover; "
                                  @"an animated cover still fills the top", SGRKeyFullBleedCovers), @"photo"),
     ];

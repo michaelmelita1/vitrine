@@ -95,13 +95,14 @@ UIImageView *SGRCreatorPicture(UIView *root) {
 
     _shuffle = [[SGRMirrorButton alloc] initWithFrame:CGRectZero];
     _shuffle.fallbackGlyph = [UIImage systemImageNamed:@"shuffle"];
-    // White like the buttons beside it while off -- Spotify's off gray read as a disabled button next to the
-    // white download (issue #65) -- and the accent while on, so its state still shows.
+    // White like the buttons beside it, on or off -- Spotify's off gray read as a disabled button next to the white
+    // download (issue #65), and its owner wants no accent on it (2026-11-07): on shows as a lighter circle (neutralFill).
     _shuffle.glyphColor = SGRPrimary();
-    _shuffle.onGlyphColor = SGRAccent();
+    _shuffle.onGlyphColor = SGRPrimary();
     _play = [[SGRPlayCapsule alloc] initWithFrame:CGRectZero];
     _play.fillColor = UIColor.whiteColor;
     _trailing = [[SGRMirrorButton alloc] initWithFrame:CGRectZero];
+    _shuffle.neutralFill = _trailing.neutralFill = YES;
     for (UIView *button in @[_shuffle, _play, _trailing]) {
         button.hidden = YES;
         [self addSubview:button];

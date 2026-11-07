@@ -38,7 +38,7 @@ static const CGFloat kUnderlineDrop = 1, kUnderlineWidth = 2, kUnderlineAlpha = 
 // The line naming the source, under the lyrics, which fade out above it and the buttons beside it. It
 // wraps onto a second line rather than run under the buttons beside it, and a tap this far around it
 // opens the pages it links to.
-static const CGFloat kCreditSize = 12, kCreditGap = 12, kCreditSlop = 8;
+static const CGFloat kCreditSize = 12, kCreditGap = 12;
 // The button for the pronunciation and the translation, in the bottom leading corner as Apple Music
 // has it, and the gap between it and the credit beside it. The translate glyph is half again as wide as the
 // mic's across from it, so it is drawn smaller to weigh the same: 14 pt is about the mic's 17 pt in area.
@@ -1299,10 +1299,8 @@ typedef struct {
 } SGRKaraokeBreak;
 
 @interface SGRCreditLabel : UILabel
-@property (nonatomic, copy) BOOL (^activate)(void);
 @end
 @implementation SGRCreditLabel
-- (BOOL)accessibilityActivate { return self.activate ? self.activate() : NO; }
 @end
 
 @interface SGRKaraokeView () <UIScrollViewDelegate, SGPlayerStateObserver>
@@ -1363,7 +1361,6 @@ typedef struct {
     CAGradientLayer *_fade;
     SGRCreditLabel *_credit;
     NSString *_creditSource;   // the source the credit was settled on, nil until the lyrics name one
-    NSArray<SGLyricsLink *> *_creditLinks;
     CGFloat _fontSize, _margin, _lineGap, _blurPerLine, _maxBlur;
     BOOL _crediting;   // Show source, read once: the page asks for the source on every frame until it has one
     double _clock;
@@ -1412,13 +1409,6 @@ typedef struct {
     _crediting = SGFlag(SGKeyLyricsCredit, NO);
     _sweepsEstimates = SGFlag(SGKeyLyricsSimulateWords, NO);
     [_scroll addSubview:_credit];
-    __weak SGRKaraokeView *weakSelf = self;
-    _credit.activate = ^BOOL {
-        SGRKaraokeView *page = weakSelf;
-        if (!page || !page->_creditLinks.count) return NO;
-        SGLyricsOpenCreditLinks(page->_creditLinks, page->_credit);
-        return YES;
-    };
     for (NSNotificationName name in @[UIContentSizeCategoryDidChangeNotification, UIAccessibilityDarkerSystemColorsStatusDidChangeNotification])
         [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(creditStyleChanged) name:name object:nil];
     _sing = [SGRSingButton new];
@@ -1524,10 +1514,6 @@ typedef struct {
     if (_extrasBox && !_extrasBox.hidden && CGRectContainsPoint(_extrasBox.frame, point)) return nil;
     if (_sing.userInteractionEnabled && [_sing pointInside:[self convertPoint:point toView:_sing] withEvent:nil]) return nil;
     CGPoint inScroll = [self convertPoint:point toView:_scroll];
-    if (_creditLinks.count && !_credit.hidden
-        && CGRectContainsPoint(CGRectInset(_credit.frame, -kCreditSlop, -MAX(kCreditSlop, (44 - _credit.frame.size.height) / 2)), inScroll)) {
-        return _credit;
-    }
     for (SGRKaraokeLineView *view in _shown.allValues) {
         CGRect target = view.bubbleTarget;
         if (CGRectIsNull(target) || !CGRectContainsPoint(target, [_scroll convertPoint:inScroll toView:view])) continue;
@@ -1552,8 +1538,7 @@ typedef struct {
     [self stir];
     BOOL explains;
     UIView *target = [self tapTargetAt:[tap locationInView:self] explains:&explains];
-    if (target == _credit) SGLyricsOpenCreditLinks(_creditLinks, _credit);
-    else if (explains) [self explainLine:(SGRKaraokeLineView *)target];
+    if (explains) [self explainLine:(SGRKaraokeLineView *)target];
     else if (target) [self seekToLine:((SGRKaraokeLineView *)target).line];
 }
 
@@ -2414,13 +2399,11 @@ static BOOL anyUntranslated(NSArray<SGKaraokeLine *> *lines) {
     _dots.frame = CGRectMake(_margin, top, _builtWidth - 2 * _margin, _dots.bounds.size.height);
 }
 
-// A credit the source's terms require shows whatever Show source says (Shared/LyricsSources/SpicyLyrics.m).
+// Under the last line while Show source is on.
 - (void)creditTo:(NSString *)source {
     _creditSource = source;
-    BOOL shown = source.length && (_crediting || SGLyricsCreditRequired(source));
+    BOOL shown = source.length && _crediting;
     NSString *text = shown ? [NSString stringWithFormat:@"Lyrics from %@", source] : nil;
-    _creditLinks = shown ? SGLyricsCreditLinks(source) : nil;
-    _credit.accessibilityTraits = _creditLinks.count ? UIAccessibilityTraitLink : UIAccessibilityTraitStaticText;
     if (text == _credit.text || [text isEqualToString:_credit.text]) return;
     _credit.text = text;
     _credit.hidden = !_showing || !text.length;

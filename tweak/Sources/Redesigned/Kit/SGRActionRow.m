@@ -190,6 +190,7 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
 }
 
 @implementation SGRMirrorButton {
+    BOOL _neutralOn;   // Spotify's button is on, for a neutral one
     UIImageView *_glyph;
     __weak UIImageView *_watchedGlyph;
     // Spotify's own image, as it was taken: what the copy is compared against, since a copy re-rendered as
@@ -231,10 +232,37 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
         ((UIView *)objc_getAssociatedObject(self, &kMirrorGlassKey)).hidden = YES;
         return;
     }
-    SGRGlassInside(self, &kMirrorGlassKey, SGRGlassCircleSize);
+    UIView *shape = SGRGlassInside(self, &kMirrorGlassKey, SGRGlassCircleSize);
+    [self sgr_keepNeutralIn:shape];
     _glyph.frame = CGRectMake(round((bounds.size.width - kMirrorGlyph) / 2), round((bounds.size.height - kMirrorGlyph) / 2),
                               kMirrorGlyph, kMirrorGlyph);
     _download.frame = _glyph.frame;
+}
+
+// The neutral film, in the glass's own content so its corners clip with it.
+- (void)sgr_keepNeutralIn:(UIView *)shape {
+    static char kNeutralKey;
+    UIView *film = objc_getAssociatedObject(self, &kNeutralKey);
+    if (!self.neutralFill || !shape) {
+        film.hidden = YES;
+        return;
+    }
+    UIView *content = [shape isKindOfClass:UIVisualEffectView.class] ? ((UIVisualEffectView *)shape).contentView : shape;
+    if (!film) {
+        film = [UIView new];
+        film.userInteractionEnabled = NO;
+        film.layer.cornerCurve = kCACornerCurveContinuous;
+        objc_setAssociatedObject(self, &kNeutralKey, film, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    UIColor *fill = _neutralOn ? [UIColor colorWithWhite:0.45 alpha:0.8] : [UIColor colorWithWhite:0.2 alpha:0.72];
+    if (![film.backgroundColor isEqual:fill]) film.backgroundColor = fill;
+    film.hidden = NO;
+    if (film.superview != content) [content insertSubview:film atIndex:0];
+    CGRect bounds = content.bounds;
+    if (!CGRectEqualToRect(film.frame, bounds)) {
+        film.frame = bounds;
+        film.layer.cornerRadius = MIN(bounds.size.width, bounds.size.height) / 2;
+    }
 }
 
 - (void)didMoveToWindow {
@@ -380,6 +408,11 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
     // and found without keeps Spotify's colors, which are then all that tells on from off.
     BOOL hasDot = NO;
     BOOL on = self.onGlyphColor && indicatorOn(source, &hasDot);
+    // A neutral button shows it is on by a lighter circle rather than a colored glyph.
+    if (self.neutralFill && hasDot && on != _neutralOn) {
+        _neutralOn = on;
+        [self setNeedsLayout];
+    }
     UIColor *ownColor = !self.onGlyphColor ? self.glyphColor
                       : hasDot ? (on ? self.onGlyphColor : self.glyphColor ?: SGRPrimary()) : nil;
     if (glyph.image && (_takenGlyph != glyph.image || (ownColor != nil) != (_glyph.image.renderingMode == UIImageRenderingModeAlwaysTemplate))) {

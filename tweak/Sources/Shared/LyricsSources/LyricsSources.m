@@ -24,9 +24,6 @@ static NSString *const kLegacyMusixmatch = @"spotifyglass.musixmatchLyrics";
 static NSString *const kLegacyAllTracks = @"spotifyglass.musixmatchAllTracks";
 static NSString *const kLegacyNetEase = @"spotifyglass.neteaseWordTiming";
 
-@implementation SGLyricsLink
-@end
-
 @implementation SGLyricsResult
 @end
 
@@ -184,7 +181,7 @@ NSArray<SGLyricsProvider *> *SGLyricsAllProviders(void) {
             provider.detail = detail;
             // A source that matches by Spotify's own track id has everything it needs from the
             // start; the rest wait for the player to name the track before they can search.
-            provider.needsName = ![key isEqualToString:@"musixmatch"] && ![key isEqualToString:SGSpicyLyricsKey];
+            provider.needsName = ![key isEqualToString:@"musixmatch"];
             provider.untimed = [key isEqualToString:@"genius"];
             provider.ask = ask;
             return provider;
@@ -195,7 +192,6 @@ NSArray<SGLyricsProvider *> *SGLyricsAllProviders(void) {
             make(@"unison", @"Unison", @"Hand-timed, few tracks", SGUnisonAsk),
             make(@"netease", @"NetEase", @"Word timing, censored", SGNetEaseAsk),
             make(@"lrclib", @"LRCLIB", @"Line timing, open fallback", SGLrcLibAsk),
-            make(SGSpicyLyricsKey, @"Spicy Lyrics", @"Community word syncs, your own key", SGSpicyLyricsAsk),
             make(@"qqmusic", @"QQ Music", @"Line timing, Chinese catalog", SGQQMusicAsk),
             make(@"kugou", @"KuGou", @"Word timing, Chinese catalog", SGKuGouAsk),
             make(@"genius", @"Genius", @"Untimed, when no other has lyrics", SGGeniusAsk),
@@ -222,9 +218,8 @@ static NSArray<NSString *> *fromLegacyKeys(void) {
 
 // With nothing stored and nothing to carry over, every source is on: word timing ahead of line timing, the two Chinese catalogs once the rest have missed, and Genius's untimed
 // words under everything.
-// Spicy Lyrics passes straight on without its key.
 static NSArray<NSString *> *defaultOrder(void) {
-    return @[SGSpicyLyricsKey, @"binilyrics", @"musixmatch", @"unison", @"netease", @"lrclib", @"qqmusic", @"kugou", @"genius"];
+    return @[@"binilyrics", @"musixmatch", @"unison", @"netease", @"lrclib", @"qqmusic", @"kugou", @"genius"];
 }
 
 NSArray<NSString *> *SGLyricsOrder(void) {
@@ -333,52 +328,6 @@ static const NSTimeInterval kNameWait = 1.5, kNamePoll = 0.1;
 
 static BOOL named(SGLyricsQuery *query) {
     return query.title.length && query.artist.length;
-}
-
-// The credits that carry links or must show, by their text, as their sources answered. Main queue.
-static NSMutableDictionary<NSString *, SGLyricsResult *> *sg_noted;
-static const NSUInteger kNotedCredits = 100;
-
-static void noteCredit(SGLyricsResult *result) {
-    if (!result.provider.length || !(result.creditRequired || result.creditLinks.count)) return;
-    if (!sg_noted) sg_noted = [NSMutableDictionary dictionary];
-    if (sg_noted.count >= kNotedCredits) [sg_noted removeAllObjects];
-    sg_noted[result.provider] = result;
-}
-
-BOOL SGLyricsCreditRequired(NSString *credit) {
-    return credit && sg_noted[credit].creditRequired;
-}
-
-NSArray<SGLyricsLink *> *SGLyricsCreditLinks(NSString *text) {
-    if (!text.length) return nil;
-    SGLyricsResult *exact = sg_noted[text];
-    if (exact) return exact.creditLinks;
-    // The longest credit the text holds, so "Spicy Lyrics, synced by a" is not read as a shorter one.
-    SGLyricsResult *found = nil;
-    for (NSString *credit in sg_noted) {
-        if ([text containsString:credit] && credit.length > found.provider.length) found = sg_noted[credit];
-    }
-    return found.creditLinks;
-}
-
-void SGLyricsOpenCreditLinks(NSArray<SGLyricsLink *> *links, UIView *from) {
-    if (!links.count) return;
-    if (links.count == 1) {
-        [UIApplication.sharedApplication openURL:links.firstObject.url options:@{} completionHandler:nil];
-        return;
-    }
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    for (SGLyricsLink *link in links) {
-        NSURL *url = link.url;
-        [sheet addAction:[UIAlertAction actionWithTitle:link.title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    sheet.popoverPresentationController.sourceView = from;
-    sheet.popoverPresentationController.sourceRect = from.bounds;
-    [SGTopController() presentViewController:sheet animated:YES completion:nil];
 }
 
 // One walk down the order for one track.
@@ -495,7 +444,6 @@ static void step(SGLyricsWalk *walk) {
     NSUInteger failures = atomic_load(&sg_failures);
     provider.ask(query, ^(SGLyricsResult *fresh) {
         learnFrom(query, fresh);
-        noteCredit(fresh);
         // Instrumental counts as no lines here; a failed request does not, as the server may only be busy.
         if ([provider.key isEqualToString:walk.picked] && !fresh.karaokeLines.count && atomic_load(&sg_failures) == failures) {
             SGLyricsDropChoice(query.trackID, walk.picked);
@@ -697,9 +645,7 @@ void SGLyricsMigrateLegacyKeys(void) {
 UIViewController *SGLyricsSourcesPage(void) {
     NSMutableArray<SGSource *> *all = [NSMutableArray array];
     for (SGLyricsProvider *provider in SGLyricsAllProviders()) {
-        // The page is made on every open, so a key refused since the last one says so here.
-        NSString *detail = [provider.key isEqualToString:SGSpicyLyricsKey] ? SGSpicyLyricsStatus() ?: provider.detail : provider.detail;
-        [all addObject:[SGSource sourceWithKey:provider.key name:provider.name detail:detail]];
+        [all addObject:[SGSource sourceWithKey:provider.key name:provider.name detail:provider.detail]];
     }
     NSString *note = SGFlag(SGKeyLyricsPreferWordTiming, NO)
         ? @"Asked top to bottom until one has word timing. Sources get only the track, never your account."
@@ -726,7 +672,6 @@ void SGLyricsKeepChosen(NSString *trackID, SGLyricsResult *result) {
         result.texts = texts;
         result.synced = SGKaraokeLinesTiming(result.karaokeLines) != SGKaraokeTimingNone;
     }
-    noteCredit(result);
     result.picked = YES;
     if (sg_kept.count >= kKeptTracks) [sg_kept removeAllObjects];
     sg_kept[trackID] = result;

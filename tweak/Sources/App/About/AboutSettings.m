@@ -35,11 +35,10 @@ static void confirmReset(void) {
 // Reset all leaves the Keychain alone, so a key outlives a reset; this takes every item Vitrine keeps there.
 static void confirmClearKeychain(void) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Clear Keychain?"
-                                                                  message:@"The Gemini, OpenAI-compatible and Anthropic API keys, the OpenAI-compatible server and the Spicy Lyrics key are removed from this iPhone. Settings stay as they are."
+                                                                  message:@"The Gemini, OpenAI-compatible and Anthropic API keys, and the OpenAI-compatible server are removed from this iPhone. Settings stay as they are."
                                                            preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Clear Keychain" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         SGAIForgetKeys();
-        SGSpicyLyricsForgetKey();
         SGLog(@"reset: keychain cleared");
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];

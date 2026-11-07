@@ -121,12 +121,7 @@ Shared:
                   pronunciation of a line, each keyed to the line by its itunes:key or lrc:key, the pronunciation
                   timed word by word (the translation taken in the Lyrics page's language); Musixmatch.m, matched by
                   Spotify's track id with an anonymous token, word timed where it has richsync; NetEase.m, word timing from yrc for what the others only line time; LrcLib.m, open and
-                  keyless and timed by the line, by the word where a record carries a Lyricsfile (Lyricsfile.m reads its YAML), the floor under the rest; its search answers with whole songs, so only a record that is the track (SongMatch.m) can win. SpicyLyrics.m, Spicy Lyrics' Developer Platform
-                  by track id on the user's own publishable key (Keychain), syllable timed where it has a sync, with
-                  its pronunciations and translations; its credit, which its terms require, shows whatever Show source
-                  says and opens the uploader's and maker's pages from a tap, its answers and misses are
-                  kept per track, a rate limit is waited out and a refused key is left for 10 min, its reason on the
-                  source's row; checked on the Mac against harness/spicy-lyrics/. QQMusic.m (line timed LRC) and KuGou.m (word timed KRC, unpacked with
+                  keyless and timed by the line, by the word where a record carries a Lyricsfile (Lyricsfile.m reads its YAML), the floor under the rest; its search answers with whole songs, so only a record that is the track (SongMatch.m) can win. QQMusic.m (line timed LRC) and KuGou.m (word timed KRC, unpacked with
                   zlib and read by NetEase.m's parser) for Chinese and other Asian songs, matched by title, singer
                   and length; checked on the Mac against harness/lyrics-sources/. Genius.m, last: untimed words for a track no
                   other source has, the song found by the search the line meanings share (SGGeniusSongIn in SongMatch.m, whose match LRCLIB's search shares too)
@@ -618,7 +613,7 @@ App:
 Every key a feature stores starts with `spotifyglass.`, whatever it holds: Reset all settings on
 the Mod page removes by that prefix and has no list to keep up to date. It leaves `SGKeyStock` behind,
 which makes every unset switch read off, so a reset is stock Spotify whatever switches exist. The API keys
-(each AI translator's, the OpenAI-compatible server, Spicy Lyrics') live in the Keychain, which a reset leaves
+(each AI translator's, the OpenAI-compatible server) live in the Keychain, which a reset leaves
 alone; Clear Keychain beside it deletes each by its own service and keeps the settings.
 
 A hook reads its switch when it runs (`SGEnabled`, `SGHidden`, `SGFlag` from Core/SGPrefs.h), so a

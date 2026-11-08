@@ -345,10 +345,7 @@ static void lookUp(NSString *key, void (^done)(id value), void (^look)(void (^an
 static NSString *videoOf(NSDictionary *editorialVideo, SGMotionShape shape) {
     NSArray<NSString *> *names = shape == SGMotionTall
         ? @[@"motionTallVideo3x4", @"motionDetailTall", @"motionSquareVideo1x1", @"motionDetailSquare"]
-        // With Native redesign, an album with only a tall clip still moves in its square, cropped to it (its owner,
-        // 2026-11-08).
-        : SGNativeRedesign() ? @[@"motionSquareVideo1x1", @"motionDetailSquare", @"motionTallVideo3x4", @"motionDetailTall"]
-                             : @[@"motionSquareVideo1x1", @"motionDetailSquare"];
+        : @[@"motionSquareVideo1x1", @"motionDetailSquare"];
     for (NSString *name in names) {
         id video = dig(editorialVideo, [name stringByAppendingString:@"/video"]);
         if ([video isKindOfClass:NSString.class] && [video length]) return video;

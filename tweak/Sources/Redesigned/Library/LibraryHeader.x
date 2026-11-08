@@ -264,7 +264,6 @@ static void clearChips(UIView *page, UIView *header) {
     list.contentInset = inset;
     objc_setAssociatedObject(list, &kInsetAddedKey, @(want), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (atRest) list.contentOffset = CGPointMake(list.contentOffset.x, -list.adjustedContentInset.top);
-    SGLog(@"redesign library: list inset %.0fpt clear of the chips", want);
 }
 
 static void layoutRoot(UIView *page) {

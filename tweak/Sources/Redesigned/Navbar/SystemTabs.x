@@ -1076,11 +1076,6 @@ static void sgr_fillChain(UIView *outer) {
         UIView *card = child.viewIfLoaded;
         if (card.superview != host) continue;
         if (!CGRectEqualToRect(card.frame, host.bounds)) {
-            static BOOL logged;
-            if (!logged) {
-                logged = YES;
-                SGLog(@"redesign tabs: Spotify's card %@ filled to %@", NSStringFromCGRect(card.frame), NSStringFromCGRect(host.bounds));
-            }
             card.frame = host.bounds;
         }
         if (card.layer.cornerRadius > 0) card.layer.cornerRadius = 0;
@@ -1127,7 +1122,6 @@ static void sgr_fillChain(UIView *outer) {
     if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl14InnerContainer")) %init(SGRFullBleedInner);
     if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl15MainUIContainer")) %init(SGRFullBleedMain);
     if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl23PrimaryContentContainer")) %init(SGRFullBleedCard);
-    else SGLog(@"redesign tabs: no PrimaryContentContainer, Spotify's card left as it is");
 }
 
 void SGRRefreshMiniPlayer(void) {

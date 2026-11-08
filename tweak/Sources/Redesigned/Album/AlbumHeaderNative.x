@@ -291,7 +291,6 @@ static void *kReadyContext = &kReadyContext;
     [self setNeedsLayout];
     [self layoutIfNeeded];
     [self sgr_updateMotion];
-    SGLog(@"redesign album: animated cover %@", file.lastPathComponent);
 }
 
 - (void)sgr_dropMotion {
@@ -387,8 +386,6 @@ static void *kReadyContext = &kReadyContext;
     _shadow.shadowRadius = found.shadowRadius;
     _shadow.shadowOffset = found.shadowOffset;
     [CATransaction commit];
-    SGLog(@"redesign album: square shadow from %@, opacity %.2f radius %.1f offset %@", NSStringFromClass(found.delegate.class),
-          found.shadowOpacity, found.shadowRadius, NSStringFromCGSize(found.shadowOffset));
     [self setNeedsLayout];
 }
 
@@ -410,11 +407,6 @@ static void *kReadyContext = &kReadyContext;
     _picture.image = image;
     // The page's field takes its color from the same picture.
     SGRAlbumSetArtwork(self, image);
-    static BOOL logged;
-    if (late && !logged) {
-        logged = YES;
-        SGLog(@"redesign album: the cover landed after the header had laid out; the hero took it");
-    }
 }
 
 @end
@@ -479,7 +471,6 @@ static void applyHero(UIView *header, UIView *cover, CGFloat bottom, CGRect wide
     if (bottom > height + 0.5) {
         height = round(bottom);
         objc_setAssociatedObject(hero, &kHeroHeightKey, @(height), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        SGLog(@"redesign album: hero %.0fpt across the top of the header", height);
     }
     if (height < kMinHero) return;
     hero.restHeight = height;
@@ -634,7 +625,6 @@ static void sizeHeader(UIView *header, CGFloat height) {
     if (height < 1) {
         if (held.active) {
             held.active = NO;
-            SGLog(@"redesign album: header back to Spotify's height");
         }
         return;
     }
@@ -645,7 +635,6 @@ static void sizeHeader(UIView *header, CGFloat height) {
     if (held.active && fabs(held.constant - height) < 0.5) return;
     held.constant = round(height);
     held.active = YES;
-    SGLog(@"redesign album: header held to %.0fpt sideways", height);
 }
 
 // The top of the page as it scrolls (its owner, 2026-11-08): the Music app's -- iOS's soft fade across the status bar
@@ -779,13 +768,6 @@ static SGRHeaderInfo *applyInfo(UIView *header, UIView *page, CGRect wide, NSStr
         if (weakHeader && weakPage) applyHeader(weakHeader, weakPage);
     });
 
-    static BOOL logged;
-    if (!logged && header.window && title) {
-        logged = YES;
-        SGLog(@"redesign album: own block \"%@\" by %@, \"%@\"; shuffle %@, play %@, %@", firstText(title),
-              firstText(parent) ?: trimmed(parent.accessibilityLabel) ?: @"nobody", metadataText(metadata) ?: @"no metadata", shuffle ? @"found" : @"missing",
-              play ? @"found" : @"missing", add ? @"add" : (download ? @"download" : @"nothing on the right"));
-    }
     return info;
 }
 
@@ -879,7 +861,6 @@ static void dropNavigationBar(UIView *page) {
     hookBarState(object_getClass(hosted));
     if (!objc_getAssociatedObject(hosted, &kNoBarKey)) {
         objc_setAssociatedObject(hosted, &kNoBarKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        SGLog(@"redesign album: no navigation bar on %@", NSStringFromClass(hosted.class));
     }
     UINavigationController *nav = hosted.navigationController;
     if (nav.topViewController == hosted && !nav.navigationBarHidden && !nav.transitionCoordinator) [nav setNavigationBarHidden:YES animated:NO];
@@ -932,12 +913,6 @@ static void applyWash(UIView *page) {
             if (!SGClassNamed(v.class, @"GradientView")) continue;
             if (wash) {
                 UIColor *color = washColorOf(v);
-                static BOOL logged;
-                if (!logged) {
-                    logged = YES;
-                    SGLog(@"redesign album: Spotify's wash %@ on %@, color %@", NSStringFromClass(v.class),
-                          NSStringFromClass(v.layer.class), color ?: @"not found");
-                }
                 SGRAlbumSetSpotifyColor(page, color);
             }
             maskOut(v);
@@ -1071,7 +1046,6 @@ static void applyPage(UIView *page) {
         if (!sgr_barHooked) sgr_barHooked = [NSMutableSet set];
         [sgr_barHooked addObject:hosting];
     }
-    else SGLog(@"redesign album: no page hosting controller to ask for no bar (%@)", hosting ? @"no bar state" : @"missing");
     SGRequireClasses(@[
         @"_TtC28CreativeWorkPlatform_PageKit24CreativeWorkTemplateView",
         @"_TtC28EncoreConsumerMobile_BaseKit14PlayButtonView",

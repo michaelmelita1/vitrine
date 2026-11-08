@@ -131,8 +131,10 @@ static UIViewController *lyricsPage(void) {
         @"Every line shows this much later than the song, for Bluetooth headphones that play a little behind the lyrics. Applies at once.");
     if (redesigned) {
         [sections addObjectsFromArray:@[
-            SGSection(@"Display", @[SGRLyricsTextSizesRow(), SGLyricsWordTimingRow(), SGLyricsRomanisedRow(), SGLyricsRomanisedReplaceRow(),
-                SGRLyricsHideRow()]),
+            // Native redesign turns the player page instead, from the Player page's Landscape.
+            SGSection(@"Display", [@[SGRLyricsTextSizesRow(), SGLyricsWordTimingRow(), SGLyricsRomanisedRow(), SGLyricsRomanisedReplaceRow(),
+                SGRLyricsHideRow()] arrayByAddingObjectsFromArray:SGNativeRedesignStored() ? @[]
+                : @[SGSwitchRow(@"Landscape lyrics", @"Turn the phone with the lyrics open", SGRKeyLyricsLandscape)]]),
             timing,
             SGSection(@"Translation", [[[@[SGLyricsTranslationLanguageRow(), SGTranslateEverySongRow()] arrayByAddingObjectsFromArray:SGOnDeviceTranslatorRows()]
                                           arrayByAddingObjectsFromArray:SGAITranslatorRows()] arrayByAddingObject:SGSavedTranslationsRow()]),
@@ -188,12 +190,14 @@ UIViewController *SGPlayerSettingsPage(void) {
     // Native redesign puts these in the player page's Controls section, as switches that show them (Redesigned/Player/
     // PlayerSettings.m), so the section is not repeated here.
     if (!nativeRedesign) [sections addObject:SGSection(native ? nil : @"Hide on the player", hidden)];
-    // Landscape: the redesigned player's lyrics screen, or under Native redesign the whole app turning with the phone and
-    // the landscape player in the player page (Redesigned/Navbar/SystemTurn.m; its owner, 2026-11-06).
-    if (!native) {
-        [sections addObject:SGSection(nil, @[nativeRedesign
-            ? SGSwitchRow(@"Landscape", @"Turn the app and the player with the phone", SGRKeyLyricsLandscape)
-            : SGSwitchRow(@"Landscape lyrics", @"Turn the phone with the lyrics open", SGRKeyLyricsLandscape)])];
+    // Native redesign's landscape (Redesigned/Navbar/SystemTurn.m): the player page turns to its landscape player, and with
+    // Whole app, off until switched on, every screen turns with the phone. The redesigned player's Landscape lyrics stays on
+    // the Lyrics page.
+    if (nativeRedesign) {
+        [sections addObject:SGSection(@"Landscape", @[
+            SGSwitchRow(@"Landscape player", @"Turn the player page with the phone", SGRKeyLyricsLandscape),
+            SGOptionRow(@"Whole app", @"Home, Search, Library and every page turn too", SGRKeyLandscapeEverywhere),
+        ])];
     }
 
     [sections addObject:SGNotedSection(@"Lossless", @[

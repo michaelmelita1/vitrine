@@ -561,11 +561,13 @@ Redesigned:
                   the mod's: Share, Go to Album and Go to Artist in a row, an Artwork submenu (PlayerMenu.m's
                   SGRPlayerMenuArtwork) and the sleep timer, and More with the sound and lyrics items and the
                   concerts link; Spotify's own song menu needs its player and is not offered. The controls' spacing
-                  goes by the phone's size. Landscape (the Player page's Landscape, SGRKeyLyricsLandscape): SystemTurn.m
-                  lets the whole app turn, standing in for the Info.plist's portrait-only iPhone answer through the app
-                  delegate's -application:supportedInterfaceOrientationsForWindow: and lifting portrait-only answers of
-                  Spotify's own controllers, and the page holds SystemLandscape.m's landscape player while it is
-                  sideways: the clip mirrored and stretched past its edge under a variable blur, the title row, the
+                  goes by the phone's size. Landscape (the Player page's Landscape player, SGRKeyLyricsLandscape): SystemTurn.m
+                  lets the player page turn, and with Whole app (SGRKeyLandscapeEverywhere, off until switched on) the
+                  whole app, standing in for the Info.plist's portrait-only iPhone answer through the app delegate's
+                  -application:supportedInterfaceOrientationsForWindow: and Spotify's own controllers' answers while the
+                  turn is allowed; otherwise the delegate's and each controller's own answers are kept and called, so a
+                  screen Spotify lets turn (a video) still does. The page holds SystemLandscape.m's landscape player while
+                  it is sideways: the clip mirrored and stretched past its edge under a variable blur, the title row, the
                   controls, lyrics and the queue, each view carried across the turn both ways. With nothing
                   playing (no track for 0.6 s) the page and the mini player say Not Playing over a note
                   (SGRSystemNotPlayingArt). On a skip the last cover and clip stay up until the next ones are in (at most

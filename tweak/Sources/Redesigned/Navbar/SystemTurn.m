@@ -1,13 +1,15 @@
-// Native redesign's landscape: the whole app turns with the phone, as iOS turns any app that allows it (its owner,
-// 2026-11-06: "force the Spotify app to support landscape everywhere and just have it happen natively"), and the system
-// tab bar's player page (SystemPlayer.m) holds its landscape player (SystemLandscape.m) while it is sideways. The turn is
-// the system's own; this file only lets it happen and carries what the page shows to the landscape player.
+// Native redesign's landscape: the system tab bar's player page (SystemPlayer.m) turns with the phone and holds its
+// landscape player (SystemLandscape.m) while it is sideways, and with the Player page's Whole app (SGRKeyLandscapeEverywhere,
+// off until switched on) every screen turns, as iOS turns any app that allows it (its owner, 2026-11-06). The turn is the
+// system's own; this file only lets it happen and carries what the page shows to the landscape player.
 //
 // Spotify's iPhone Info.plist allows portrait alone. UIKit asks the app delegate's
-// -application:supportedInterfaceOrientationsForWindow: in its place, so the delegate answers every way but upside down,
-// and Spotify's own controllers that answer portrait alone for themselves are made to answer the same. The Player page's
-// Landscape switch (SGRKeyLyricsLandscape) keeps all of it portrait, and Exit Full Screen keeps it portrait until the phone
-// has stood upright.
+// -application:supportedInterfaceOrientationsForWindow: in its place, so the delegate answers every way but upside down
+// while the turn is allowed -- the player page up, or Whole app on -- and Spotify's own controllers that answer for
+// themselves answer the same then. Otherwise every one of them gives its own answer, the delegate's and each
+// controller's kept and called, so a screen Spotify lets turn (a video) still does. The Player page's Landscape player
+// switch (SGRKeyLyricsLandscape) keeps all of it portrait, and Exit Full Screen keeps it portrait until the phone has
+// stood upright.
 //
 // Threading: main thread only.
 #import <objc/runtime.h>
@@ -22,24 +24,20 @@ static __weak UIViewController *sg_embedded;
 // Shut from the landscape player (Exit Full Screen): portrait until the phone has stood upright.
 static BOOL sg_shut;
 
+// The player page up (not only set, but in a window), or Whole app on.
 static BOOL turnsSideways(void) {
-    return !sg_shut && SGEnabled(SGRKeyLyricsLandscape);
+    if (sg_shut || !SGEnabled(SGRKeyLyricsLandscape)) return NO;
+    return SGFlag(SGRKeyLandscapeEverywhere, NO) || sg_page.viewIfLoaded.window != nil;
 }
 
 #pragma mark - the answer
 
+// The delegate's own answer, or none (the Info.plist's portrait), for when the turn is not allowed.
+static UIInterfaceOrientationMask (*sg_delegateAnswer)(id, SEL, UIApplication *, UIWindow *);
+
 static UIInterfaceOrientationMask orientationsFor(id self, SEL _cmd, UIApplication *application, UIWindow *window) {
-    return turnsSideways() ? UIInterfaceOrientationMaskAllButUpsideDown : UIInterfaceOrientationMaskPortrait;
-}
-
-// Spotify's own controllers that answer portrait alone for themselves are made to answer as the delegate does, as UIKit's
-// default does on a phone: each class once, found from the windows' roots and what they present.
-static UIInterfaceOrientationMask anyWay(id self, SEL _cmd) {
-    return turnsSideways() ? UIInterfaceOrientationMaskAllButUpsideDown : UIInterfaceOrientationMaskPortrait;
-}
-
-static BOOL turnsAnyWay(id self, SEL _cmd) {
-    return YES;
+    if (turnsSideways()) return UIInterfaceOrientationMaskAllButUpsideDown;
+    return sg_delegateAnswer ? sg_delegateAnswer(self, _cmd, application, window) : UIInterfaceOrientationMaskPortrait;
 }
 
 static void unlockClass(Class cls) {
@@ -54,11 +52,17 @@ static void unlockClass(Class cls) {
         Method *methods = class_copyMethodList(c, &count);
         for (unsigned i = 0; i < count; i++) {
             SEL selector = method_getName(methods[i]);
+            // Each answers every way but upside down while the turn is allowed, and its own answer otherwise.
             if (selector == @selector(supportedInterfaceOrientations)) {
-                method_setImplementation(methods[i], (IMP)anyWay);
-                SGLog(@"system player: %@ turns now", name);
+                UIInterfaceOrientationMask (*own)(id, SEL) = (UIInterfaceOrientationMask (*)(id, SEL))method_getImplementation(methods[i]);
+                method_setImplementation(methods[i], imp_implementationWithBlock(^UIInterfaceOrientationMask(id me) {
+                    return turnsSideways() ? UIInterfaceOrientationMaskAllButUpsideDown : own(me, selector);
+                }));
             } else if (selector == @selector(shouldAutorotate)) {
-                method_setImplementation(methods[i], (IMP)turnsAnyWay);
+                BOOL (*own)(id, SEL) = (BOOL (*)(id, SEL))method_getImplementation(methods[i]);
+                method_setImplementation(methods[i], imp_implementationWithBlock(^BOOL(id me) {
+                    return turnsSideways() || own(me, selector);
+                }));
             }
         }
         free(methods);
@@ -99,7 +103,7 @@ static void answerForOrientations(void) {
     done = YES;
     SEL selector = @selector(application:supportedInterfaceOrientationsForWindow:);
     Method method = class_getInstanceMethod([delegate class], selector);
-    if (method) method_setImplementation(method, (IMP)orientationsFor);
+    if (method) sg_delegateAnswer = (UIInterfaceOrientationMask (*)(id, SEL, UIApplication *, UIWindow *))method_setImplementation(method, (IMP)orientationsFor);
     else class_addMethod([delegate class], selector, (IMP)orientationsFor, "Q@:@@");
 }
 
@@ -165,9 +169,7 @@ void SGRSystemTurnBack(void) {
     if (@available(iOS 16.0, *)) {
         if (!scene) return;
         UIWindowSceneGeometryPreferencesIOS *preferences = [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskPortrait];
-        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError *error) {
-            SGLog(@"system player: the scene did not turn back: %@", error.localizedDescription);
-        }];
+        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:nil];
     }
 }
 

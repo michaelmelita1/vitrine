@@ -63,7 +63,6 @@ BOOL SGNativeRedesign(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         on = SGRedesignedUI() && SGRedesignAvailable() && SGFlag(SGKeyNativeRedesign, NO);
-        if (on) SGLog(@"ui: native redesign");
     });
     return on;
 }

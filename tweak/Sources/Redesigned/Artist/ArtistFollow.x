@@ -162,8 +162,6 @@ static id currentProvider(void) {
 @property (nonatomic) BOOL subscribed;
 @property (nonatomic) NSInteger following;   // -1 until the first state arrives
 @property (nonatomic, copy) void (^changed)(void);
-// What the log calls the state: "follow", or "saved" for SGRCollectionWatchURI.
-@property (nonatomic, copy) NSString *what;
 @end
 
 @implementation SGRFollowWatch
@@ -197,19 +195,12 @@ static void subscribe(SGRFollowWatch *watch, id provider) {
     __weak SGRFollowWatch *weakWatch = watch;
     NSURL *uri = watch.uri;
     watch.subscribed = YES;
-    NSString *what = watch.what ?: @"follow";
-    SGLog(@"redesign artist: %@ subscribes for %@ on %@", what, uri.absoluteString, NSStringFromClass([provider class]));
     watch.token = [(id<SGRCollectionStateProvider>)provider subscribeCollectionStateForURL:uri completion:^(id state, NSError *error) {
-        if (error || ![state respondsToSelector:@selector(contains:)]) {
-            SGLog(@"redesign artist: %@ state for %@ unreadable: %@ %@", what, uri.absoluteString, [state class], error);
-            return;
-        }
-        NSInteger raw = [state respondsToSelector:@selector(rawValue)] ? [(id<SGRCollectionState>)state rawValue] : -1;
+        if (error || ![state respondsToSelector:@selector(contains:)]) return;
         BOOL following = [(id<SGRCollectionState>)state contains:saved];
         dispatch_async(dispatch_get_main_queue(), ^{
             SGRFollowWatch *current = weakWatch;
             if (!current || current.following == following) return;
-            SGLog(@"redesign kit: %@ state %ld for %@", what, (long)raw, uri.absoluteString);
             current.following = following;
             if (current.changed) current.changed();
         });
@@ -246,7 +237,6 @@ id SGRCollectionWatchURI(NSURL *uri, void (^changed)(void)) {
     if (!uri) return nil;
     SGRFollowWatch *watch = [SGRFollowWatch new];
     watch.uri = uri;
-    watch.what = @"saved";
     watch.following = -1;
     watch.changed = changed;
     id provider = currentProvider();

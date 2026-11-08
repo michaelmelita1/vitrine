@@ -159,6 +159,8 @@ UIView *SGRPlayerEncoreGlyphIn(SGRGlyphButton *button, NSString *name);
 // The lyrics turn sideways with the phone onto a landscape screen of their own (PlayerLandscape.x). On
 // until switched off. Shown or put away by hand for the harness.
 #define SGRKeyLyricsLandscape @"spotifyglass.redesign.lyrics.landscape"
+// Native redesign: the whole app turns with the phone, not only the player page. Off until switched on, read live.
+#define SGRKeyLandscapeEverywhere @"spotifyglass.redesign.landscape.everywhere"
 void SGRPlayerShowLandscape(BOOL show);
 // The playing track's lines came in, or turned out to be none: the landscape screen lays out for it.
 void SGRPlayerLandscapeLinesChanged(void);

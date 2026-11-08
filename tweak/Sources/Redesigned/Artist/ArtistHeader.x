@@ -305,7 +305,6 @@ static void holdContainer(UIView *container, CGFloat height) {
     if (held.active && fabs(held.constant - height) < 0.5) return;
     held.constant = round(height);
     held.active = YES;
-    SGLog(@"redesign artist: header held to %.0fpt sideways", height);
 }
 
 // `full` NO is the header's own pass: a step of the collapse (its height changed, its width did not) then only

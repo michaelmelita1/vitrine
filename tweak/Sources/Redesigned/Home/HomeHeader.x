@@ -502,7 +502,10 @@ static void layoutHeader(UIViewController *page) {
 
     CGFloat trailing = pillLeading - SGRGrid;
     CGFloat height = ceil(font.lineHeight);
-    CGRect frame = CGRectMake(SGRSideMargin, round(CGRectGetMidY(untransformed(stack)) - height / 2), MAX(0, trailing - SGRSideMargin), height);
+    // Sideways, in from the Dynamic Island's side by the safe area as the cards under it are, not against the screen's
+    // edge (its owner's screenshot, 2026-11-08); upright the safe area's side is 0 and this is SGRSideMargin as before.
+    CGFloat leading = SGRSideMargin + (SGNativeRedesign() ? header.safeAreaInsets.left : 0);
+    CGRect frame = CGRectMake(leading, round(CGRectGetMidY(untransformed(stack)) - height / 2), MAX(0, trailing - leading), height);
     place(title, frame);
     follow(view);
 
@@ -542,6 +545,23 @@ static void layoutHeader(UIViewController *page) {
 - (void)traitCollectionDidChange:(UITraitCollection *)previous {
     %orig;
     [((UIViewController *)self).viewIfLoaded setNeedsLayout];
+}
+
+// Home turned while it was off screen (an album was turned sideways over it) came back with the header it had upright
+// -- the title against the edge, the pill apart, the tint across part of the width -- for the first frames of the way
+// back, until a pass of its own put it right (its owner's recording, 2026-11-08). Laid out before it shows, with
+// Spotify's header at the new width first.
+- (void)viewWillAppear:(BOOL)animated {
+    %orig;
+    UIView *view = ((UIViewController *)self).viewIfLoaded;
+    if (!view || !SGNativeRedesign()) return;
+    [view setNeedsLayout];
+    [view layoutIfNeeded];
+    if (sg_header && [sg_header isDescendantOfView:view]) {
+        [sg_header setNeedsLayout];
+        [sg_header layoutIfNeeded];
+        layoutHeader((UIViewController *)self);
+    }
 }
 %end
 

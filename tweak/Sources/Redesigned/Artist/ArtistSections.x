@@ -20,6 +20,7 @@
 // cell: content squeezed to 0 breaks Spotify's required constraints on every pass (Album/AlbumSections.x).
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
+#import "Redesigned/Album/Album.h"
 #import "Artist.h"
 
 static char kSettledKey, kKindsKey, kDroppedKey;
@@ -181,6 +182,20 @@ static void logOnce(NSString *what) {
     SGLog(@"redesign artist: %@", what);
 }
 
+// The height each dropped place's content measured at, kept per list while its count holds.
+static NSMutableDictionary<NSIndexPath *, NSNumber *> *naturalsOf(UICollectionView *list) {
+    static char key, countKey;
+    NSInteger count = 0;
+    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    NSMutableDictionary *naturals = objc_getAssociatedObject(list, &key);
+    if (!naturals || [objc_getAssociatedObject(list, &countKey) integerValue] != count) {
+        naturals = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(list, &key, naturals, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(list, &countKey, @(count), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return naturals;
+}
+
 %hook _TtC12Element_List18CollectionViewCell
 - (UICollectionViewLayoutAttributes *)preferredLayoutAttributesFittingAttributes:(UICollectionViewLayoutAttributes *)attributes {
     UICollectionViewCell *cell = (UICollectionViewCell *)self;
@@ -189,7 +204,23 @@ static void logOnce(NSString *what) {
     UICollectionView *list = page ? listOf(cell) : nil;
     if (!page) {
         if (objc_getAssociatedObject(cell, &kSettledKey)) unsettle(cell);
+        // A card in a dropped section's carousel, never seen: it keeps the size it was given rather than being
+        // measured on every pass of its carousel (the album's stutter, 2026-11-08).
+        for (UIView *v = SGNativeRedesign() ? cell.superview : nil; v; v = v.superview) {
+            if (![v isKindOfClass:UICollectionViewCell.class]) continue;
+            if (objc_getAssociatedObject(v, &kSettledKey)) return [attributes copy];
+            break;
+        }
         return %orig;
+    }
+    // A place known dropped, answered from here: a 0pt cell is on screen with all the others, and the list asks
+    // each again on every pass, which Spotify measured in full each time (the album's hitch log, 2026-11-08).
+    NSNumber *known = SGNativeRedesign() ? naturalsOf(list)[attributes.indexPath] : nil;
+    if (known && [droppedOf(list) containsObject:attributes.indexPath]) {
+        settle(cell, known.doubleValue);
+        UICollectionViewLayoutAttributes *zero = [attributes copy];
+        zero.size = CGSizeMake(zero.size.width, 0);
+        return zero;
     }
     UICollectionViewLayoutAttributes *result = %orig;
     NSIndexPath *path = attributes.indexPath;
@@ -209,6 +240,7 @@ static void logOnce(NSString *what) {
         return result;
     }
     settle(cell, MAX(1, result.size.height));
+    naturalsOf(list)[path] = @(MAX(1, result.size.height));
     result.size = CGSizeMake(result.size.width, 0);
     return result;
 }

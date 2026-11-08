@@ -1024,10 +1024,97 @@ static char kRedirectedKey;
 }
 %end
 
+// Sideways, Spotify sets the whole app in a card 8pt in from every edge with 16pt corners (MainUI_TabBarUIImpl's
+// InnerContainer in its PrimaryContentContainer: the album dump of 2026-11-08), room its own landscape chrome is drawn
+// in. iOS's tab bar floats over the page instead, so the card only left black bars round every screen (its owner,
+// 2026-11-08): it fills its container again, square, after Spotify's pass. Upright Spotify does not inset it.
+// The views inside keep the card's inset size, laid out by Spotify's own containers on their passes (the page stayed
+// 940x412 in the 956x440 card, black down the right and along the bottom: 2026-11-08). Down the chain of full-size
+// containers, any that is short of its parent by no more than the card's inset is laid to its parent's bounds; run from
+// each container's pass, since each lays out the one under it again.
+static void sgr_fillChain(UIView *outer) {
+    UIWindow *window = outer.window;
+    if (!window || window.bounds.size.width <= window.bounds.size.height) return;
+    for (NSInteger depth = 0; depth < 6 && outer; depth++) {
+        UIView *inner = nil;
+        CGSize room = outer.bounds.size;
+        for (UIView *v in outer.subviews) {
+            CGRect f = v.frame;
+            CGFloat dw = room.width - f.size.width, dh = room.height - f.size.height;
+            if (CGPointEqualToPoint(f.origin, CGPointZero) && dw >= -0.5 && dh >= -0.5 && dw <= 32.5 && dh <= 32.5
+                && f.size.width > room.width * 0.8) {
+                inner = v;
+                break;
+            }
+        }
+        if (!inner) break;
+        if (!CGRectEqualToRect(inner.frame, outer.bounds)) inner.frame = outer.bounds;
+        outer = inner;
+    }
+}
+
+%group SGRFullBleedCard
+%hook _TtC19MainUI_TabBarUIImpl23PrimaryContentContainer
+- (void)viewDidLayoutSubviews {
+    %orig;
+    UIView *host = ((UIViewController *)self).view;
+    for (UIViewController *child in ((UIViewController *)self).childViewControllers) {
+        if (![NSStringFromClass(child.class) hasSuffix:@"InnerContainer"]) continue;
+        UIView *card = child.viewIfLoaded;
+        if (card.superview != host) continue;
+        if (!CGRectEqualToRect(card.frame, host.bounds)) {
+            static BOOL logged;
+            if (!logged) {
+                logged = YES;
+                SGLog(@"redesign tabs: Spotify's card %@ filled to %@", NSStringFromCGRect(card.frame), NSStringFromCGRect(host.bounds));
+            }
+            card.frame = host.bounds;
+        }
+        if (card.layer.cornerRadius > 0) card.layer.cornerRadius = 0;
+        sgr_fillChain(card);
+    }
+}
+%end
+%end
+
+%group SGRFullBleedInner
+%hook _TtC19MainUI_TabBarUIImpl14InnerContainer
+- (void)viewDidLayoutSubviews {
+    %orig;
+    sgr_fillChain(((UIViewController *)self).view);
+}
+%end
+%end
+
+%group SGRFullBleedMain
+%hook _TtC19MainUI_TabBarUIImpl15MainUIContainer
+- (void)viewDidLayoutSubviews {
+    %orig;
+    sgr_fillChain(((UIViewController *)self).view);
+}
+%end
+%end
+
+// And the tab bar container under them, which keeps the page short of the card by the room Spotify's own tab bar takes
+// (the navigation controller stayed 940x412 when the rest was 956x440: 2026-11-08).
+%group SGRFullBleedTabs
+%hook _TtC23NavigationUI_TabBarImpl19TabBarContainerImpl
+- (void)viewDidLayoutSubviews {
+    %orig;
+    sgr_fillChain(((UIViewController *)self).view);
+}
+%end
+%end
+
 %ctor {
     if (!SGRedesignedUI()) return;
     if (!SGRSystemTabsOn()) return;
     %init;
+    if (NSClassFromString(@"_TtC23NavigationUI_TabBarImpl19TabBarContainerImpl")) %init(SGRFullBleedTabs);
+    if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl14InnerContainer")) %init(SGRFullBleedInner);
+    if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl15MainUIContainer")) %init(SGRFullBleedMain);
+    if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl23PrimaryContentContainer")) %init(SGRFullBleedCard);
+    else SGLog(@"redesign tabs: no PrimaryContentContainer, Spotify's card left as it is");
 }
 
 void SGRRefreshMiniPlayer(void) {

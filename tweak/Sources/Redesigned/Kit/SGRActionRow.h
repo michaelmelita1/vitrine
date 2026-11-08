@@ -44,6 +44,14 @@
 // view, hidden while off). Spotify's own off gray read as a disabled button beside the white download
 // (issue #65). A button with no such dot keeps Spotify's colors. nil, the default, reads no dot.
 @property (nonatomic, copy) UIColor *onGlyphColor;
+// A gray film inside the glass, so the circle reads the same over any cover rather than taking its color through
+// the glass (the header's shuffle and trailing buttons; its owner, 2026-11-07), lighter while a button with onGlyphColor
+// is on. NO, the default, leaves it clear.
+@property (nonatomic) BOOL neutralFill;
+// A flat circle instead of the glass, as the Music app draws the buttons beside Play: a faint white fill, lighter
+// while the button is on, and the glyph always white, never the accent (its owner, 2026-11-08). Implies neutralFill's
+// on state. NO, the default, is the glass.
+@property (nonatomic) BOOL flat;
 // For a button that shows its state only as a word in the app's language (the artist's Follow): YES with
 // whether it is on once the state is known, from wherever the page reads it. The button then draws
 // stateOffSymbol, or stateOnSymbol in the accent color, and nothing while it answers NO. Set before the
@@ -70,6 +78,11 @@
 // `source` is Spotify's own ⋯, wherever the page keeps it; nil hides the button until one is found. Kept
 // on `page` under `key` and cheap to call again on every pass.
 SGRMirrorButton *SGRPinnedMore(UIView *page, const void *key, UIView *source);
+
+// The back button opposite it, for a page that hides iOS's navigation bar (the album: its owner, 2026-11-08, the Music
+// app's separate glass buttons and no bar): the same glass circle in the top leading corner, popping the page's
+// navigation controller. Kept on `page` under `key` and cheap to call again on every pass.
+SGRMirrorButton *SGRPinnedBack(UIView *page, const void *key);
 
 // A sheet opening within this long of a tap on a pinned ⋯ is that page's context menu.
 static const NSTimeInterval SGRPinnedMoreWindow = 3;

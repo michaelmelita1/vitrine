@@ -581,6 +581,22 @@ Redesigned:
                   that show them, on Hide on the player's keys, with Match the lyrics button) in place of Hide on the
                   player, and no Gestures, Full screen cover, Follow the cover or Split tabs rows, whose stored values are
                   kept for when it is off.
+                  Under Native redesign, sideways, Spotify's card (MainUI_TabBarUIImpl's InnerContainer, 8 pt in from every
+                  edge with 16 pt corners) and the containers in it are laid to the full screen on each of their passes
+                  (SystemTabs.x, SGRFullBleedCard), since the system bar floats over the page; Home's and Library's
+                  headers keep to the side safe areas, Library's list is inset clear of its chips, and Home lays its header
+                  out before it reappears. The album and artist pages are the Music app's (Album/AlbumHeaderNative.x in
+                  place of AlbumHeader.x, which keeps the redesign's album header while the switch is off; ArtistHeader.x
+                  behind the same switch): the cover a square the mod places, with no Full bleed covers, the title, the
+                  artist and a row of flat circles under it, and sideways the cover or photo a square at the top left with
+                  the text and the row beside it and the list held under it by a height constraint on the header's element
+                  view. Neither page has a navigation bar: the page's controller in Spotify's stack answers
+                  preferredNavigationBarState 2 and prefersLiquidGlassNavigationBar NO, hooked on whatever class it is
+                  the first time a page lays out (a spotify:album: or spotify:artist: address answers so from the first
+                  ask), the scroll views stop adjusting their inset for bars, and the Kit's glass back button
+                  (SGRPinnedBack) is pinned opposite the ⋯; iOS's soft top fade waits until the cover or photo has gone up
+                  past the status bar. The sections dropped under the tracks are answered from memory once known, the
+                  cards inside them are not measured, and every cell is sized once on open so the page keeps one length.
     NowPlayingBar/ the glass now playing bar (NowPlayingBar.x), with Spotify's device button on it hidden on request
                   (BarConnect.x, its own key and its own row on the Player page, apart from the native look's). The card's text is the Music
                   app's, the title over the artists with no device line, drawn inside Spotify's own text on each swipe page

@@ -690,7 +690,8 @@ static void applyPage(UIView *page) {
 %end
 
 %ctor {
-    if (!SGRedesignedUI()) return;
+    // With Native redesign on, the album's header is AlbumHeaderNative.x's: the Music app's in both orientations.
+    if (!SGRedesignedUI() || SGNativeRedesign()) return;
     %init;
     SGRequireClasses(@[
         @"_TtC28CreativeWorkPlatform_PageKit24CreativeWorkTemplateView",

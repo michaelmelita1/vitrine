@@ -207,6 +207,8 @@ static void applyCredit(UIView *cell, UIView *row, UIView *page) {
 
 #pragma mark - the rows
 
+static void applyNeutral(UIView *row);
+
 static void applyRow(UIView *cell, UIView *page) {
     clearSurface(cell);
     UIView *row = SGRFindByIdentifier(cell, @"Components.UI.RetrievalRow*", &kRowKey);
@@ -225,7 +227,94 @@ static void applyRow(UIView *cell, UIView *page) {
     });
 
     applyHairline(row);
+    if (SGNativeRedesign()) applyNeutral(row);
     if (hidesCredits()) applyCredit(cell, row, page);
+}
+
+#pragma mark - the column
+
+// Where Spotify lays its track rows out across the page, in the page's coordinates: sideways it keeps them to a
+// column narrower than the page, and the header lines its cover up with the rows' edge (AlbumHeader.x). A change
+// lays the page out again, which lays the header out.
+static char kColumnKey;
+
+static void noteColumn(UIView *cell, UIView *page) {
+    CGRect frame = [cell convertRect:cell.bounds toView:page];
+    if (frame.size.width < 100) return;
+    NSValue *kept = objc_getAssociatedObject(page, &kColumnKey);
+    CGRect known = kept ? kept.CGRectValue : CGRectZero;
+    if (kept && fabs(CGRectGetMinX(known) - CGRectGetMinX(frame)) < 0.5 && fabs(known.size.width - frame.size.width) < 0.5) return;
+    objc_setAssociatedObject(page, &kColumnKey, [NSValue valueWithCGRect:CGRectMake(frame.origin.x, 0, frame.size.width, 0)],
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [page setNeedsLayout];
+}
+
+BOOL SGRAlbumListColumn(UIView *page, CGFloat *left, CGFloat *right) {
+    NSValue *kept = objc_getAssociatedObject(page, &kColumnKey);
+    if (!kept) return NO;
+    CGRect frame = kept.CGRectValue;
+    *left = CGRectGetMinX(frame);
+    *right = CGRectGetMaxX(frame);
+    return YES;
+}
+
+// Whether a color is a color rather than a gray: what Spotify's green, or the accent it is repainted to, is.
+static BOOL colorful(UIColor *color) {
+    CGFloat hue, saturation, brightness, alpha;
+    return color && [color getHue:&hue saturation:&saturation brightness:&brightness alpha:&alpha] && saturation > 0.3 && alpha > 0.1;
+}
+
+// Whether a picture drawn in its own colors is in a color: its average, drawn into one pixel, weighted by its
+// opaque pixels. An album row carries no artwork, so every picture in it is a glyph. Answered once per image.
+static BOOL bakedColorful(UIImage *image) {
+    static NSMapTable<UIImage *, NSNumber *> *answers;
+    if (!answers) answers = [NSMapTable weakToStrongObjectsMapTable];
+    NSNumber *known = [answers objectForKey:image];
+    if (known) return known.boolValue;
+    CGImageRef cg = image.CGImage;
+    BOOL answer = NO;
+    if (cg) {
+        uint8_t pixel[4] = {0};
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGContextRef context = CGBitmapContextCreate(pixel, 1, 1, 8, 4, space, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+        CGColorSpaceRelease(space);
+        if (context) {
+            CGContextSetInterpolationQuality(context, kCGInterpolationMedium);
+            CGContextDrawImage(context, CGRectMake(0, 0, 1, 1), cg);
+            CGContextRelease(context);
+            if (pixel[3] > 8) {
+                CGFloat a = pixel[3] / 255.0;
+                answer = colorful([UIColor colorWithRed:pixel[0] / 255.0 / a green:pixel[1] / 255.0 / a blue:pixel[2] / 255.0 / a alpha:1]);
+            }
+        }
+    }
+    [answers setObject:@(answer) forKey:image];
+    return answer;
+}
+
+// No accent on a row (its owner, 2026-11-08: "accented check marks are annoying", "accented buttons everywhere"): the
+// saved check, the playing row's title and its bars, in green or the accent, go to the rows' own white and gray. Any
+// glyph of the row in a color is drawn again as a template in the secondary gray, the way ⋯ is; any text in a color
+// takes the primary white. Read on every pass, so a row that starts playing loses its color too.
+static void applyNeutral(UIView *row) {
+    SGForEachView(row, ^(UIView *v) {
+        if ([v isKindOfClass:UILabel.class]) {
+            UILabel *label = (UILabel *)v;
+            if (colorful(label.textColor)) label.textColor = SGRPrimary();
+            return;
+        }
+        if ([v isKindOfClass:UIImageView.class]) {
+            UIImageView *image = (UIImageView *)v;
+            if (!image.image) return;
+            BOOL tinted = image.image.renderingMode == UIImageRenderingModeAlwaysTemplate;
+            if (!(tinted ? colorful(image.tintColor) : bakedColorful(image.image))) return;
+            if (!tinted) image.image = [image.image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+            if (![image.tintColor isEqual:SGRSecondary()]) image.tintColor = SGRSecondary();
+            return;
+        }
+        // Encore's own icon views, drawn in their tint.
+        if ([NSStringFromClass(v.class) containsString:@"Icon"] && colorful(v.tintColor)) v.tintColor = SGRSecondary();
+    });
 }
 
 #pragma mark - the cells
@@ -253,7 +342,9 @@ static BOOL isTrackContent(UIView *content) {
     UICollectionViewCell *cell = (UICollectionViewCell *)self;
     if (!isTrackContent(cell.contentView.subviews.firstObject)) return;
     UIView *page = SGRAlbumPageOf(cell);
-    if (page) applyRow(cell, page);
+    if (!page) return;
+    if (SGNativeRedesign()) noteColumn(cell, page);
+    applyRow(cell, page);
 }
 
 - (void)prepareForReuse {

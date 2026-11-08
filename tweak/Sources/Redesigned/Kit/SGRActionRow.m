@@ -190,6 +190,7 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
 }
 
 @implementation SGRMirrorButton {
+    BOOL _neutralOn;   // Spotify's button is on, for a neutral one
     UIImageView *_glyph;
     __weak UIImageView *_watchedGlyph;
     // Spotify's own image, as it was taken: what the copy is compared against, since a copy re-rendered as
@@ -231,10 +232,63 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
         ((UIView *)objc_getAssociatedObject(self, &kMirrorGlassKey)).hidden = YES;
         return;
     }
-    SGRGlassInside(self, &kMirrorGlassKey, SGRGlassCircleSize);
+    if (self.flat) {
+        ((UIView *)objc_getAssociatedObject(self, &kMirrorGlassKey)).hidden = YES;
+        [self sgr_keepFlat];
+    } else {
+        UIView *shape = SGRGlassInside(self, &kMirrorGlassKey, SGRGlassCircleSize);
+        [self sgr_keepNeutralIn:shape];
+    }
     _glyph.frame = CGRectMake(round((bounds.size.width - kMirrorGlyph) / 2), round((bounds.size.height - kMirrorGlyph) / 2),
                               kMirrorGlyph, kMirrorGlyph);
     _download.frame = _glyph.frame;
+}
+
+// The flat circle, SGRGlassCircleSize across in the middle, under the glyph.
+- (void)sgr_keepFlat {
+    static char kFlatKey;
+    UIView *circle = objc_getAssociatedObject(self, &kFlatKey);
+    if (!circle) {
+        circle = [UIView new];
+        circle.userInteractionEnabled = NO;
+        objc_setAssociatedObject(self, &kFlatKey, circle, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (circle.superview != self) [self insertSubview:circle atIndex:0];
+    UIColor *fill = [UIColor colorWithWhite:1 alpha:_neutralOn ? 0.3 : 0.12];
+    if (![circle.backgroundColor isEqual:fill]) circle.backgroundColor = fill;
+    CGFloat side = SGRGlassCircleSize;
+    CGRect bounds = self.bounds;
+    CGRect frame = CGRectMake(round((bounds.size.width - side) / 2), round((bounds.size.height - side) / 2), side, side);
+    if (!CGRectEqualToRect(circle.frame, frame)) {
+        circle.frame = frame;
+        circle.layer.cornerRadius = side / 2;
+    }
+}
+
+// The neutral film, in the glass's own content so its corners clip with it.
+- (void)sgr_keepNeutralIn:(UIView *)shape {
+    static char kNeutralKey;
+    UIView *film = objc_getAssociatedObject(self, &kNeutralKey);
+    if (!self.neutralFill || !shape) {
+        film.hidden = YES;
+        return;
+    }
+    UIView *content = [shape isKindOfClass:UIVisualEffectView.class] ? ((UIVisualEffectView *)shape).contentView : shape;
+    if (!film) {
+        film = [UIView new];
+        film.userInteractionEnabled = NO;
+        film.layer.cornerCurve = kCACornerCurveContinuous;
+        objc_setAssociatedObject(self, &kNeutralKey, film, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    UIColor *fill = _neutralOn ? [UIColor colorWithWhite:0.45 alpha:0.8] : [UIColor colorWithWhite:0.2 alpha:0.72];
+    if (![film.backgroundColor isEqual:fill]) film.backgroundColor = fill;
+    film.hidden = NO;
+    if (film.superview != content) [content insertSubview:film atIndex:0];
+    CGRect bounds = content.bounds;
+    if (!CGRectEqualToRect(film.frame, bounds)) {
+        film.frame = bounds;
+        film.layer.cornerRadius = MIN(bounds.size.width, bounds.size.height) / 2;
+    }
 }
 
 - (void)didMoveToWindow {
@@ -309,7 +363,7 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
             _glyph.image = image;
         }
         // On is saved or followed, in the accent color, as downloaded is.
-        _glyph.tintColor = on ? SGRAccent() : SGRPrimary();
+        _glyph.tintColor = on && !self.flat ? SGRAccent() : SGRPrimary();
         if (first) [self setNeedsLayout];
     }
     NSString *word = source.accessibilityLabel ?: wordIn(source);
@@ -380,6 +434,11 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
     // and found without keeps Spotify's colors, which are then all that tells on from off.
     BOOL hasDot = NO;
     BOOL on = self.onGlyphColor && indicatorOn(source, &hasDot);
+    // A neutral button shows it is on by a lighter circle rather than a colored glyph.
+    if ((self.neutralFill || self.flat) && hasDot && on != _neutralOn) {
+        _neutralOn = on;
+        [self setNeedsLayout];
+    }
     UIColor *ownColor = !self.onGlyphColor ? self.glyphColor
                       : hasDot ? (on ? self.onGlyphColor : self.glyphColor ?: SGRPrimary()) : nil;
     if (glyph.image && (_takenGlyph != glyph.image || (ownColor != nil) != (_glyph.image.renderingMode == UIImageRenderingModeAlwaysTemplate))) {
@@ -492,12 +551,20 @@ static void keepOnTop(UIView *page, UIView *button) {
 // the page's own bounds and not converted from the window: the swipe back slides the page across the
 // window, and a frame converted from the window's x would hold the button still while the page left under
 // it, over the screen below, until the page was gone and took it along.
+// The back button's top on a sideways page (device screenshot 2026-11-07: 32pt down on the album page).
+static const CGFloat kSidewaysTop = 32;
+
 static void placeInCorner(UIView *page, UIView *button) {
     UIWindow *window = page.window;
     UIView *space = window ?: page;
     CGFloat side = SGRGlassCircleSize;
-    CGFloat x = page.bounds.size.width - kCornerSide - side;
-    CGFloat y = space.safeAreaInsets.top;
+    UIEdgeInsets safe = space.safeAreaInsets;
+    // Sideways there is no status bar and no top safe area, so the safe top put the button against the screen's
+    // edge, half off it, and the Dynamic Island's side was not kept clear (its owner, 2026-11-07: the ⋯ broken in
+    // landscape). There it is level with the back button, which Spotify keeps this far down, and inside the safe side.
+    BOOL sideways = space.bounds.size.width > space.bounds.size.height;
+    CGFloat x = page.bounds.size.width - MAX(kCornerSide, safe.right) - side;
+    CGFloat y = sideways ? MAX(safe.top, kSidewaysTop) : safe.top;
     if (window) y = [page convertPoint:CGPointMake(0, y) fromView:nil].y;
     CGRect frame = CGRectMake(x, y, side, side);
     if (!CGRectIsEmpty(frame) && !CGRectEqualToRect(button.frame, frame)) button.frame = frame;
@@ -524,3 +591,45 @@ SGRMirrorButton *SGRPinnedMore(UIView *page, const void *key, UIView *source) {
     placeInCorner(page, button);
     return button;
 }
+
+@interface SGRPinnedBackTarget : NSObject
+@end
+@implementation SGRPinnedBackTarget
+- (void)sgr_back:(SGRMirrorButton *)button {
+    for (UIResponder *r = button.superview; r; r = r.nextResponder) {
+        if (![r isKindOfClass:UIViewController.class]) continue;
+        UINavigationController *nav = ((UIViewController *)r).navigationController;
+        if (nav.viewControllers.count > 1) {
+            [nav popViewControllerAnimated:YES];
+            return;
+        }
+    }
+}
+@end
+
+static char kBackTargetKey;
+SGRMirrorButton *SGRPinnedBack(UIView *page, const void *key) {
+    if (!page) return nil;
+    SGRMirrorButton *button = objc_getAssociatedObject(page, key);
+    if (!button) {
+        button = [[SGRMirrorButton alloc] initWithFrame:CGRectZero];
+        button.fallbackGlyph = [UIImage systemImageNamed:@"chevron.backward"];
+        button.glyphColor = SGRPrimary();
+        [button feedFrom:[[UIView alloc] initWithFrame:CGRectZero]];
+        button.accessibilityLabel = NSLocalizedStringFromTableInBundle(@"Back", nil, [NSBundle bundleForClass:UIView.class], nil);
+        SGRPinnedBackTarget *target = [SGRPinnedBackTarget new];
+        objc_setAssociatedObject(button, &kBackTargetKey, target, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [button addTarget:target action:@selector(sgr_back:) forControlEvents:UIControlEventTouchUpInside];
+        objc_setAssociatedObject(page, key, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    keepOnTop(page, button);
+    // Mirrored from the ⋯: the frame placeInCorner gives it, kCornerSide in from the leading edge instead.
+    placeInCorner(page, button);
+    UIWindow *window = page.window;
+    UIEdgeInsets safe = (window ?: page).safeAreaInsets;
+    CGRect frame = button.frame;
+    frame.origin.x = MAX(kCornerSide, safe.left);
+    if (!CGRectEqualToRect(button.frame, frame)) button.frame = frame;
+    return button;
+}
+

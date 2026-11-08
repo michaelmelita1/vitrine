@@ -22,7 +22,8 @@ extern const CGFloat SGRHeaderInfoTitleRise;  // 56, of the content over the pic
 
 // Full bleed covers (issue #98): the album's and the playlist's cover across the top of the page. Off, the cover
 // is the square Spotify lays out above the title, and only an album's animated cover still runs full bleed. On
-// until switched off (Appearance), read once, by the first album or playlist header.
+// until switched off (Appearance), read once, by the first album or playlist header. With Native redesign on it is
+// always NO: every cover is the square, as the Music app sets it.
 #define SGRKeyFullBleedCovers @"spotifyglass.redesign.fullBleedCovers"
 BOOL SGRFullBleedCovers(void);
 
@@ -55,6 +56,9 @@ BOOL SGRFullBleedCovers(void);
 - (void)showTitleImage:(UIImage *)image;
 // The height the content wants at `width`, from the top of the title to the bottom of the description.
 - (CGFloat)contentHeightForWidth:(CGFloat)width;
+// Set from the leading edge rather than centered, with no side inset: the album page sideways, where the text
+// stands beside the cover.
+@property (nonatomic) BOOL leading;
 // Where the content starts, from the top; 0 keeps it on the bottom edge. Content that would then run past the
 // bottom goes back on the bottom edge.
 @property (nonatomic) CGFloat pinnedTop;

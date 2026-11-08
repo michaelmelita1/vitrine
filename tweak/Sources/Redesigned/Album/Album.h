@@ -41,6 +41,11 @@ UIViewController *SGRAlbumSettingsPage(void);
 // The album's artist as the header of the page `view` is on shows it, for the rows to compare theirs with. A
 // change lays the page's track rows out again; the same artist again is a no-op.
 void SGRAlbumSetArtist(UIView *view, NSString *artist);
+// Where Spotify lays the track rows of `page` out across it, in the page's coordinates, once a row has been laid
+// out: sideways a column narrower than the page, which the header lines its cover and text up with.
+BOOL SGRAlbumListColumn(UIView *page, CGFloat *left, CGFloat *right);
+// Reads where the cover goes sideways again, from the hero's scroll steps; lays the header out only on a change.
+void SGRAlbumRecheckWide(UIView *hero);
 // AlbumCredits.m. Whether a row's artist line says nothing the album's header does not: it is the album's
 // artist, or the album's artist and the guests the title names after "feat.", "ft.", "featuring" or "with".
 BOOL SGRCreditRepeatsAlbum(NSString *albumArtist, NSString *rowArtist, NSString *title);
@@ -63,3 +68,11 @@ void SGRAlbumSetSpotifyColor(UIView *view, UIColor *color);
 // The page comes in whole once its cover has been read (Kit/SGRField.h). Called from the album header's pass
 // only, so a podcast's episode page, the same template with no cover for the field to read, is never held.
 void SGRAlbumHoldPage(UIView *page);
+
+// Sizes every cell of the album's list once, soon after its count changes, so the dropped sections under the tracks are
+// 0 tall before the page is scrolled to them (AlbumSections.x). Cheap to call on every pass of the list's view.
+void SGRAlbumRealizeFooters(UIView *listView);
+
+// No navigation bar over `page` (an album's or an artist's): its controller in Spotify's stack asks for none from now on,
+// the bar goes now if the page is on top, and the Kit's back button is pinned in its place (AlbumHeaderNative.x, Native redesign only).
+void SGRDropNavigationBar(UIView *page);

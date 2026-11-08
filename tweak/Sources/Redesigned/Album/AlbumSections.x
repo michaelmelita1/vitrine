@@ -62,6 +62,34 @@ static BOOL isKept(UIView *content) {
     return YES;
 }
 
+// Spotify's copyright cell is one label of two lines, the © line and the ℗ line, often word for word the same
+// company: the Music app shows the ℗ line alone (its owner, 2026-11-08: "a double copyright notice"). The © line
+// goes, out of the label's attributed text so its font and color stay; a label with only one of them is left alone.
+static void oneCopyright(UIView *content) {
+    UIView *copyright = SGRFindByIdentifier(content, @"Album.Copyright", NULL);
+    if (!copyright) return;
+    SGForEachView(copyright, ^(UIView *v) {
+        if (![v isKindOfClass:UILabel.class]) return;
+        UILabel *label = (UILabel *)v;
+        NSString *text = label.attributedText.string ?: label.text;
+        if (![text containsString:@"\u2117"]) return;
+        NSMutableAttributedString *kept = [label.attributedText mutableCopy];
+        if (!kept) return;
+        __block BOOL dropped = NO;
+        [text enumerateSubstringsInRange:NSMakeRange(0, text.length) options:NSStringEnumerationByLines | NSStringEnumerationReverse
+                              usingBlock:^(NSString *line, NSRange range, NSRange enclosing, BOOL *stop) {
+            if (![[line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet] hasPrefix:@"\u00A9"]) return;
+            [kept deleteCharactersInRange:enclosing];
+            dropped = YES;
+        }];
+        if (!dropped) return;
+        // A © line last leaves the ℗ line's newline behind it.
+        while (kept.length && [NSCharacterSet.newlineCharacterSet characterIsMember:[kept.string characterAtIndex:kept.length - 1]])
+            [kept deleteCharactersInRange:NSMakeRange(kept.length - 1, 1)];
+        label.attributedText = kept;
+    });
+}
+
 // The content laid at `lead` down the cell, at the height it measured at, and the cell sized for both.
 // Kept on the cell so its own passes, which size the content to the cell again, do not undo it.
 static void settle(UICollectionViewCell *cell, CGFloat natural, CGFloat lead) {
@@ -178,12 +206,82 @@ static BOOL shown(UICollectionViewCell *cell, UIView *content, NSIndexPath *path
     return section != kNoHeading && (switched & (1u << section));
 }
 
+// The places in a list whose cell was dropped, and the height its content measured at. A dropped cell is 0 tall, so
+// every one of them under the tracks is on screen at once, and the list asks each again on every pass: measured by
+// Spotify each time -- the carousels, the merch cards -- and searched for the two kept lines, the asking took up to a
+// third of every second of a scroll, 1,500 times a second (the hitch log of 2026-11-08). Answered from here once known;
+// the switches are read once a launch, so a place stays what it was for the list's life.
+static NSMutableDictionary<NSIndexPath *, NSNumber *> *droppedOf(UICollectionView *list) {
+    static char key, countKey;
+    // Spotify adds the sections as they come, and a place can hold another section after; any change in the list's
+    // count starts the answers again.
+    NSInteger count = 0;
+    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    NSMutableDictionary *dropped = objc_getAssociatedObject(list, &key);
+    if (!dropped || [objc_getAssociatedObject(list, &countKey) integerValue] != count) {
+        dropped = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(list, &key, dropped, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(list, &countKey, @(count), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return dropped;
+}
+
+static UICollectionView *listOf(UICollectionViewCell *cell) {
+    for (UIView *v = cell.superview; v; v = v.superview) {
+        if ([v isKindOfClass:UICollectionView.class]) return (UICollectionView *)v;
+    }
+    return nil;
+}
+
 static void logOnce(NSString *what) {
     static NSMutableSet<NSString *> *logged;
     if (!logged) logged = [NSMutableSet set];
     if ([logged containsObject:what]) return;
     [logged addObject:what];
     SGLog(@"redesign album: %@", what);
+}
+
+// The list sizes a cell only as it comes near the screen, so until then the dropped sections under the tracks hold the
+// height Spotify estimated for them; the page was that much longer, scrolled on into empty field near the end, and
+// snapped back as they came to 0 (its owner's recording, 2026-11-08). So once the list has its cells, it is laid out
+// once as tall as its content -- every cell sized, the dropped ones answering 0 -- and put back, all in one pass, so
+// the page has its real length from the start. Again whenever the count changes, as Spotify adds sections.
+static void realizeAll(UICollectionView *list) {
+    CGSize content = list.collectionViewLayout.collectionViewContentSize;
+    CGRect frame = list.frame;
+    if (!list.window || content.height <= frame.size.height + 1) return;
+    CGPoint offset = list.contentOffset;
+    [UIView performWithoutAnimation:^{
+        for (NSInteger pass = 0; pass < 3; pass++) {
+            CGFloat tall = MIN(list.collectionViewLayout.collectionViewContentSize.height, 12000);
+            list.frame = CGRectMake(frame.origin.x, frame.origin.y, frame.size.width, tall);
+            list.contentOffset = CGPointZero;
+            [list layoutIfNeeded];
+        }
+        list.frame = frame;
+        list.contentOffset = offset;
+        [list layoutIfNeeded];
+    }];
+}
+
+void SGRAlbumRealizeFooters(UIView *listView) {
+    if (!SGNativeRedesign()) return;
+    UICollectionView *list = nil;
+    for (UIView *sub in listView.subviews) {
+        if ([sub isKindOfClass:UICollectionView.class]) { list = (UICollectionView *)sub; break; }
+    }
+    if (!list.window) return;
+    NSInteger count = 0;
+    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    static char kRealizedKey;
+    if (count == 0 || [objc_getAssociatedObject(list, &kRealizedKey) integerValue] == count) return;
+    objc_setAssociatedObject(list, &kRealizedKey, @(count), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    __weak UICollectionView *weakList = list;
+    // After the pass that brought the cells, not inside it.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UICollectionView *strong = weakList;
+        if (strong) realizeAll(strong);
+    });
 }
 
 %hook _TtC12Element_List18CollectionViewCell
@@ -194,7 +292,26 @@ static void logOnce(NSString *what) {
     // Cells are reused across kinds, and one settled before can hold a track row now.
     if (!isFooterContent(content) || !SGRAlbumPageOf(cell)) {
         if (settled) unsettle(cell);
+        // A card inside a dropped section's carousel: never seen, cut off by the 0pt cell around it, but measured by
+        // Spotify all the same as its carousel laid out on the scroll -- 184 of them in one second, 2ms each, the worst
+        // of the stutter (the hitch log of 2026-11-08). It keeps the size it was given.
+        for (UIView *v = SGNativeRedesign() ? cell.superview : nil; v; v = v.superview) {
+            if (![v isKindOfClass:UICollectionViewCell.class]) continue;
+            NSArray<NSNumber *> *outer = objc_getAssociatedObject(v, &kSettledKey);
+            if (outer && outer[1].doubleValue == 0) {
+                return [attributes copy];
+            }
+            break;
+        }
         return %orig;
+    }
+    UICollectionView *list = listOf(cell);
+    NSNumber *known = SGNativeRedesign() && list && attributes.indexPath ? droppedOf(list)[attributes.indexPath] : nil;
+    if (known) {
+        settle(cell, known.doubleValue, 0);
+        UICollectionViewLayoutAttributes *zero = [attributes copy];
+        zero.size = CGSizeMake(zero.size.width, 0);
+        return zero;
     }
     // A kept cell is measured from the top and settled again below: content settle() moved down its lead measures
     // that much taller on every pass, and the collection view asks again until the answer holds still. Only the
@@ -204,6 +321,8 @@ static void logOnce(NSString *what) {
         frame.origin.y = 0;
         cell.contentView.frame = frame;
     }
+    // Before Spotify measures it, so the cell is sized for the one line left.
+    if (SGNativeRedesign()) oneCopyright(content);
     UICollectionViewLayoutAttributes *result = %orig;
     CGFloat natural = MAX(1, result.size.height);
     if (isKept(content)) {
@@ -217,6 +336,7 @@ static void logOnce(NSString *what) {
     } else {
         settle(cell, natural, 0);
         result.size = CGSizeMake(result.size.width, 0);
+        if (SGNativeRedesign() && list && attributes.indexPath) droppedOf(list)[attributes.indexPath] = @(natural);
         logOnce(@"the sections under the tracks dropped");
     }
     return result;

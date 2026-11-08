@@ -158,6 +158,7 @@ static SGRArtworkField *fieldIn(UIView *page) {
     for (UIView *sub in list.subviews) {
         if (sub.backgroundColor && SGIsBaseSurface(sub.backgroundColor.CGColor)) sub.backgroundColor = UIColor.clearColor;
     }
+    SGRAlbumRealizeFooters(list);
 }
 %end
 

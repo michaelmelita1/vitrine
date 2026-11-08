@@ -125,7 +125,7 @@ static char kButtonGlassKey, kPanelGlassKey;
         case SGSingStatePreparing:
         case SGSingStateBuffering: progress = 2; break;
         case SGSingStateWaiting: alpha = 0.7; break;
-        case SGSingStateSinging: tint = SGRAccentColor() ?: UIColor.systemGreenColor; break;
+        case SGSingStateSinging: tint = SGRAccent(); break;
         case SGSingStateBehind: glyph = @"tortoise.fill"; break;
         case SGSingStateHot: glyph = @"thermometer.high"; tint = UIColor.systemOrangeColor; break;
         case SGSingStateFailed: glyph = @"exclamationmark.triangle.fill"; tint = UIColor.systemYellowColor; break;
@@ -288,7 +288,7 @@ static void tell(NSString *message, NSString *action, void (^then)(void)) {
         SGRShowGlass([self placePanel], NO);
         if (!SGRReduceMotion()) _panel.transform = CGAffineTransformMakeScale(kPanelEnterScale, kPanelEnterScale);
     }
-    _slider.minimumTrackTintColor = SGRAccentColor() ?: UIColor.systemGreenColor;
+    _slider.minimumTrackTintColor = SGRAccent();
     _slider.value = SGSingLevel();
     [self showLevel];
     UIView *glass = [self placePanel];

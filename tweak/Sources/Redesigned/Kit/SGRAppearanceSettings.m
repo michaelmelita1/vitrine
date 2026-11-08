@@ -30,7 +30,7 @@ static void choosePreset(NSInteger index) {
 NSArray<SGModRow *> *SGRAppearanceRows(void) {
     SGModRow *menu = SGMenuRow(@"Accent color preset", presets(), ^NSString *{ return presets()[(NSUInteger)preset()]; },
                                ^(NSInteger index) { choosePreset(index); });
-    SGModRow *colour = SGStatActionRow(@"Accent color", nil, ^NSString *{ return [NSString stringWithFormat:@"#%06lX", (long)SGRAccentRGB()]; }, ^{
+    SGModRow *colour = SGStatActionRow(@"Accent color", @"The selected tab; everything else is white", ^NSString *{ return [NSString stringWithFormat:@"#%06lX", (long)SGRAccentRGB()]; }, ^{
         SGPickColor(@"Accent color", SGRAccentRGB(), ^(NSInteger rgb) {
             SGSetInt(SGRKeyAccent, rgb);
             SGSetInt(SGRKeyAccentCustom, rgb);
@@ -40,7 +40,5 @@ NSArray<SGModRow *> *SGRAppearanceRows(void) {
     return @[
         SGWithSymbol(menu, @"paintpalette"),
         SGWithSymbol(colour, @"eyedropper"),
-        SGWithSymbol(SGSwitchRow(@"Full bleed covers", @"Album and playlist covers across the top. Off, a square cover; "
-                                 @"an animated cover still fills the top", SGRKeyFullBleedCovers), @"photo"),
     ];
 }

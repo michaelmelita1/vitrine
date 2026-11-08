@@ -8,7 +8,8 @@
 UIViewController *SGRAlbumSettingsPage(void) {
     return [[SGModPage alloc] initWithTitle:@"Albums" intro:SGRestartNote sections:@[
         SGNotedSection(@"Apple Music", @[
-            SGSwitchRow(@"Animated covers", @"At the top of an album that has one, about 5 MB each", SGRKeyAlbumMotion),
+            SGSwitchRow(@"Animated covers", @"In the cover of an album that has one, about 5 MB each. Apple Music's only, "
+                        @"never a Canvas, whatever the player's sources are", SGRKeyAlbumMotion),
             SGOptionRow(@"Download in Low Data Mode", nil, SGKeyMotionLowData),
         ], @"Only the album's name is sent to Apple Music. A cover stays still in Low Power Mode."),
         SGSection(@"Hide on an album's page", @[

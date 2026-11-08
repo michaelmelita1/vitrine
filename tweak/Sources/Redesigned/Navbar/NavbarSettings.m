@@ -220,7 +220,7 @@ typedef NS_ENUM(NSInteger, SGRNavbarSection) {
     }
     UIImageSymbolConfiguration *size = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightRegular];
     [cell.check setImage:[UIImage systemImageNamed:hidden ? @"circle" : @"checkmark.circle.fill" withConfiguration:size] forState:UIControlStateNormal];
-    cell.check.tintColor = hidden ? SGGrey() : SGRAccent();
+    cell.check.tintColor = hidden ? SGGrey() : SGRTabAccent();
     cell.check.accessibilityLabel = [NSString stringWithFormat:@"Show %@ on the bar", entry[SGRNavbarTitle]];
     cell.check.accessibilityValue = hidden ? @"Off" : @"On";
     return cell;

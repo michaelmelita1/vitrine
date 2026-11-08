@@ -1,5 +1,6 @@
-// The redesign's accent color.
-// Accent color: Spotify's green, #1ED760, is one token. Its three components occur once in the
+// The redesign's accent color, which colors the tab bar alone (Navbar/SystemTabs.x, SGRTabAccent); Spotify's green
+// everywhere else is white (its owner, 2026-11-08: "the accent colour to really only impact the tab bar").
+// Spotify's green, #1ED760, is one token. Its three components occur once in the
 // whole binary, and every green the app draws, from the play button to the "Zobrazit vše" links
 // and the progress bar, is that token or a state blended from it. So it is swapped where it is
 // born, in the UIColor initializer, and the blends follow. Lottie animations carry their own green
@@ -12,7 +13,6 @@
 // upsell backend still names.
 static const uint32_t kGreens[] = {0x1ED760, 0x1DB954};
 
-static NSInteger sg_accent = -1;   // 0xRRGGBB once chosen, read at launch
 
 static NSInteger chosen(void) {
     NSInteger rgb = SGInt(SGRKeyAccent, SGRDefaultAccent);
@@ -44,15 +44,14 @@ NSInteger SGRAccentRGB(void) {
     return rgb < 0 ? SGSpotifyGreen : rgb;
 }
 
-// A darker green than the token comes out as the accent darkened by the same amount, so the two
-// keep their relation.
+// A darker green than the token comes out as white darkened by the same amount, a gray, so the two keep their
+// relation.
 static BOOL swap(CGFloat *r, CGFloat *g, CGFloat *b) {
     for (size_t i = 0; i < sizeof(kGreens) / sizeof(kGreens[0]); i++) {
         CGFloat gr, gg, gb;
         unpack(kGreens[i], &gr, &gg, &gb);
         if (fabs(*r - gr) > 0.01 || fabs(*g - gg) > 0.01 || fabs(*b - gb) > 0.01) continue;
-        CGFloat ar, ag, ab;
-        unpack((uint32_t)sg_accent, &ar, &ag, &ab);
+        CGFloat ar = 1, ag = 1, ab = 1;
         CGFloat factor = MAX(gr, MAX(gg, gb)) / (0xD7 / 255.0);
         *r = MIN(1, ar * factor);
         *g = MIN(1, ag * factor);
@@ -144,6 +143,5 @@ static id swappedValue(id value) {
 
 %ctor {
     if (!SGRedesignedUI()) return;
-    sg_accent = chosen();
-    if (sg_accent >= 0) %init;
+    %init;
 }

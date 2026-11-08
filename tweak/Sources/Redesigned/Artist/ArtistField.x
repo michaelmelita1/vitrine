@@ -13,6 +13,7 @@
 // and the pages under it move up into its place and stop paging, as the native look's artist page (since removed) did. With its switch off (SGRKeyArtistHideTabs) the strip and the paging stay Spotify's.
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRKit.h"
+#import "Redesigned/Album/Album.h"
 #import "Artist.h"
 
 static NSString *const kPageIdentifier = @"creator-page";
@@ -91,6 +92,9 @@ static SGRArtworkField *fieldIn(UIView *page) {
     for (UIView *sub in list.subviews) {
         if (sub.backgroundColor && SGIsBaseSurface(sub.backgroundColor.CGColor)) sub.backgroundColor = UIColor.clearColor;
     }
+    // Every cell sized once soon after the list has them, so the dropped sections are 0 tall before they are
+    // scrolled to and the page keeps one length (the album's, Album/AlbumSections.x).
+    SGRAlbumRealizeFooters(list);
 }
 %end
 

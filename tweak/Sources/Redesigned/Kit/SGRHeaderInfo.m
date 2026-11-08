@@ -10,10 +10,7 @@ const CGFloat SGRHeaderInfoBottom = 14;
 const CGFloat SGRHeaderInfoTitleRise = 56;
 
 BOOL SGRFullBleedCovers(void) {
-    static BOOL on;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ on = SGEnabled(SGRKeyFullBleedCovers); });
-    return on;
+    return NO;
 }
 
 // The text kSide in from the edges; Play at least kPlayWidth wide, the Music app's; the gaps between.
@@ -102,7 +99,7 @@ UIImageView *SGRCreatorPicture(UIView *root) {
     _play = [[SGRPlayCapsule alloc] initWithFrame:CGRectZero];
     _play.fillColor = UIColor.whiteColor;
     _trailing = [[SGRMirrorButton alloc] initWithFrame:CGRectZero];
-    _shuffle.neutralFill = _trailing.neutralFill = YES;
+    _shuffle.flat = _trailing.flat = YES;
     for (UIView *button in @[_shuffle, _play, _trailing]) {
         button.hidden = YES;
         [self addSubview:button];
@@ -272,13 +269,26 @@ UIImageView *SGRCreatorPicture(UIView *root) {
     if (changed) [self setNeedsLayout];
 }
 
+- (void)setLeading:(BOOL)leading {
+    if (_leading == leading) return;
+    _leading = leading;
+    NSTextAlignment alignment = leading ? NSTextAlignmentNatural : NSTextAlignmentCenter;
+    _title.textAlignment = _creator.textAlignment = _length.textAlignment = alignment;
+    _measuredWidth = -1;
+    [self setNeedsLayout];
+}
+
+- (CGFloat)sgr_side {
+    return _leading ? 0 : kSide;
+}
+
 - (void)trailingStateChanged {
     if (_trailing.source) [_trailing feedFrom:_trailing.source];
 }
 
 - (CGFloat)contentHeightForWidth:(CGFloat)width {
     if (width == _measuredWidth) return _measuredHeight;
-    CGFloat text = MAX(0, width - 2 * kSide), height = 0;
+    CGFloat side = [self sgr_side], text = MAX(0, width - 2 * side), height = 0;
     UILabel *previous = nil;
     for (UILabel *label in @[_title, _creator, _length]) {
         if (label.hidden) continue;
@@ -296,7 +306,8 @@ UIImageView *SGRCreatorPicture(UIView *root) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat width = self.bounds.size.width, text = MAX(0, width - 2 * kSide);
+    CGFloat inset = [self sgr_side], width = self.bounds.size.width, text = MAX(0, width - 2 * inset);
+    BOOL rtl = self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
     CGFloat content = [self contentHeightForWidth:width];
     CGFloat y = round(self.bounds.size.height - SGRHeaderInfoBottom - content);
     if (self.pinnedTop > 0 && self.pinnedTop + content <= self.bounds.size.height) y = round(self.pinnedTop);
@@ -309,21 +320,21 @@ UIImageView *SGRCreatorPicture(UIView *root) {
         if (previous) y += [self sgr_gapAfter:previous];
         CGSize size = [self sgr_sizeOf:label width:text];
         CGFloat height = ceil(size.height);
-        label.frame = CGRectMake(kSide, y, text, height);
+        label.frame = CGRectMake(inset, y, text, height);
         // The name at its own width, so a tap beside it is the page's (-sgr_creatorHit:), and before it the
         // picture, a line high so the line keeps its height, the two centered together. The picture leads, so it
         // is on the right in a right-to-left language.
         if (label == _creator) {
             CGFloat picture = _picture.hidden ? 0 : height + kPictureGap;
             CGFloat named = MIN(ceil(size.width), MAX(0, text - picture));
-            CGFloat x = round((width - picture - named) / 2);
-            BOOL rtl = self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+            CGFloat x = _leading ? (rtl ? width - picture - named : 0) : round((width - picture - named) / 2);
             _picture.frame = CGRectMake(rtl ? x + named + kPictureGap : x, y, height, height);
             _picture.layer.cornerRadius = height / 2;
             label.frame = CGRectMake(rtl ? x : x + picture, y, named, height);
         }
         if (label == _title && _titleImage) {
-            _logo.frame = CGRectMake(round((width - size.width) / 2), y, size.width, height);
+            CGFloat x = _leading ? (rtl ? width - size.width : 0) : round((width - size.width) / 2);
+            _logo.frame = CGRectMake(x, y, size.width, height);
             _logo.accessibilityLabel = _title.text;
         }
         y += height;
@@ -335,8 +346,10 @@ UIImageView *SGRCreatorPicture(UIView *root) {
     // are there or not.
     CGFloat side = SGRActionHeight;
     // As wide as its word, short of pushing the other two off the page.
-    CGFloat playWidth = MIN(MAX(kPlayWidth, [_play sgr_width]), width - 2 * (kSide + side + kRowSpacing));
-    CGRect play = CGRectMake(round((width - playWidth) / 2), y, playWidth, side);
+    CGFloat playWidth = MIN(MAX(kPlayWidth, [_play sgr_width]), width - 2 * (inset + side + kRowSpacing));
+    // Set from the leading edge, shuffle first, then Play, then the third.
+    CGFloat playX = !_leading ? round((width - playWidth) / 2) : (rtl ? width - side - kRowSpacing - playWidth : side + kRowSpacing);
+    CGRect play = CGRectMake(playX, y, playWidth, side);
     _play.frame = play;
     _shuffle.frame = CGRectMake(CGRectGetMinX(play) - kRowSpacing - side, y, side, side);
     _trailing.frame = CGRectMake(CGRectGetMaxX(play) + kRowSpacing, y, side, side);
@@ -344,7 +357,7 @@ UIImageView *SGRCreatorPicture(UIView *root) {
 
     if (!_about.hidden) {
         y += kAboutAbove;
-        _about.frame = CGRectMake(kSide, y, text, ceil([_about sizeThatFits:CGSizeMake(text, CGFLOAT_MAX)].height));
+        _about.frame = CGRectMake(inset, y, text, ceil([_about sizeThatFits:CGSizeMake(text, CGFLOAT_MAX)].height));
     }
 }
 

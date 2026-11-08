@@ -38,9 +38,14 @@ UIColor *SGRTertiary(void) {
     return [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.60 : 0.40];
 }
 
-// Read per call: the accent is stored as it is picked, and the color row reads it the same way.
 UIColor *SGRAccent(void) {
-    return SGRAccentColor() ?: [UIColor colorWithRed:0x1E / 255.0 green:0xD7 / 255.0 blue:0x60 / 255.0 alpha:1];
+    return UIColor.whiteColor;
+}
+
+// Read per call: the accent is stored as it is picked, and the color row reads it the same way. Spotify's own green
+// is made a shade off the token (#1FD45F for #1ED760), or SGRAccent.x would turn it white on its way through UIColor.
+UIColor *SGRTabAccent(void) {
+    return SGRAccentColor() ?: [UIColor colorWithRed:0x1F / 255.0 green:0xD4 / 255.0 blue:0x5F / 255.0 alpha:1];
 }
 
 UIColor *SGRNeutralField(void) {

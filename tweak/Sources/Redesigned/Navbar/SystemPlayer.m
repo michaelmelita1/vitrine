@@ -51,6 +51,7 @@
 #import "Core/SGCore.h"
 #import "Redesigned/Kit/SGRRepaint.h"
 #import "Shared/Player/SleepTimer.h"
+#import "Shared/Haptics/Haptics.h"
 #import "Settings/SGMarquee.h"
 #import "Shared/Player/SpeedPitch.h"
 #import "Redesigned/Kit/SGRKit.h"
@@ -283,9 +284,14 @@ NSInteger SGRTrackMoved(SPTPlayerState *state, NSString *from) {
 #pragma mark - the progress
 
 
+// How close to either end the bar is at it, and how far past a tenth it has to be to have passed it.
+static const CGFloat kScrubEdge = 0.005, kScrubHysteresis = 0.004;
+
 @implementation SGRSystemScrubber {
     UIView *_track, *_fill;
     CGFloat _startValue, _startX;
+    NSInteger _tenth;   // the tenth of the song the bar was last felt in
+    BOOL _atEdge;
     NSHashTable<UIGestureRecognizer *> *_suspended;
 }
 
@@ -352,11 +358,31 @@ NSInteger SGRTrackMoved(SPTPlayerState *state, NSString *from) {
     else [UIView animateWithDuration:kScrubSpring delay:0 usingSpringWithDamping:1 - kScrubBounce initialSpringVelocity:0 options:options animations:apply completion:nil];
 }
 
+// Vibrations > Controls (Shared/Haptics): a tap as the finger takes the bar, a tick at every tenth of the song it
+// passes, a firmer one at either end, a soft one as it lets go, as Spotify's scrubber had them (ControlHaptics.x).
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     _startX = [touch locationInView:self].x;
     _startValue = _value;
+    _tenth = (NSInteger)floor(_value * 10);
+    _atEdge = _value <= kScrubEdge || _value >= 1 - kScrubEdge;
+    SGPlayFeedback(SGFeedbackGrab);
+    SGPrepareFeedback(SGFeedbackDetent);
     [self setHeld:YES];
     return YES;
+}
+
+- (void)feelValue {
+    BOOL edge = _value <= kScrubEdge || _value >= 1 - kScrubEdge;
+    if (edge != _atEdge) {
+        _atEdge = edge;
+        if (edge) SGPlayFeedback(SGFeedbackEdge);
+    }
+    // A tenth counts once the bar is a little past it, so a finger resting on one ticks once.
+    NSInteger tenth = (NSInteger)floor(_value * 10);
+    if (tenth != _tenth && fabs(_value * 10 - MAX(tenth, _tenth)) > kScrubHysteresis * 10) {
+        _tenth = tenth;
+        if (!edge) SGPlayFeedback(SGFeedbackDetent);
+    }
 }
 
 - (BOOL)continueTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
@@ -365,11 +391,13 @@ NSInteger SGRTrackMoved(SPTPlayerState *state, NSString *from) {
         [self performSelector:@selector(checkSuspended) withObject:nil afterDelay:1];
     }
     self.value = _startValue + ([touch locationInView:self].x - _startX) / MAX(1, self.bounds.size.width);
+    [self feelValue];
     if (self.onMove) self.onMove(_value);
     return YES;
 }
 
 - (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    SGPlayFeedback(SGFeedbackRelease);
     [self setHeld:NO];
     if (self.onRelease) self.onRelease(_value);
 }
@@ -1177,6 +1205,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     SGMarqueeLabel *_besideTitle, *_besideArtist;   // the track the swipe brings in
     BOOL _titleSkipping;
     NSString *_titleSkipFrom;                  // the track the swipe skipped from
+    BOOL _titlePast;                           // the swipe is past where letting go skips
     BOOL _episode;                             // an episode or a chapter plays: 15 s skips, the speed in shuffle's place
     BOOL _volumeOff, _shuffleOff, _repeatOff;  // the Player page's Volume off, Hide on the player's Shuffle and Repeat
     UIButton *_speed;
@@ -2054,7 +2083,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (!uri) return;
     BOOL want = !_savedShown;
     if (!SGRCollectionSetSaved([NSURL URLWithString:uri], want)) return;
-    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    SGPlayFeedback(SGFeedbackAdd);
     [self showSaved:want animated:YES];
 }
 
@@ -2869,6 +2898,13 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
             _besideTitle.hidden = _besideArtist.hidden = !beside;
             CGFloat moved = beside ? x : x / 4;
             [self placeTitlePagesAt:moved way:way step:step];
+            // A tick as the drag passes where letting go skips, as Spotify's cover swipe had (Vibrations > Controls).
+            BOOL past = beside && fabs(x) > step * kTitleSwipeDistance;
+            if (swipe.state == UIGestureRecognizerStateBegan) _titlePast = NO;
+            if (past != _titlePast) {
+                _titlePast = past;
+                if (past) SGPlayFeedback(SGFeedbackDetent);
+            }
             break;
         }
         case UIGestureRecognizerStateEnded:
@@ -3017,6 +3053,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     if (!player) return;
     BOOL resume = SGPlayerState().isPaused;
+    SGPlayFeedback(resume ? SGFeedbackPlay : SGFeedbackPause);
     if (resume) [player resume:nil];
     else [player pause:nil];
     [_play turnToSymbol:resume ? @"pause.fill" : @"play.fill" animated:YES];
@@ -3030,6 +3067,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
 // The command first, then the step: the animation never holds the skip up. An episode goes back or on kEpisodeSkip
 // seconds through the same seekTo: the progress bar sends, kept inside the episode.
 - (void)skip:(NSInteger)direction {
+    SGPlayFeedback(SGFeedbackSkip);
     if (_episode) {
         SPTPlayerState *state = SGPlayerState();
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
@@ -3101,6 +3139,7 @@ void SGRSystemToggleShuffle(void) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerState *state = SGPlayerState();
     if (!player || !state || !SGRSystemOptionAllowed(state, NO)) return;
+    SGPlayFeedback(SGFeedbackToggle);
     [player setShufflingContext:!state.options.shufflingContext];
 }
 
@@ -3109,6 +3148,7 @@ void SGRSystemCycleRepeat(void) {
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
     SPTPlayerOptions *options = SGPlayerState().options;
     if (!player || !options || !SGRSystemOptionAllowed(SGPlayerState(), YES)) return;
+    SGPlayFeedback(SGFeedbackToggle);
     if (options.repeatingTrack) {
         [player setRepeatingTrack:NO];
         [player setRepeatingContext:NO];

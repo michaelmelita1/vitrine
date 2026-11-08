@@ -15,6 +15,7 @@
 #import "Redesigned/Lyrics/SGRKaraokeView.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
+#import "Shared/Haptics/Haptics.h"
 #import "Redesigned/Player/Player.h"
 #import "Redesigned/Artist/Artist.h"
 #import "SystemPlayer.h"
@@ -150,6 +151,7 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     CAGradientLayer *_titleFade;
     SGMarqueeLabel *_besideTitle, *_besideArtist;   // the track the swipe brings in
     BOOL _titleSkipping;
+    BOOL _titlePast;   // the swipe is past where letting go skips
     NSString *_titleSkipFrom;
     CGFloat _headPush;            // how far it has, 0 to the queue's headRoom
     BOOL _queueDragging;          // a track lifted in the queue: the foot is away and the list runs to the screen's foot
@@ -915,6 +917,13 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
             _besideArtist.text = beside.artistName ?: @"";
             _besideTitle.hidden = _besideArtist.hidden = !beside;
             [self placeTitlePagesAt:beside ? x : x / 4 way:way step:step];
+            // A tick as the drag passes where letting go skips (Vibrations > Controls), as the page's.
+            BOOL past = beside && fabs(x) > step * kTitleSwipeDistance;
+            if (swipe.state == UIGestureRecognizerStateBegan) _titlePast = NO;
+            if (past != _titlePast) {
+                _titlePast = past;
+                if (past) SGPlayFeedback(SGFeedbackDetent);
+            }
             break;
         }
         case UIGestureRecognizerStateEnded:
@@ -1049,7 +1058,7 @@ static NSString *landscapeTime(double seconds) {
 
 - (void)toggleSaved {
     if (!_savedTrack || !SGRCollectionSetSaved([NSURL URLWithString:_savedTrack], !_saved)) return;
-    [[[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight] impactOccurred];
+    SGPlayFeedback(SGFeedbackAdd);
     [self showSaved:!_saved];
     [self restartRest];
 }
@@ -1165,6 +1174,7 @@ static NSString *landscapeTime(double seconds) {
 - (void)togglePlay {
     id<SPTPlayer> player = self.player;
     BOOL resume = SGPlayerState().isPaused;
+    SGPlayFeedback(resume ? SGFeedbackPlay : SGFeedbackPause);
     if (resume) [player resume:nil];
     else [player pause:nil];
     [_play turnToSymbol:resume ? @"pause.fill" : @"play.fill" animated:YES];
@@ -1173,12 +1183,14 @@ static NSString *landscapeTime(double seconds) {
 }
 
 - (void)previous {
+    SGPlayFeedback(SGFeedbackSkip);
     [self.player skipToPreviousTrackWithOptions:nil];
     [_previous stepArrow:-1];
     [self restartRest];
 }
 
 - (void)next {
+    SGPlayFeedback(SGFeedbackSkip);
     [self.player skipToNextTrackWithOptions:nil];
     [_next stepArrow:1];
     [self restartRest];

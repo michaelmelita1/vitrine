@@ -8,6 +8,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import "Core/SGCore.h"
+#import "Shared/Haptics/Haptics.h"
 #import "Redesigned/Kit/SGRKit.h"
 #import "Redesigned/Player/Player.h"
 #import "SystemPlayer.h"
@@ -34,6 +35,10 @@ static const CGFloat kHeldBounce = 0.3;
 static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24, kGlyphRest = 0.68;
 
 static char kSessionContext;
+
+// Vibrations > Controls, as the progress bar has them (SystemPlayer.m): a tick at each of the sixteen steps the volume
+// buttons move by, a firmer one at either end. A step counts once the value is a little past it.
+static const CGFloat kVolumeSteps = 16, kVolumeHysteresis = 0.004;
 
 static UIImageView *glyph(NSString *symbol) {
     UIImageSymbolConfiguration *configuration =
@@ -73,6 +78,8 @@ static UIImageView *glyph(NSString *symbol) {
     CGFloat _value, _startValue, _startX, _trackMin, _trackMax;
     CGFloat _stretch;   // -1 to 1: how far a drag past the low (negative) or high end stretches the track
     BOOL _held;
+    NSInteger _step;   // the step the row was last felt in
+    BOOL _atEnd;
     CFTimeInterval _lastPush;
     NSHashTable<UIGestureRecognizer *> *_suspended;
 }
@@ -337,8 +344,25 @@ static UIImageView *glyph(NSString *symbol) {
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
     _startX = [touch locationInView:self].x;
     _startValue = _value;
+    _step = (NSInteger)floor(_value * kVolumeSteps);
+    _atEnd = _value <= 0 || _value >= 1;
+    SGPlayFeedback(SGFeedbackGrab);
+    SGPrepareFeedback(SGFeedbackDetent);
     [self setHeld:YES];
     return YES;
+}
+
+- (void)feelValue {
+    BOOL end = _value <= 0 || _value >= 1;
+    if (end != _atEnd) {
+        _atEnd = end;
+        if (end) SGPlayFeedback(SGFeedbackEdge);
+    }
+    NSInteger step = (NSInteger)floor(_value * kVolumeSteps);
+    if (step != _step && fabs(_value * kVolumeSteps - MAX(step, _step)) > kVolumeHysteresis * kVolumeSteps) {
+        _step = step;
+        if (!end) SGPlayFeedback(SGFeedbackDetent);
+    }
 }
 
 // Relative to where the finger came down: the value moves by the finger's travel over the track's length.
@@ -347,6 +371,7 @@ static UIImageView *glyph(NSString *symbol) {
     CGFloat span = MAX(1, _trackMax - _trackMin + 2 * kStretch);
     CGFloat wanted = _startValue + ([touch locationInView:self].x - _startX) / span, before = _value;
     [self setValue:wanted fromUser:YES];
+    [self feelValue];
     // Past an end, the stretch (ElasticSlider's normalizedStretchingValue): the overshoot over kMaxStretch / kPushStretch.
     CGFloat over = wanted < 0 ? wanted : wanted > 1 ? wanted - 1 : 0, most = kMaxStretch / span / kPushStretch;
     CGFloat stretch = MIN(most, MAX(-most, over)) / most;
@@ -363,7 +388,10 @@ static UIImageView *glyph(NSString *symbol) {
     return YES;
 }
 
-- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event { [self setHeld:NO]; }
+- (void)endTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
+    SGPlayFeedback(SGFeedbackRelease);
+    [self setHeld:NO];
+}
 - (void)cancelTrackingWithEvent:(UIEvent *)event { [self setHeld:NO]; }
 
 - (NSString *)accessibilityValue { return [NSString stringWithFormat:@"%d%%", (int)round(_value * 100)]; }

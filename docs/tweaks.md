@@ -597,6 +597,11 @@ Redesigned:
                   (SGRPinnedBack) is pinned opposite the ⋯; iOS's soft top fade waits until the cover or photo has gone up
                   past the status bar. The sections dropped under the tracks are answered from memory once known, the
                   cards inside them are not measured, and every cell is sized once on open so the page keeps one length.
+                  Vibrations › Controls (Shared/Haptics) plays on the mod's own player too: play and pause, the skips,
+                  shuffle and repeat, the star, the progress bar and the volume row (a tap as either is taken, a tick at
+                  each tenth or volume step, a firmer one at the ends, a soft one as it lets go) and the title and mini
+                  player swipes (a tick as they pass where letting go skips), on the page, the landscape player and the
+                  mini player.
     NowPlayingBar/ the glass now playing bar (NowPlayingBar.x), with Spotify's device button on it hidden on request
                   (BarConnect.x, its own key and its own row on the Player page, apart from the native look's). The card's text is the Music
                   app's, the title over the artists with no device line, drawn inside Spotify's own text on each swipe page

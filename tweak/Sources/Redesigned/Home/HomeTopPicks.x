@@ -58,8 +58,13 @@ static BOOL sg_showHeading;
 @implementation SGRLayoutBox
 @end
 
+// Of the page's width, or of the screen's short side when the app is turned: a share of a landscape page made each card
+// a square half the screen tall and more (its owner, 2026-11-06).
 static CGFloat targetWidth(void) {
-    return round(sg_containerWidth * kCardShare);
+    if (!SGNativeRedesign()) return round(sg_containerWidth * kCardShare);
+    CGSize screen = UIScreen.mainScreen.bounds.size;
+    CGFloat portrait = MIN(screen.width, screen.height);
+    return round(MIN(sg_containerWidth, portrait > 0 ? portrait : sg_containerWidth) * kCardShare);
 }
 
 // The large shelf's heading goes, and the band it took with it, unless Show Top picks heading keeps both. Its

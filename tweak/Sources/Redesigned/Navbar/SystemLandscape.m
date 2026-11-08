@@ -78,6 +78,22 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
 }
 @end
 
+// The rest's shield: over everything but `passing`, where the touches go to what is under it (the lines, which a drag
+// scrolls whatever the controls are doing; its owner's recording, 2026-11-06: a drag on the lines at rest woke the
+// controls instead, so scrolling worked one time in two).
+@interface SGRSystemShieldView : UIView
+@property (nonatomic, weak) UIView *passing;
+@end
+
+@implementation SGRSystemShieldView
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *passing = self.passing;
+    if (passing.window && passing.alpha > 0.01 && !passing.hidden
+        && CGRectContainsPoint([passing convertRect:passing.bounds toView:self], point)) return nil;
+    return [super hitTest:point withEvent:event];
+}
+@end
+
 @interface SGRSystemLandscapeController : UIViewController <SGPlayerStateObserver, UIGestureRecognizerDelegate>
 - (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated;
 - (void)setQueueMode:(BOOL)queue animated:(BOOL)animated;
@@ -96,7 +112,7 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     SGRKaraokeView *_lyrics;
     NSTimer *_rest;
     UITapGestureRecognizer *_hide;   // only while the controls are up
-    UIView *_shield;                 // only while they are not: the touch that brings them back
+    SGRSystemShieldView *_shield;    // only while they are not: the touch that brings them back, but on the lines
     BOOL _bare;                      // the track playing has no lines: the cover takes the screen
     // The clip, when the track has one: sharp on the left, and again under a blur behind the column (one player for both).
     UIView *_clip;
@@ -417,7 +433,8 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     // Never a button's touch: on the phone the tap to rest took the lyrics button's (its owner, 2026-11-06).
     _hide.delegate = self;
     [self.view addGestureRecognizer:_hide];
-    _shield = [[UIView alloc] initWithFrame:self.view.bounds];
+    _shield = [[SGRSystemShieldView alloc] initWithFrame:self.view.bounds];
+    _shield.passing = _stage;
     _shield.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _shield.accessibilityElementsHidden = YES;
     [_shield addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(wake)]];
@@ -684,6 +701,8 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     }
     _stage.frame = CGRectMake(left - 24, linesTop, width + 48, linesBottom - linesTop);
     _lyrics.frame = _stage.bounds;
+    // Laid out again when only the column moved, so a scroll by hand keeps its lines where they are (SGRKaraokeView.m).
+    [_lyrics setNeedsLayout];
     // The queue runs down behind the foot to the screen's, its last track resting just above the foot (the portrait
     // page's way), so a lift that puts the foot away resizes nothing and the list never jumps.
     // It starts at the head's top, the head's room above its chips, which its scroll pushes up into as the Music app's
@@ -738,11 +757,9 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     _lyricsButton.accessibilityValue = lines ? @"Shown" : nil;
 }
 
-- (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated {
-    if (lyrics == _lyricsMode && !_queueMode && self.isViewLoaded) return;
-    _lyricsMode = lyrics;
-    _queueMode = NO;
-    if (!self.isViewLoaded) return;
+// A switch between the player, the lines and the queue: one crossfade on the layout's spring, the head moving with it,
+// as it was before the switch was staged (its owner's recordings, 2026-11-06: the 12:51 build's was the smoother).
+- (void)switchColumnAnimated:(BOOL)animated {
     [self setControlsShown:YES];
     void (^change)(void) = ^{
         [self.view setNeedsLayout];
@@ -750,6 +767,14 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     };
     if (animated && self.view.window) SGRAnimateLayout(self.view, change, nil);
     else change();
+}
+
+- (void)setLyricsMode:(BOOL)lyrics animated:(BOOL)animated {
+    if (lyrics == _lyricsMode && !_queueMode && self.isViewLoaded) return;
+    _lyricsMode = lyrics;
+    _queueMode = NO;
+    if (!self.isViewLoaded) return;
+    [self switchColumnAnimated:animated];
     [self restartRest];
 }
 
@@ -757,7 +782,8 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     [self setLyricsMode:!(_lyricsMode && !_queueMode) animated:YES];
 }
 
-// The queue in the column, in the lines' place; again, back to what was there. It never rests.
+// The queue in the column, in the lines' place; again, back to the player. It takes the lyrics' place for good, so the
+// queue tapped again closes to the player rather than back to the lyrics (its owner, 2026-11-06). It never rests.
 - (void)toggleQueueMode {
     [self setQueueMode:!_queueMode animated:YES];
 }
@@ -765,18 +791,13 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)setQueueMode:(BOOL)queue animated:(BOOL)animated {
     if (queue == _queueMode) return;
     _queueMode = queue;
+    if (queue) _lyricsMode = NO;
     if (!self.isViewLoaded) return;
     if (_queueMode) {
         [self refreshQueue];
         [_queue scrollToTop];
     }
-    [self setControlsShown:YES];
-    void (^change)(void) = ^{
-        [self.view setNeedsLayout];
-        [self.view layoutIfNeeded];
-    };
-    if (animated && self.view.window) SGRAnimateLayout(self.view, change, nil);
-    else change();
+    [self switchColumnAnimated:animated];
     [self restartRest];
 }
 
@@ -838,7 +859,7 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
 - (void)placeHead {
     CGFloat push = _queueMode ? _headPush : 0, room = MAX(1, _queue.headRoom);
     _head.transform = CGAffineTransformMakeTranslation(0, -push);
-    _head.alpha = MAX(0, 1 - push / (room * 0.7));
+    _head.alpha = MIN(1, MAX(0, 1 - push / (room * 0.7))) * (_queueMode ? _queue.headShown : 1);
 }
 
 - (void)refreshQueue {
@@ -1217,6 +1238,15 @@ static NSString *landscapeTime(double seconds) {
 }
 
 - (void)setControlsShown:(BOOL)shown {
+    // Already up: the clock starts over and nothing is laid out again. A second layout here, on the response's quick
+    // curve, ran over a switch's spring and had it over in a few frames (its owner's recordings, 2026-11-06).
+    if (shown && !_resting && !_shield.superview) {
+        [_rest invalidate];
+        _rest = nil;
+        _hide.enabled = YES;
+        [self restartRest];
+        return;
+    }
     [_rest invalidate];
     _rest = nil;
     _hide.enabled = shown;

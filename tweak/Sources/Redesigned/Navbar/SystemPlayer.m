@@ -1208,7 +1208,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     UIView *_optionBadge;             // shuffle or repeat on the queue button, while on and hidden from the controls
     UIViewController *_landscapeScreen;   // the landscape player over the page while the app is turned
     CGFloat _headPush;                // how far the queue's scroll has pushed the thumbnail row up, 0 to its headRoom
-    CGFloat _shownPush;               // the push the row's alpha was last set for
+    CGFloat _shownAlpha;              // the alpha placeHeadPush last gave the row
     UIImageView *_queueBubble;        // the queue button's light disc while the queue is open, the Music app's
     UIImageView *_lyricsBubble;       // the lyrics button's, while the lyrics are up
     BOOL _alone;      // the lines have the page to themselves
@@ -1766,6 +1766,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGFloat stageTop = CGRectGetMaxY(thumb) + 8;
     CGRect stage = CGRectMake(0, stageTop, width, MAX(0, scrubberY - 8 - stageTop));
     _stage.frame = _alone ? [self aloneStageFrom:stage] : stage;
+    // Laid out again when only the stage moved, so a scroll by hand keeps its lines where they are (SGRKaraokeView.m).
+    [_lines setNeedsLayout];
     _lyricsNote.frame = CGRectInset(_stage.bounds, kMargin, 0);
     _lyricsSpinner.frame = _stage.bounds;
     // While a track is moved the queue runs down to the foot of the screen, the controls away (setQueueDragging:).
@@ -2499,18 +2501,19 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)placeHeadPush {
     CGFloat push = _queueOpen ? _headPush : 0, room = MAX(1, _queueView.headRoom);
-    CGFloat shown = MAX(0, 1 - push / (room * 0.7));
+    // Pushed up, the row fades as it goes; pulled down by History, it fades as it reaches the list's foot.
+    CGFloat shown = MIN(1, MAX(0, 1 - push / (room * 0.7))) * (_queueOpen ? _queueView.headShown : 1);
     CGAffineTransform up = CGAffineTransformMakeTranslation(0, -push);
     _titleBlock.transform = up;
     _add.transform = up;
     _more.transform = up;
     // Only the queue's: the lyrics' rest fades the row by its own alpha (fadingViews), the thumbnail's own staying put.
-    if (_queueOpen || push != _shownPush) {
+    if (_queueOpen || shown != _shownAlpha) {
         _titleBlock.alpha = shown;
         _add.alpha = shown;
         _more.alpha = shown;
     }
-    _shownPush = push;
+    _shownAlpha = shown;
     _cover.alpha = shown;
     // The shadow, which is the holder's, goes with the thumbnail, or it stayed behind as a dark square as the row went
     // (its owner's recording, 2026-11-06).

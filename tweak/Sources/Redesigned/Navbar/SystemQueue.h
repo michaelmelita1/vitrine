@@ -39,6 +39,9 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 // How far the page's head is pushed: up to headRoom as the list scrolls on, and below 0, down, as History is pulled into
 // view over it.
 @property (nonatomic, copy) void (^onHeadPush)(CGFloat push);
+// How much of the page's head shows, 0 to 1: all of it but as History pulls it down to where the list fades out over
+// the controls. Read in onHeadPush.
+@property (nonatomic, readonly) CGFloat headShown;
 // A track of History tapped: the track itself, and how many tracks back it lies.
 @property (nonatomic, copy) void (^onPickPast)(SPTPlayerTrack *track, NSInteger steps);
 // The state's tracks to come, with the name of what it plays from for the main group's note; the chip read again.

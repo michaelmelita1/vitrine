@@ -141,6 +141,20 @@ static id swappedValue(id value) {
 }
 %end
 
+// A switch that is on shows it only by its track's color, so Spotify's green made white left a white knob on a white
+// track (code review, 2026-11-08): a white on-tint goes back to the system's own green.
+static BOOL isWhite(UIColor *color) {
+    CGFloat w = 0, a = 0, r, g, b;
+    if ([color getWhite:&w alpha:&a]) return w > 0.95 && a > 0.5;
+    return [color getRed:&r green:&g blue:&b alpha:&a] && MIN(r, MIN(g, b)) > 0.95 && a > 0.5;
+}
+
+%hook UISwitch
+- (void)setOnTintColor:(UIColor *)color {
+    %orig(color && isWhite(color) ? nil : color);
+}
+%end
+
 %ctor {
     if (!SGRedesignedUI()) return;
     %init;

@@ -72,6 +72,8 @@ void SGRAlbumHoldPage(UIView *page);
 // Sizes every cell of the album's list once, soon after its count changes, so the dropped sections under the tracks are
 // 0 tall before the page is scrolled to them (AlbumSections.x). Cheap to call on every pass of the list's view.
 void SGRAlbumRealizeFooters(UIView *listView);
+// The list's item count, counted again at most every quarter second (AlbumSections.x), for the sizing hooks.
+NSInteger SGRListItemCount(UICollectionView *list);
 
 // No navigation bar over `page` (an album's or an artist's): its controller in Spotify's stack asks for none from now on,
 // the bar goes now if the page is on top, and the Kit's back button is pinned in its place (AlbumHeader.x).

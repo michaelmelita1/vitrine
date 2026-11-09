@@ -555,6 +555,13 @@ static void layoutHeader(UIViewController *page) {
     %orig;
     UIView *view = ((UIViewController *)self).viewIfLoaded;
     if (!view) return;
+    // Only when the screen's width changed since Home last laid out (a turn while it was off screen): an ordinary way
+    // back keeps its normal pass (code review, 2026-11-08).
+    static char widthKey;
+    CGFloat width = view.window ? view.window.bounds.size.width : UIScreen.mainScreen.bounds.size.width;
+    NSNumber *last = objc_getAssociatedObject(self, &widthKey);
+    objc_setAssociatedObject(self, &widthKey, @(width), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!last || fabs(last.doubleValue - width) < 1) return;
     [view setNeedsLayout];
     [view layoutIfNeeded];
     if (sg_header && [sg_header isDescendantOfView:view]) {

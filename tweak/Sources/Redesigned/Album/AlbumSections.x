@@ -211,12 +211,25 @@ static BOOL shown(UICollectionViewCell *cell, UIView *content, NSIndexPath *path
 // Spotify each time -- the carousels, the merch cards -- and searched for the two kept lines, the asking took up to a
 // third of every second of a scroll, 1,500 times a second (the hitch log of 2026-11-08). Answered from here once known;
 // the switches are read once a launch, so a place stays what it was for the list's life.
+// The list's item count, counted again at most every quarter second: the sizing asks hundreds of times a second while
+// scrolling, and Spotify adds sections only now and then (code review, 2026-11-08).
+NSInteger SGRListItemCount(UICollectionView *list) {
+    static char countKey, atKey;
+    CFTimeInterval now = CACurrentMediaTime();
+    NSNumber *at = objc_getAssociatedObject(list, &atKey), *kept = objc_getAssociatedObject(list, &countKey);
+    if (kept && at && now - at.doubleValue < 0.25) return kept.integerValue;
+    NSInteger count = 0;
+    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    objc_setAssociatedObject(list, &countKey, @(count), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(list, &atKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return count;
+}
+
 static NSMutableDictionary<NSIndexPath *, NSNumber *> *droppedOf(UICollectionView *list) {
     static char key, countKey;
     // Spotify adds the sections as they come, and a place can hold another section after; any change in the list's
     // count starts the answers again.
-    NSInteger count = 0;
-    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    NSInteger count = SGRListItemCount(list);
     NSMutableDictionary *dropped = objc_getAssociatedObject(list, &key);
     if (!dropped || [objc_getAssociatedObject(list, &countKey) integerValue] != count) {
         dropped = [NSMutableDictionary dictionary];
@@ -250,16 +263,18 @@ static void realizeAll(UICollectionView *list) {
     CGSize content = list.collectionViewLayout.collectionViewContentSize;
     CGRect frame = list.frame;
     if (!list.window || content.height <= frame.size.height + 1) return;
+    // Only the frame grows, from where the list is scrolled to down to its end: its offset is never touched, so Spotify's
+    // scroll delegate, which keeps the page's overlay and impressions by it, sees nothing (code review, 2026-11-08).
     CGPoint offset = list.contentOffset;
     [UIView performWithoutAnimation:^{
         for (NSInteger pass = 0; pass < 3; pass++) {
-            CGFloat tall = MIN(list.collectionViewLayout.collectionViewContentSize.height, 12000);
+            CGFloat rest = list.collectionViewLayout.collectionViewContentSize.height - MAX(0, offset.y);
+            CGFloat tall = MIN(MAX(rest, frame.size.height), 12000);
             list.frame = CGRectMake(frame.origin.x, frame.origin.y, frame.size.width, tall);
-            list.contentOffset = CGPointZero;
             [list layoutIfNeeded];
         }
         list.frame = frame;
-        list.contentOffset = offset;
+        if (!CGPointEqualToPoint(list.contentOffset, offset)) list.contentOffset = offset;
         [list layoutIfNeeded];
     }];
 }

@@ -185,8 +185,7 @@ static void logOnce(NSString *what) {
 // The height each dropped place's content measured at, kept per list while its count holds.
 static NSMutableDictionary<NSIndexPath *, NSNumber *> *naturalsOf(UICollectionView *list) {
     static char key, countKey;
-    NSInteger count = 0;
-    for (NSInteger section = 0, sections = list.numberOfSections; section < sections; section++) count += [list numberOfItemsInSection:section];
+    NSInteger count = SGRListItemCount(list);
     NSMutableDictionary *naturals = objc_getAssociatedObject(list, &key);
     if (!naturals || [objc_getAssociatedObject(list, &countKey) integerValue] != count) {
         naturals = [NSMutableDictionary dictionary];

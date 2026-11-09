@@ -441,7 +441,9 @@ static CGFloat columnDrop(UIView *header) {
     }
     NSNumber *key = @(round(width));
     CGFloat deepest = MAX(kept[key].doubleValue, room);
-    kept[key] = @(deepest);
+    // Kept only once the header is as wide as its window: mid-turn passes at in-between widths would leave values a
+    // later page of that width picks up (code review, 2026-11-08).
+    if (fabs(width - header.window.bounds.size.width) < 1) kept[key] = @(deepest);
     return MAX(0, deepest - room);
 }
 
@@ -593,7 +595,16 @@ static CGRect wideCover(UIView *header, UIView *page) {
     else if (SGRAlbumListColumn(page, &left, &right)) x = round([page convertPoint:CGPointMake(left, 0) toView:header].x + SGRSideMargin);
     CGFloat side = MIN(kWideCover, window.bounds.size.height - kWideTop - kWideBelow - 100);
     if (side < kMinCover) return CGRectZero;
-    return CGRectMake(x, MAX(0, round(kWideTop - headerRestTop(header))), side, side);
+    CGFloat y = MAX(0, round(kWideTop - headerRestTop(header)));
+    // The list's insets are still the upright ones for the first passes sideways, which put the cover and the text
+    // beside it about 190pt low until a later pass moved them up (its owner's recordings, 2026-11-09): a stale reading
+    // only ever puts it lower. The place is the same on every album at a given screen width, so the highest one read
+    // is kept, across launches too, and the cover never goes below it.
+    NSString *key = [NSString stringWithFormat:@"spotifyglass.redesign.album.wideTop.%.0f", window.bounds.size.width];
+    NSNumber *kept = [NSUserDefaults.standardUserDefaults objectForKey:key];
+    if (kept && kept.doubleValue <= y) y = kept.doubleValue;
+    else [NSUserDefaults.standardUserDefaults setObject:@(y) forKey:key];
+    return CGRectMake(x, y, side, side);
 }
 
 // Upright, the cover's own place, measured from the screen as the sideways one is: kUprightGap under the status bar
@@ -960,7 +971,8 @@ static void applyHeader(UIView *header, UIView *page) {
     }
     NSNumber *widthKey = @(round(width));
     rest = MAX(rest, kept[widthKey].doubleValue);
-    kept[widthKey] = @(rest);
+    // Only settled: the header as wide as its window, not a pass mid-turn (code review, 2026-11-08).
+    if (header.window && fabs(width - header.window.bounds.size.width) < 1) kept[widthKey] = @(rest);
     CGRect wide = wideCover(header, page);
     BOOL turned = !CGRectIsEmpty(wide) && CGRectIsEmpty([objc_getAssociatedObject(header, &kWideKey) CGRectValue]);
     objc_setAssociatedObject(header, &kWideKey, [NSValue valueWithCGRect:wide], OBJC_ASSOCIATION_RETAIN_NONATOMIC);

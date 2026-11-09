@@ -414,7 +414,10 @@ void SGMotionAlbumCover(NSString *artist, NSString *album, SGMotionShape shape, 
     // Each edition its own answer: the standard album's motion is not the deluxe's ("edition" marks the keys made so, as
     // older ones, which editions shared, could hold another edition's cover).
     NSString *edition = editionOf(album);
-    NSString *key = [NSString stringWithFormat:@"album\n%ld\n%@\n%@\nedition %@", (long)shape, artistKey, albumKey, edition];
+    // A square asked since it falls back to the tall clip has keys of its own ("tall"), so an album kept as having no
+    // square clip before is asked again rather than answered none from the disk (code review, 2026-11-08).
+    NSString *key = [NSString stringWithFormat:@"album\n%ld\n%@\n%@\nedition %@%@", (long)shape, artistKey, albumKey, edition,
+                     shape == SGMotionSquare ? @"\ntall" : @""];
     // The remote file is what is kept: the store may drop its local copy later in the launch.
     lookUp(key, ^(NSURL *remote) { SGMotionFile(remote, done); }, ^(void (^answer)(id, BOOL)) {
         // Searched by the whole name too when it names an edition: the search by the bare name alone may not bring

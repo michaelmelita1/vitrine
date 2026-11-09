@@ -25,6 +25,9 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat);
 @property (nonatomic) BOOL showsShuffle, showsRepeat;
 @property (nonatomic, copy) void (^onShuffle)(void);
 @property (nonatomic, copy) void (^onRepeat)(void);
+// A Jam chip at the row's end (its owner, 2026-11-09): its tap runs onJam; lit while a Jam is on (jamOn, set by the page).
+@property (nonatomic, copy) void (^onJam)(void);
+@property (nonatomic) BOOL jamOn;
 // A track lifted to be moved (YES) and let go (NO): the page puts its controls away meanwhile, as the Music app does.
 @property (nonatomic, copy) void (^onDragging)(BOOL dragging);
 // The page's controls over the foot of the list: the list runs on under them, its last track resting just above them

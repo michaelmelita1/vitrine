@@ -553,7 +553,12 @@ Redesigned:
                   Spotify by setQueue:: a row moves up or down its group by its grip (a reorder of the mod's own, as
                   UIKit's editing mode takes swipes away), the page's controls moving off meanwhile; a swipe left removes
                   a track; a Clear chip empties Playing Next. Its chip row has one AutoMix chip stepping off, AutoMix and
-                  Crossfade, and Shuffle and Repeat when they are off the controls. Shuffle and Repeat, on the page and
+                  Crossfade, a Jam chip, and Shuffle and Repeat when they are off the controls. The Jam chip starts a
+                  Jam through Spotify's spotify:jam:play link and, during one, opens Spotify's Jam details sheet
+                  (spotify:internal:jam-manage-participants-sheet); while a Jam is on the queue button stands in a capsule
+                  with the faces of who is in it (SystemJam.m: the Jam is read off Spotify's own Jam hat on its hidden
+                  now playing bar, the faces off the facepiles in its Jam views, the user's own picture from Home's
+                  profile button before anyone joins). Shuffle and Repeat, on the page and
                   the chips, follow the player state's restrictions (SGRSystemOptionAllowed) as Spotify's Connect menu
                   does; hidden from the controls and on, one of them badges the queue button. The queue pushes the title
                   row out as it scrolls, its chips and group headings held at its top, with History (the player's

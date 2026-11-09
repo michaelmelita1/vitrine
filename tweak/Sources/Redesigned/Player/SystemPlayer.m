@@ -1216,7 +1216,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     UIControl *_volume;
     SGRGlyphButton *_lyrics, *_queue;
     // While a Spotify Jam is on (Shared/Player/Jam.h): the queue button in a capsule with the faces of who is in it, as the
-    // Music app shows SharePlay (its owner's screenshot, 2026-11-09), and a tap opens Spotify's own queue, the Jam's.
+    // Music app shows SharePlay (its owner's screenshot, 2026-11-09). The glyph still opens the page's queue; the queue's
+    // Jam chip opens the Jam's details.
     UIView *_jamCapsule;
     NSArray<UIImage *> *_jamFaces;
     NSTimer *_jamTimer;
@@ -1439,11 +1440,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queue = [SGRGlyphButton buttonWithSymbol:@"list.bullet" pointSize:20 title:@"Queue"];
     // A tap turns the page to its queue, as the Music app's does (its owner, 2026-11-02). No hold: Spotify's own queue sheet
     // is not opened from the page any more (its owner, 2026-11-02).
-    _queue.onTap = ^{
-        typeof(self) strongSelf = weakSelf;
-        if (strongSelf && strongSelf->_jamFaces) [strongSelf openJamQueue];
-        else [strongSelf toggleQueue];
-    };
+    _queue.onTap = ^{ [weakSelf toggleQueue]; };
     // Dim while the queue is closed; open, the Music app's way (its owner's screenshot, 2026-11-02): a light disc behind
     // it and the glyph dark on it.
     _queue.glyph.tintColor = SGRSecondary();
@@ -1455,6 +1452,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView = [SGRSystemQueueView new];
     _queueView.alpha = 0;
     _queueView.onReorder = ^(NSArray *upcoming) { [weakSelf handQueueBack:upcoming]; };
+    _queueView.onJam = ^{ [weakSelf startOrOpenJam]; };
     // Shuffle and Repeat hidden from the controls on the Player page show in the queue's row instead (its owner, 2026-11-02).
     _queueView.showsShuffle = _shuffleOff;
     _queueView.showsRepeat = _repeatOff;
@@ -1662,8 +1660,23 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
 
-- (void)openJamQueue {
+// Spotify's Jam details sheet (Invite others, who is in it, Auto-invite, End Jam, Guest settings: its owner's screenshot,
+// 2026-11-09), by the link Spotify's own list names for it; if Spotify takes no such link, its Jam queue sheet, whose
+// gear leads there.
+- (void)openJamSettings {
+    if (SGOpenSpotifyURI([NSURL URLWithString:@"spotify:internal:jam-manage-participants-sheet"])) return;
     SGOpenSpotifyURI([NSURL URLWithString:@"spotify:now-playing:queue"]);
+}
+
+// The queue's Jam chip: while a Jam is on, its sheet; otherwise Spotify's own link that starts one with what plays
+// (spotify:jam:play, from Spotify's link list; untested 2026-11-09), and if Spotify takes no such link, its queue sheet,
+// which has its own Start a Jam.
+- (void)startOrOpenJam {
+    if (_jamFaces || SGOpenSpotifyURI([NSURL URLWithString:@"spotify:jam:play"])) {
+        if (_jamFaces) [self openJamSettings];
+        return;
+    }
+    [self openJamSettings];
 }
 
 // Looked for while the page is in a window: when it opens, on each change of the player, and every two seconds, since
@@ -1677,6 +1690,7 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
     NSArray<UIImage *> *faces = SGJamFaces(3);
     if ((!faces && !_jamFaces) || [faces isEqualToArray:_jamFaces]) return;
     _jamFaces = faces;
+    _queueView.jamOn = faces != nil;
     if (!faces) {
         // Back into the queue button: the capsule shrinks onto it as the glyph slides home, the faces fading first.
         [self.view setNeedsLayout];
@@ -1702,10 +1716,9 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
         _jamCapsule.layer.cornerCurve = kCACornerCurveContinuous;
         _jamCapsule.clipsToBounds = YES;
         _jamCapsule.alpha = 0;
-        _jamCapsule.accessibilityLabel = @"Jam queue";
-        _jamCapsule.isAccessibilityElement = YES;
-        _jamCapsule.accessibilityTraits = UIAccessibilityTraitButton;
-        [_jamCapsule addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openJamQueue)]];
+        _jamCapsule.accessibilityElementsHidden = YES;
+        // The faces show who is in it and nothing more (its owner, 2026-11-09): the queue's Jam chip opens the Jam.
+        _jamCapsule.userInteractionEnabled = NO;
     }
     if (_jamCapsule.superview != _queue.superview) [_queue.superview insertSubview:_jamCapsule belowSubview:_queue];
     for (UIView *old in _jamCapsule.subviews.copy) [old removeFromSuperview];

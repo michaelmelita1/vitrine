@@ -125,6 +125,7 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     UIButton *_automix;   // one chip, three states as repeat has: off, AutoMix (beat-matched), Crossfade
     UIButton *_shuffle, *_repeat;   // shown while the controls have them hidden (showsShuffle, showsRepeat)
     UIButton *_clear;               // clears Playing Next, dimmed while it holds nothing
+    UIButton *_jam;                 // starts a Jam, or opens it while one is on (onJam)
     UIView *_chipsRow;              // holds the chips, so the row fades as a whole whatever each chip's own dim
     BOOL _shuffling;
     NSInteger _repeatMode;          // 0 off, 1 the playlist or album, 2 the track
@@ -206,11 +207,15 @@ BOOL SGRSystemOptionAllowed(SPTPlayerState *state, BOOL repeat) {
     _clear = [self chipWithImage:chipSymbol(@"xmark") title:@"Clear Playing Next"];
     _clear.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
     [_clear addAction:[UIAction actionWithHandler:^(UIAction *action) { [weakSelf tapClear]; }] forControlEvents:UIControlEventTouchUpInside];
+    _jam = [self chipWithImage:chipSymbol(@"person.2.fill") title:@"Start a Jam"];
+    _jam.titleLabel.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
+    [_jam addAction:[UIAction actionWithHandler:^(UIAction *action) { if (weakSelf.onJam) weakSelf.onJam(); }]
+   forControlEvents:UIControlEventTouchUpInside];
     _chipsRow = [UIView new];
     _headShown = 1;
     [self addSubview:_list];
     [self addSubview:_chipsRow];
-    for (UIView *view in @[_automix, _shuffle, _repeat, _clear]) [_chipsRow addSubview:view];
+    for (UIView *view in @[_automix, _shuffle, _repeat, _clear, _jam]) [_chipsRow addSubview:view];
     [self syncCrossfade];
     [self syncClear];
     return self;
@@ -429,6 +434,12 @@ static UIImage *chipSymbol(NSString *name) {
     [self syncAutoMixAnimated:YES];
 }
 
+- (void)setJamOn:(BOOL)jamOn {
+    _jamOn = jamOn;
+    [self paintChip:_jam on:jamOn];
+    _jam.accessibilityLabel = jamOn ? @"Jam" : @"Start a Jam";
+}
+
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGSize size = self.bounds.size;
@@ -436,8 +447,13 @@ static UIImage *chipSymbol(NSString *name) {
     NSMutableArray<UIView *> *chips = [NSMutableArray array];
     if (_showsShuffle) [chips addObject:_shuffle];
     if (_showsRepeat) [chips addObject:_repeat];
+    // Jam in the middle, labelled like AutoMix and Clear (its owner, 2026-11-09): AutoMix, Jam, Clear.
     [chips addObject:_automix];
+    [chips addObject:_jam];
     [chips addObject:_clear];
+    NSString *jamTitle = self.glyphsOnly ? nil : @" Jam";
+    if (!([_jam titleForState:UIControlStateNormal] == jamTitle || [[_jam titleForState:UIControlStateNormal] isEqualToString:jamTitle]))
+        [UIView performWithoutAnimation:^{ [self->_jam setTitle:jamTitle forState:UIControlStateNormal]; }];
     CGFloat chipWidth = MAX(0, (size.width - 2 * kSideMargin - kChipGap * (chips.count - 1)) / chips.count);
     // With headRoom the chips ride up with the list from under the head, and once at the top they stay there, the tracks
     // passing under them (its owner, 2026-11-06: "i wanted the chips to be stuck on the top"); without, they stand over

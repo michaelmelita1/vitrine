@@ -76,19 +76,34 @@ static UIImage *ownFace(void) {
     return sg_ownFace;
 }
 
+// Inside one of Spotify's Jam views: a class of the Jam's or of social listening on the way down. Facepiles elsewhere
+// show other people, an artist's on a page among them (the owner's recording, 2026-11-09: the artist playing showed
+// in the Jam's faces), so only these are read.
+static BOOL isJamView(UIView *view) {
+    NSString *name = NSStringFromClass(view.class);
+    return [name containsString:@"Jam"] || [name containsString:@"SocialListening"] || [name containsString:@"SocialSession"];
+}
+
+static void walkIn(UIView *view, BOOL inJam, BOOL inFacepile, BOOL *hat, NSMutableArray<UIImage *> *faces);
+
 static void walk(UIView *view, BOOL inFacepile, BOOL *hat, NSMutableArray<UIImage *> *faces) {
+    walkIn(view, NO, inFacepile, hat, faces);
+}
+
+static void walkIn(UIView *view, BOOL inJam, BOOL inFacepile, BOOL *hat, NSMutableArray<UIImage *> *faces) {
     if (!*hat && isJamHat(view)) *hat = YES;
+    inJam = inJam || isJamView(view);
     if (isOwnFace(view)) {
         UIImage *own = imageIn(view);
         if (own) keepOwnFace(own);
     }
-    BOOL facepile = inFacepile || isFacepile(view);
+    BOOL facepile = inFacepile || (inJam && isFacepile(view));
     if (facepile && [view isKindOfClass:UIImageView.class]) {
         UIImage *image = ((UIImageView *)view).image;
         CGSize size = view.bounds.size;
         if (image && size.width >= 12 && fabs(size.width - size.height) < 2 && ![faces containsObject:image]) [faces addObject:image];
     }
-    for (UIView *sub in view.subviews) walk(sub, facepile, hat, faces);
+    for (UIView *sub in view.subviews) walkIn(sub, inJam, facepile, hat, faces);
 }
 
 NSArray<UIImage *> *SGJamFaces(NSUInteger max) {

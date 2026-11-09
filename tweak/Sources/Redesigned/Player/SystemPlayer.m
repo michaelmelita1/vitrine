@@ -59,6 +59,7 @@
 #import "Player.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Player/SGLastTrack.h"
+#import "Shared/Player/Jam.h"
 #import "Shared/Navigation/Links.h"
 #import "Shared/Sing/Sing.h"
 #import "SystemPlayer.h"
@@ -1214,6 +1215,11 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     SGRSystemControlButton *_shuffle, *_previous, *_play, *_next, *_repeat;
     UIControl *_volume;
     SGRGlyphButton *_lyrics, *_queue;
+    // While a Spotify Jam is on (Shared/Player/Jam.h): the queue button in a capsule with the faces of who is in it, as the
+    // Music app shows SharePlay (its owner's screenshot, 2026-11-09), and a tap opens Spotify's own queue, the Jam's.
+    UIView *_jamCapsule;
+    NSArray<UIImage *> *_jamFaces;
+    NSTimer *_jamTimer;
     SGRSystemRouteButton *_route;
     UILabel *_routeLine;
     UIView *_stage;   // the lines' own view, since the karaoke view dims every sibling it has; out of the page while closed
@@ -1433,7 +1439,11 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queue = [SGRGlyphButton buttonWithSymbol:@"list.bullet" pointSize:20 title:@"Queue"];
     // A tap turns the page to its queue, as the Music app's does (its owner, 2026-11-02). No hold: Spotify's own queue sheet
     // is not opened from the page any more (its owner, 2026-11-02).
-    _queue.onTap = ^{ [weakSelf toggleQueue]; };
+    _queue.onTap = ^{
+        typeof(self) strongSelf = weakSelf;
+        if (strongSelf && strongSelf->_jamFaces) [strongSelf openJamQueue];
+        else [strongSelf toggleQueue];
+    };
     // Dim while the queue is closed; open, the Music app's way (its owner's screenshot, 2026-11-02): a light disc behind
     // it and the glyph dark on it.
     _queue.glyph.tintColor = SGRSecondary();
@@ -1598,6 +1608,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 // display link would pin the zoom's frames to its rate.
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self updateJamAnimated:NO];
     [self paintAccent];
     [self startTicking];
     __weak typeof(self) weakSelf = self;
@@ -1647,8 +1658,125 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _scrubber.userInteractionEnabled = _volume.userInteractionEnabled = YES;
 }
 
+#pragma mark - the Jam
+
+static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
+
+- (void)openJamQueue {
+    SGOpenSpotifyURI([NSURL URLWithString:@"spotify:now-playing:queue"]);
+}
+
+// Looked for while the page is in a window: when it opens, on each change of the player, and every two seconds, since
+// joining and leaving change nothing the player reports.
+- (void)updateJam {
+    [self updateJamAnimated:YES];
+}
+
+// Before the page opens it is drawn in place, still (its owner's recording, 2026-11-09: it faded in once the page was up).
+- (void)updateJamAnimated:(BOOL)animated {
+    NSArray<UIImage *> *faces = SGJamFaces(3);
+    if ((!faces && !_jamFaces) || [faces isEqualToArray:_jamFaces]) return;
+    _jamFaces = faces;
+    if (!faces) {
+        // Back into the queue button: the capsule shrinks onto it as the glyph slides home, the faces fading first.
+        [self.view setNeedsLayout];
+        void (^close)(void) = ^{
+            [self.view layoutIfNeeded];
+            self->_jamCapsule.frame = self->_queue.frame;
+            for (UIView *face in self->_jamCapsule.subviews) face.alpha = 0;
+        };
+        if (!animated) {
+            [UIView performWithoutAnimation:close];
+            _jamCapsule.alpha = 0;
+            return;
+        }
+        [UIView animateWithDuration:0.5 delay:0 usingSpringWithDamping:0.86 initialSpringVelocity:0
+                            options:UIViewAnimationOptionBeginFromCurrentState animations:close completion:^(BOOL finished) {
+            if (!self->_jamFaces) self->_jamCapsule.alpha = 0;
+        }];
+        return;
+    }
+    if (!_jamCapsule) {
+        _jamCapsule = [UIView new];
+        _jamCapsule.backgroundColor = [UIColor colorWithWhite:1 alpha:0.14];
+        _jamCapsule.layer.cornerCurve = kCACornerCurveContinuous;
+        _jamCapsule.clipsToBounds = YES;
+        _jamCapsule.alpha = 0;
+        _jamCapsule.accessibilityLabel = @"Jam queue";
+        _jamCapsule.isAccessibilityElement = YES;
+        _jamCapsule.accessibilityTraits = UIAccessibilityTraitButton;
+        [_jamCapsule addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openJamQueue)]];
+    }
+    if (_jamCapsule.superview != _queue.superview) [_queue.superview insertSubview:_jamCapsule belowSubview:_queue];
+    for (UIView *old in _jamCapsule.subviews.copy) [old removeFromSuperview];
+    // The faces overlap, the first on top; before anyone has joined, two figures in their place.
+    NSArray<UIImage *> *shown = faces.count ? faces : @[[UIImage systemImageNamed:@"person.2.fill"]];
+    for (NSInteger i = shown.count - 1; i >= 0; i--) {
+        UIImageView *face = [[UIImageView alloc] initWithImage:shown[i]];
+        face.contentMode = faces.count ? UIViewContentModeScaleAspectFill : UIViewContentModeScaleAspectFit;
+        face.tintColor = SGRSecondary();
+        face.clipsToBounds = YES;
+        face.layer.cornerRadius = kJamFace / 2;
+        face.tag = i;
+        [_jamCapsule addSubview:face];
+    }
+    [self.view setNeedsLayout];
+    if (animated && _jamCapsule.alpha < 1) {
+        // Out of the queue button: the capsule starts as the button, grows to the left with a spring while the glyph
+        // slides to its right end, and the faces come in as it opens (its owner, 2026-11-09).
+        [UIView performWithoutAnimation:^{
+            self->_jamCapsule.frame = self->_queue.frame;
+            self->_jamCapsule.alpha = 1;
+            for (UIView *face in self->_jamCapsule.subviews) {
+                face.bounds = CGRectMake(0, 0, kJamFace, kJamFace);
+        face.center = CGPointMake(kJamInset + face.tag * kJamFaceStep + kJamFace / 2, 22);
+                face.alpha = 0;
+                face.transform = CGAffineTransformMakeScale(0.6, 0.6);
+            }
+        }];
+        [UIView animateWithDuration:0.55 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0
+                            options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+            [self.view layoutIfNeeded];
+        } completion:nil];
+        [UIView animateWithDuration:0.35 delay:0.12 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            for (UIView *face in self->_jamCapsule.subviews) {
+                face.alpha = 1;
+                face.transform = CGAffineTransformIdentity;
+            }
+        } completion:nil];
+    } else {
+        [UIView performWithoutAnimation:^{
+            self->_jamCapsule.alpha = 1;
+            [self.view layoutIfNeeded];
+        }];
+    }
+}
+
+// The capsule stands centred where the queue button stands (its owner, 2026-11-09), the faces on its left and the queue
+// glyph moved to its right end.
+- (void)layoutJamAround:(CGFloat)rowMid {
+    if (!_jamCapsule || !_jamFaces) return;
+    NSUInteger count = MAX(1, _jamFaces.count);
+    CGFloat faces = kJamFace + (count - 1) * kJamFaceStep;
+    CGFloat middle = _queue.center.x, width = kJamInset + faces + 4 + 44;
+    _jamCapsule.frame = CGRectMake(round(middle - width / 2), round(rowMid - 22), width, 44);
+    _queue.center = CGPointMake(CGRectGetMaxX(_jamCapsule.frame) - 22, rowMid);
+    _jamCapsule.layer.cornerRadius = 22;
+    for (UIView *face in _jamCapsule.subviews) {
+        face.bounds = CGRectMake(0, 0, kJamFace, kJamFace);
+        face.center = CGPointMake(kJamInset + face.tag * kJamFaceStep + kJamFace / 2, 22);
+    }
+}
+
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    if (!_jamTimer) {
+        __weak typeof(self) weakSelf = self;
+        _jamTimer = [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer) {
+            if (!weakSelf) [timer invalidate];
+            else if (weakSelf.viewIfLoaded.window) [weakSelf updateJam];
+        }];
+    }
     [self openLanded];
     // Animated's clip is looked up only while the page is in a window (SGRPlayerMotionPreview).
     if (_background == SGRPlayerBackgroundAnimated && !_motion) [self syncClipAnimated:YES];
@@ -1742,6 +1870,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
         row[i].center = CGPointMake(round(width * shares[i]), rowMid);
     }
     _queueBubble.center = _lyricsBubble.center = CGPointMake(22, 22);
+    [self layoutJamAround:rowMid];
     CGFloat lineHeight = ceil(_routeLine.font.lineHeight);
     _routeLine.frame = CGRectMake(24, round(rowMid + kRouteLineDrop - lineHeight / 2), MAX(0, width - 48), lineHeight);
     CGFloat spacing = controlsSpacing();
@@ -2215,6 +2344,7 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
 
 - (void)playerStateDidChange:(SPTPlayerState *)state {
     [self show:state];
+    [self updateJam];
     // A pause brings the rest back and keeps it; playing again starts the clock (PlayerLyrics.x).
     if (!state || state.isPaused) {
         [self setAlone:NO animated:YES];

@@ -20,6 +20,7 @@
 #import "Redesigned/Artist/Artist.h"
 #import "SystemPlayer.h"
 #import "SystemQueue.h"
+#import "SystemHistory.h"
 
 @interface CAFilter : NSObject
 + (instancetype)filterWithType:(NSString *)type;
@@ -426,7 +427,10 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _queue.onRepeat = ^{ SGRSystemCycleRepeat(); };
     _queue.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
     _queue.onHeadPush = ^(CGFloat push) { [weakSelf pushHead:push]; };
-    _queue.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) { SGRSystemStepBack(track, steps); };
+    _queue.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) {
+        if (SGRSystemHistoryOn()) SGRSystemPlayPast(track);
+        else SGRSystemStepBack(track, steps);
+    };
     // Under the foot, as the list now runs on behind it.
     [self.view insertSubview:_queue belowSubview:_lyricsButton];
 
@@ -878,7 +882,9 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
         if (!me || !me->_queueMode || ![next isKindOfClass:NSArray.class]) return;
         me->_queueKey = SGRSystemQueueKey(next);
         [me->_queue showState:SGPlayerState() upcoming:next from:from];
-        if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queue showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
+        NSArray *own = SGRSystemHistoryTracks();
+        if (own) [me->_queue showPast:own];
+        else if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queue showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
     } on:dispatch_get_main_queue()];
 }
 

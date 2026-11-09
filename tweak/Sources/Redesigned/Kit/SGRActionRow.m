@@ -256,8 +256,10 @@ static BOOL indicatorOn(UIView *button, BOOL *found) {
     if (circle.superview != self) [self insertSubview:circle atIndex:0];
     UIColor *fill = [UIColor colorWithWhite:1 alpha:_neutralOn ? 0.3 : 0.12];
     if (![circle.backgroundColor isEqual:fill]) circle.backgroundColor = fill;
-    CGFloat side = SGRGlassCircleSize;
+    // The button's own size, as round as the row is tall: the Music app's 52pt circles beside Play (its owner's
+    // screenshots, 2026-11-09).
     CGRect bounds = self.bounds;
+    CGFloat side = MIN(bounds.size.width, bounds.size.height);
     CGRect frame = CGRectMake(round((bounds.size.width - side) / 2), round((bounds.size.height - side) / 2), side, side);
     if (!CGRectEqualToRect(circle.frame, frame)) {
         circle.frame = frame;

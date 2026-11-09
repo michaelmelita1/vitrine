@@ -19,7 +19,7 @@ extern const CGFloat SGRRadiusCard;      // 16, a content card
 extern const CGFloat SGRRadiusCover;     // 8, a release cover in a list
 extern const CGFloat SGRRadiusThumb;     // 6, a row's thumbnail up to 64pt
 extern const CGFloat SGRGlassCircleSize; // 44, a round glass behind a top bar button
-extern const CGFloat SGRActionHeight;    // 48, a button of the action row under a hero
+extern const CGFloat SGRActionHeight;    // 52, a button of the action row under a hero
 extern const CGFloat SGRActionSpacing;   // 12, between the buttons of an action row
 extern const CGFloat SGRGlassSpacing;    // 16, how near two glass shapes merge in one container
 extern const NSTimeInterval SGRCrossfade;   // 0.35, a new image or field color fading in

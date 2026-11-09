@@ -596,14 +596,6 @@ static CGRect wideCover(UIView *header, UIView *page) {
     CGFloat side = MIN(kWideCover, window.bounds.size.height - kWideTop - kWideBelow - 100);
     if (side < kMinCover) return CGRectZero;
     CGFloat y = MAX(0, round(kWideTop - headerRestTop(header)));
-    // The list's insets are still the upright ones for the first passes sideways, which put the cover and the text
-    // beside it about 190pt low until a later pass moved them up (its owner's recordings, 2026-11-09): a stale reading
-    // only ever puts it lower. The place is the same on every album at a given screen width, so the highest one read
-    // is kept, across launches too, and the cover never goes below it.
-    NSString *key = [NSString stringWithFormat:@"spotifyglass.redesign.album.wideTop.%.0f", window.bounds.size.width];
-    NSNumber *kept = [NSUserDefaults.standardUserDefaults objectForKey:key];
-    if (kept && kept.doubleValue <= y) y = kept.doubleValue;
-    else [NSUserDefaults.standardUserDefaults setObject:@(y) forKey:key];
     return CGRectMake(x, y, side, side);
 }
 
@@ -612,7 +604,9 @@ static CGRect wideCover(UIView *header, UIView *page) {
 // navigation bar (the dump of 2026-11-08: {96, 76, 248, 248} in 440). Following Spotify's square instead, an album
 // opened sideways and turned upright took the one Spotify lays out with the bar gone, smaller and up in the status
 // bar (recording of 2026-11-08). Empty sideways or before the header is in a window.
-static const CGFloat kUprightGap = 14, kUprightShare = 248.0 / 440.0;
+// The Music app's: 305pt of 440, its top 74pt under the status bar, below the back button and ⋯ rather than between
+// them (its owner's screenshots side by side, 2026-11-09).
+static const CGFloat kUprightGap = 74, kUprightShare = 305.0 / 440.0;
 // The app's window, for a header not in it yet: an album page's first passes come before the push puts it on screen,
 // and with no window the cover fell back to Spotify's larger square and the page slid up as it opened (recording of
 // 2026-11-08).
@@ -957,6 +951,40 @@ static void applyWash(UIView *page) {
 }
 
 static void applyHeader(UIView *header, UIView *page) {
+    // A turn: when the window's width changes. Its first passes leave Spotify's list scrolled 238 to 280pt down, the
+    // header with it, for 0.4s before the list goes back to its rest at 0, which was the jump (the owner's turn log,
+    // 2026-11-09: offset -280 and -238 with the header on screen at 280 and 238, then 0 at 0.39s). So for a second after
+    // a turn, a list that was at rest before it and is not being touched is put back at rest at once.
+    static char kTurnAtKey, kRestedKey, kWidthKey;
+    UIScrollView *turnList = listAbove(header);
+    CGFloat windowWidth = header.window.bounds.size.width;
+    NSNumber *lastWidth = objc_getAssociatedObject(header, &kWidthKey);
+    if (windowWidth > 0 && lastWidth && fabs(windowWidth - lastWidth.doubleValue) > 1) {
+        objc_setAssociatedObject(header, &kTurnAtKey, @(CACurrentMediaTime()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (windowWidth > 0) objc_setAssociatedObject(header, &kWidthKey, @(windowWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSNumber *turnAt = objc_getAssociatedObject(header, &kTurnAtKey);
+    // The wrong places all come in the first 0.03s of the turn (-274, -308, 293.7 in the owner's turn logs); after that the list
+    // is left alone, so a scroll that starts right after a turn is not pulled back frame by frame (the same logs: 23 to 112
+    // pulled back to 0 at 0.5 to 0.6s).
+    BOOL turning = turnAt && CACurrentMediaTime() - turnAt.doubleValue < 0.15;
+    // Wherever the list was before the turn, at rest or scrolled (the same jump scrolled: 80, then -274, then 80 again at
+    // 0.41s: the owner's turn log, 2026-11-09), it is put back there at once.
+    if (turnList && !turning && !turnList.isTracking && !turnList.isDecelerating)
+        objc_setAssociatedObject(header, &kRestedKey, @(turnList.contentOffset.y), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // Only turning sideways, where the jump was, and only where Spotify itself lands 0.4s later: the place before the turn,
+    // no further than the sideways page scrolls (489 upright came back as 270 sideways: the owner's turn log), so nothing
+    // moves when Spotify gets there. Never while the list is moving: that fought a scroll under way.
+    NSNumber *before = objc_getAssociatedObject(header, &kRestedKey);
+    BOOL sideways = header.window.bounds.size.width > header.window.bounds.size.height;
+    if (turning && sideways && before && turnList && !turnList.isTracking && !turnList.isDecelerating && fabs(header.bounds.size.width - turnList.bounds.size.width) < 1) {
+        UIEdgeInsets inset = turnList.adjustedContentInset;
+        CGFloat furthest = MAX(-inset.top, turnList.contentSize.height - turnList.bounds.size.height + inset.bottom);
+        CGFloat target = MAX(-inset.top, MIN(before.doubleValue, furthest));
+        if (fabs(turnList.contentOffset.y - target) > 0.5) {
+            turnList.contentOffset = CGPointMake(turnList.contentOffset.x, target);
+        }
+    }
     if (!SGRFindByIdentifier(header, @"CreativeWorkPlatform.Components.UI.TitleRow", &kTitleKey)) return;
     SGRAlbumHoldPage(page);
     applyWash(page);

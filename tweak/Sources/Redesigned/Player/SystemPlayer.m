@@ -64,6 +64,7 @@
 #import "Shared/Sing/Sing.h"
 #import "SystemPlayer.h"
 #import "SystemQueue.h"
+#import "SystemHistory.h"
 
 // The page's side margin, the Music app's.
 static const CGFloat kMargin = 28;
@@ -171,6 +172,142 @@ typedef NS_ENUM(NSInteger, SGRSystemLyrics) { SGRSystemLyricsUnknown, SGRSystemL
 static BOOL sgr_lyricsLeftOpen;
 
 static char kConnectKey;
+
+// Keeps the borrowed surface the size of the cover: Spotify's bar lays it out again to its own size, and laid out to nothing it
+// came off the video (attached 0, eligible 0, 0x0 two seconds in: the owner's log, 2026-11-09).
+@interface SGRFrameKeeper : NSObject
+@property (nonatomic, weak) UIView *view;
+@property (nonatomic) BOOL busy;
+@end
+
+@implementation SGRFrameKeeper
+- (void)keep {
+    UIView *view = self.view, *holder = view.superview;
+    if (!view || !holder || self.busy) return;
+    if (CGRectEqualToRect(view.frame, holder.bounds) && CGAffineTransformIsIdentity(view.transform)) return;
+    self.busy = YES;
+    view.transform = CGAffineTransformIdentity;
+    view.frame = holder.bounds;
+    self.busy = NO;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
+    [self keep];
+}
+@end
+
+// A music video full screen (its owner, 2026-11-09): black, the picture as large as it fits at 16:9, turned sideways if
+// the app lets it, and a tap for its few controls: close, play or pause, Picture in Picture. The page hands it the
+// borrowed surface (holder, filled by the surface's frame keeper) and takes it back as it closes.
+@interface SGRVideoFullScreen : UIViewController
+@property (nonatomic, readonly) UIView *holder;
+@property (nonatomic, copy) void (^onClose)(void);
+@property (nonatomic, copy) void (^onPlayPause)(void);
+@property (nonatomic, copy) void (^onPictureInPicture)(void);
+@property (nonatomic) BOOL paused;
+@end
+
+@implementation SGRVideoFullScreen {
+    UIView *_controls;
+    UIButton *_close, *_play, *_pip;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = UIColor.blackColor;
+    self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    _holder = [UIView new];
+    _holder.backgroundColor = UIColor.blackColor;
+    [self.view addSubview:_holder];
+    _controls = [UIView new];
+    _controls.alpha = 0;
+    [self.view addSubview:_controls];
+    __weak typeof(self) weakSelf = self;
+    _close = [self button:@"xmark" action:^{ if (weakSelf.onClose) weakSelf.onClose(); }];
+    _play = [self button:@"pause.fill" action:^{ if (weakSelf.onPlayPause) weakSelf.onPlayPause(); }];
+    _pip = [self button:@"pip.enter" action:^{ if (weakSelf.onPictureInPicture) weakSelf.onPictureInPicture(); }];
+    _close.accessibilityLabel = @"Close";
+    _pip.accessibilityLabel = @"Picture in Picture";
+    [self.view addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(toggleControls)]];
+}
+
+- (UIButton *)button:(NSString *)symbol action:(void (^)(void))action {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightSemibold];
+    [button setImage:[UIImage systemImageNamed:symbol withConfiguration:config] forState:UIControlStateNormal];
+    button.tintColor = UIColor.whiteColor;
+    button.backgroundColor = [UIColor colorWithWhite:0 alpha:0.45];
+    button.layer.cornerRadius = 24;
+    [button addAction:[UIAction actionWithHandler:^(UIAction *a) { action(); }] forControlEvents:UIControlEventTouchUpInside];
+    [_controls addSubview:button];
+    return button;
+}
+
+- (void)setPaused:(BOOL)paused {
+    _paused = paused;
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightSemibold];
+    [_play setImage:[UIImage systemImageNamed:paused ? @"play.fill" : @"pause.fill" withConfiguration:config] forState:UIControlStateNormal];
+    _play.accessibilityLabel = paused ? @"Play" : @"Pause";
+}
+
+- (void)toggleControls {
+    [UIView animateWithDuration:0.25 animations:^{ self->_controls.alpha = self->_controls.alpha > 0.5 ? 0 : 1; }];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGRect bounds = self.view.bounds;
+    CGFloat w = bounds.size.width, h = round(w * 9 / 16);
+    if (h > bounds.size.height) {
+        h = bounds.size.height;
+        w = round(h * 16 / 9);
+    }
+    _holder.frame = CGRectMake(round((bounds.size.width - w) / 2), round((bounds.size.height - h) / 2), w, h);
+    _controls.frame = bounds;
+    UIEdgeInsets safe = self.view.safeAreaInsets;
+    _close.frame = CGRectMake(safe.left + 16, safe.top + 12, 48, 48);
+    _pip.frame = CGRectMake(bounds.size.width - safe.right - 64, safe.top + 12, 48, 48);
+    _play.frame = CGRectMake(round(bounds.size.width / 2 - 32), round(bounds.size.height / 2 - 32), 64, 64);
+    _play.layer.cornerRadius = 32;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskAllButUpsideDown;
+}
+
+- (BOOL)prefersStatusBarHidden {
+    return YES;
+}
+
+- (BOOL)prefersHomeIndicatorAutoHidden {
+    return YES;
+}
+@end
+
+// The video's own drawing layer in a surface, an AVSampleBufferDisplayLayer if Spotify's renderer draws into one, which is
+// what Picture in Picture can be run from.
+static AVSampleBufferDisplayLayer *sampleLayerIn(CALayer *layer) {
+    if ([layer isKindOfClass:AVSampleBufferDisplayLayer.class]) return (AVSampleBufferDisplayLayer *)layer;
+    for (CALayer *sub in layer.sublayers) {
+        AVSampleBufferDisplayLayer *found = sampleLayerIn(sub);
+        if (found) return found;
+    }
+    return nil;
+}
+
+// A music video: the player plays it on a video surface (media.type and track_player video: the owner's log, 2026-11-09).
+static BOOL isVideoTrack(SPTPlayerTrack *track) {
+    NSDictionary *metadata = [track.metadata isKindOfClass:NSDictionary.class] ? track.metadata : nil;
+    return [metadata[@"track_player"] isEqual:@"video"] || [metadata[@"media.type"] isEqual:@"video"];
+}
+
+// Whether the item playing is the AI DJ talking: its own item, with no length (the owner's DJ log, 2026-11-09:
+// is_narration and suppress_progress true, provider narration/acknowledgment, "Up next" by "DJ X").
+static BOOL isNarration(SPTPlayerTrack *track) {
+    NSDictionary *metadata = [track.metadata isKindOfClass:NSDictionary.class] ? track.metadata : nil;
+    return [metadata[@"is_narration"] isEqual:@"true"] || [metadata[@"suppress_progress"] isEqual:@"true"]
+        || ([track respondsToSelector:@selector(provider)] && [track.provider hasPrefix:@"narration"]);
+}
 
 static BOOL isTrack(id track) {
     return [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
@@ -1175,7 +1312,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
 #pragma mark - the page
 
-@interface SGRSystemPlayerPage () <SGPlayerStateObserver, UIGestureRecognizerDelegate, SGRSystemTurnPage>
+@interface SGRSystemPlayerPage () <SGPlayerStateObserver, UIGestureRecognizerDelegate, SGRSystemTurnPage, AVPictureInPictureSampleBufferPlaybackDelegate, AVPictureInPictureControllerDelegate>
 @end
 
 @implementation SGRSystemPlayerPage {
@@ -1197,6 +1334,17 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     UILabel *_context;
     UIView *_coverHolder;   // the shadow; scaled when paused
     UIImageView *_cover;
+    BOOL _narrating;   // the AI DJ talking
+    UIView *_videoSurface;   // over the cover while a music video plays
+    __weak UIView *_videoHome;   // where the borrowed surface came from
+    CGRect _videoHomeFrame;
+    UIViewAutoresizing _videoHomeMask;
+    BOOL _wantsVideo;
+    SGRFrameKeeper *_videoKeeper;
+    UIColor *_videoHomeColor;
+    SGRVideoFullScreen *_fullScreen;
+    AVPictureInPictureController *_pip;
+    UITapGestureRecognizer *_videoTap;
     SGMarqueeLabel *_title, *_artist;
     UIView *_titleBlock;                       // the title and artist, the swipe's page
     CAGradientLayer *_titleFade;
@@ -1460,7 +1608,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queueView.onRepeat = ^{ [weakSelf cycleRepeat]; };
     _queueView.onDragging = ^(BOOL dragging) { [weakSelf setQueueDragging:dragging]; };
     _queueView.onHeadPush = ^(CGFloat push) { [weakSelf pushHead:push]; };
-    _queueView.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) { SGRSystemStepBack(track, steps); };
+    _queueView.onPickPast = ^(SPTPlayerTrack *track, NSInteger steps) {
+        if (SGRSystemHistoryOn()) SGRSystemPlayPast(track);
+        else SGRSystemStepBack(track, steps);
+    };
     _queueView.onPick = ^(SPTPlayerTrack *track) {
         id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
         if ([player respondsToSelector:@selector(skipToNextTrackWithOptions:track:)]) [player skipToNextTrackWithOptions:nil track:track];
@@ -1783,6 +1934,7 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    [self attachVideoIfShown];
     if (!_jamTimer) {
         __weak typeof(self) weakSelf = self;
         _jamTimer = [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer) {
@@ -1800,6 +1952,7 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    if (!_fullScreen) [self returnVideo];
     // A swipe close let go back ends the close too: a tap on the mini player waiting on it (Navbar/SystemTabs.x's opened) is let
     // go, rather than left waiting to open the page at the next close.
     [self.transitionCoordinator animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -1909,13 +2062,28 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
     // The cover takes the room left between the header and the title, as wide as the margins allow.
     CGFloat roomTop = headerBottom + 20, room = MAX(0, titleY - 28 - roomTop);
     CGFloat side = floor(MIN(inner, room));
-    _coverHolder.bounds = CGRectMake(0, 0, side, side);
+    CGSize art = CGSizeMake(side, side);
+    // A music video: the picture's own 16:9, as wide as the page, edge to edge, and no taller than the room (its owner,
+    // 2026-11-09: "shrink to the size of the video and make it as big as possible").
+    BOOL video = _videoSurface != nil;
+    if (video) {
+        CGFloat w = width, h = round(w * 9 / 16);
+        if (h > room) {
+            h = floor(room);
+            w = round(h * 16 / 9);
+        }
+        art = CGSizeMake(w, h);
+    }
+    CGFloat corner = video ? 0 : SGRRadiusArtwork;
+    _coverHolder.bounds = CGRectMake(0, 0, art.width, art.height);
     _coverHolder.center = CGPointMake(width / 2, round(roomTop + room / 2));
+    if (_cover.layer.cornerRadius != corner) _cover.layer.cornerRadius = corner;
     if (!CGRectEqualToRect(_shadowBounds, _coverHolder.bounds)) {
         _shadowBounds = _coverHolder.bounds;
-        _coverHolder.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:_shadowBounds cornerRadius:SGRRadiusArtwork].CGPath;
+        _coverHolder.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:_shadowBounds cornerRadius:corner].CGPath;
     }
     _cover.frame = _coverHolder.bounds;
+    [_videoKeeper keep];
 
     // With the lyrics up, the Music app's top row: the cover as a thumbnail under the header with the title and artist
     // beside it, and the lines from there down to the progress. The stage keeps its place either way, so the lines come
@@ -2091,6 +2259,24 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     if (artwork) [own addObject:artwork];
     [own addObject:[self sleepTimerMenu]];
     [menu addObject:inlineGroup(own)];
+
+    // Add to Playlist: Spotify's own sheet, by its link with the song as `entities`, the parameter its page requires
+    // ("ATP needs 'entities', 'listEntity', 'transitionBlob', or 'defaultSaveLocationCategory'" in the 9.1.90 binary;
+    // uris= was taken and showed nothing: its owner's link tests, 2026-11-09).
+    if (song) {
+        NSString *entities = [uri stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.alphanumericCharacterSet];
+        NSString *link = [@"spotify:add-to-playlist?entities=" stringByAppendingString:entities];
+        [menu addObject:inlineGroup(@[[UIAction actionWithTitle:@"Add to Playlist" image:[UIImage systemImageNamed:@"text.badge.plus"] identifier:nil
+                                          handler:^(UIAction *action) { SGOpenSpotifyURI([NSURL URLWithString:link]); }]])];
+    }
+
+    // The AI DJ: Spotify's own DJ sheet, what the DJ button on its player opens ("What can I play for you?", a request
+    // typed or spoken, Let DJ pick), by the one DJ link Spotify takes from outside (its owner's link tests, 2026-11-09).
+    // Spotify's song menu and its video settings were tried the same way and refused.
+    [menu addObject:inlineGroup(@[[UIAction actionWithTitle:@"AI DJ" image:[UIImage systemImageNamed:@"waveform"] identifier:nil
+                                      handler:^(UIAction *action) {
+        SGOpenSpotifyURI([NSURL URLWithString:@"spotify:internal:aidj:interactivity-container"]);
+    }]])];
 
     // The artist's concerts, in the menu itself (its owner, 2026-11-06: no More submenu).
     if (artist) {
@@ -2372,6 +2558,198 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [self showOptions:state];
 }
 
+// A music video plays over the cover, as Spotify's player shows it (its owner, 2026-11-09). Its controls are the page's.
+- (void)showVideo:(BOOL)on {
+    _wantsVideo = on;
+    if (!on) {
+        [self returnVideo];
+        return;
+    }
+    [self attachVideoIfShown];
+}
+
+// Spotify's video surfaces on screen.
+static void collectSurfaces(UIView *view, NSMutableArray<UIView *> *found) {
+    if ([NSStringFromClass(view.class) containsString:@"VideoSurface"]) [found addObject:view];
+    for (UIView *sub in view.subviews) collectSurfaces(sub, found);
+}
+
+// The surface Spotify draws the video on for its now playing bar (identifier now-playing-bar), which is attached and drawing
+// while a video plays (the owner's log, 2026-11-09); a surface of the mod's own was made and eligible but never attached,
+// its manager out of reach. The redesign hides that bar, so its surface is borrowed: moved over the cover while the page
+// shows the video, and put back where it was when the page closes or the video ends.
+static UIView *barVideoSurface(void) {
+    NSMutableArray<UIView *> *surfaces = [NSMutableArray array];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) collectSurfaces(window, surfaces);
+    }
+    for (UIView *surface in surfaces) if ([surface.description containsString:@"identifier:now-playing-bar"]) return surface;
+    return nil;
+}
+
+- (void)attachVideoIfShown {
+    if (!_wantsVideo || _videoSurface || !self.viewIfLoaded.window) return;
+    UIView *surface = barVideoSurface();
+    if (!surface) {
+        // The bar may build its surface a moment after the video starts.
+        __weak typeof(self) weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [weakSelf attachVideoIfShown]; });
+        return;
+    }
+    _videoHome = surface.superview;
+    _videoHomeFrame = surface.frame;
+    _videoHomeMask = surface.autoresizingMask;
+    _videoSurface = surface;
+    [_cover addSubview:surface];
+    surface.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    // The cover is not to show through around or under the picture (its owner, 2026-11-09).
+    _videoHomeColor = surface.backgroundColor;
+    surface.backgroundColor = UIColor.blackColor;
+    // A tap on the picture takes it full screen.
+    if (!_videoTap) {
+        _videoTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openVideoFullScreen)];
+        [_cover addGestureRecognizer:_videoTap];
+    }
+    _videoTap.enabled = YES;
+    _cover.userInteractionEnabled = YES;
+    [self setUpPictureInPictureFor:surface];
+    _videoKeeper = [SGRFrameKeeper new];
+    _videoKeeper.view = surface;
+    for (NSString *key in @[@"frame", @"bounds", @"center"]) [surface addObserver:_videoKeeper forKeyPath:key options:0 context:NULL];
+    [_videoKeeper keep];
+    [UIView animateWithDuration:0.35 animations:^{
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    }];
+}
+
+#pragma mark - the video full screen and in Picture in Picture
+
+- (void)openVideoFullScreen {
+    UIView *surface = _videoSurface;
+    if (!surface || _fullScreen) return;
+    SGRVideoFullScreen *full = [SGRVideoFullScreen new];
+    full.modalPresentationStyle = UIModalPresentationFullScreen;
+    full.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    full.paused = SGPlayerState().isPaused;
+    __weak typeof(self) weakSelf = self;
+    full.onClose = ^{ [weakSelf closeVideoFullScreen]; };
+    full.onPlayPause = ^{
+        id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+        if (SGPlayerState().isPaused) [player resume:nil];
+        else [player pause:nil];
+    };
+    full.onPictureInPicture = ^{ [weakSelf startPictureInPicture]; };
+    _fullScreen = full;
+    [full loadViewIfNeeded];
+    [self presentViewController:full animated:YES completion:^{
+        [full.holder addSubview:surface];
+        [self->_videoKeeper keep];
+        [self turnTo:UIInterfaceOrientationMaskLandscapeRight];
+    }];
+}
+
+- (void)closeVideoFullScreen {
+    SGRVideoFullScreen *full = _fullScreen;
+    if (!full) return;
+    [self turnTo:UIInterfaceOrientationMaskPortrait];
+    if (_videoSurface) {
+        [_cover addSubview:_videoSurface];
+        [_videoKeeper keep];
+    }
+    [full dismissViewControllerAnimated:YES completion:^{ self->_fullScreen = nil; }];
+}
+
+// Sideways for the full screen and upright again after, as far as the app lets the turn (SystemTurn.m).
+- (void)turnTo:(UIInterfaceOrientationMask)mask {
+    if (@available(iOS 16.0, *)) {
+        UIWindowScene *scene = self.view.window.windowScene ?: _fullScreen.view.window.windowScene;
+        if (!scene) return;
+        [_fullScreen setNeedsUpdateOfSupportedInterfaceOrientations];
+        [scene requestGeometryUpdateWithPreferences:[[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask] errorHandler:nil];
+    }
+}
+
+// Picture in Picture from the surface's own drawing layer, when Spotify's renderer draws into an AVSampleBufferDisplayLayer
+// (iOS's sample buffer Picture in Picture); its play, pause and skips go to Spotify's player.
+- (void)setUpPictureInPictureFor:(UIView *)surface {
+    if (_pip || !AVPictureInPictureController.isPictureInPictureSupported) return;
+    AVSampleBufferDisplayLayer *layer = sampleLayerIn(surface.layer);
+    if (!layer) return;
+    AVPictureInPictureControllerContentSource *source = [[AVPictureInPictureControllerContentSource alloc] initWithSampleBufferDisplayLayer:layer playbackDelegate:self];
+    _pip = [[AVPictureInPictureController alloc] initWithContentSource:source];
+    _pip.delegate = self;
+    _pip.canStartPictureInPictureAutomaticallyFromInline = YES;
+}
+
+- (void)startPictureInPicture {
+    if (!_pip) return;
+    if (_fullScreen) [self closeVideoFullScreen];
+    [_pip startPictureInPicture];
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)controller setPlaying:(BOOL)playing {
+    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+    if (playing) [player resume:nil];
+    else [player pause:nil];
+}
+
+// Spotify's clock is its own, so the window shows no scrubber: the range is open.
+- (CMTimeRange)pictureInPictureControllerTimeRangeForPlayback:(AVPictureInPictureController *)controller {
+    return CMTimeRangeMake(kCMTimeNegativeInfinity, kCMTimePositiveInfinity);
+}
+
+- (BOOL)pictureInPictureControllerIsPlaybackPaused:(AVPictureInPictureController *)controller {
+    return SGPlayerState().isPaused;
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)controller didTransitionToRenderSize:(CMVideoDimensions)newRenderSize {
+}
+
+- (void)pictureInPictureController:(AVPictureInPictureController *)controller skipByInterval:(CMTime)skipInterval completionHandler:(void (^)(void))completionHandler {
+    SPTPlayerState *state = SGPlayerState();
+    [(id<SPTPlayer>)SGPlayer() seekTo:MAX(0, positionOf(state) + CMTimeGetSeconds(skipInterval))];
+    completionHandler();
+}
+
+// The borrowed surface back in the bar.
+- (void)returnVideo {
+    UIView *surface = _videoSurface;
+    _videoSurface = nil;
+    if (!surface) return;
+    if (_videoKeeper) {
+        for (NSString *key in @[@"frame", @"bounds", @"center"]) [surface removeObserver:_videoKeeper forKeyPath:key];
+        _videoKeeper = nil;
+    }
+    surface.backgroundColor = _videoHomeColor;
+    _videoTap.enabled = NO;
+    if (!_pip.isPictureInPictureActive) _pip = nil;
+    if (self.isViewLoaded) [UIView animateWithDuration:0.35 animations:^{
+        [self.view setNeedsLayout];
+        [self.view layoutIfNeeded];
+    }];
+    UIView *home = _videoHome;
+    if (home) {
+        surface.autoresizingMask = _videoHomeMask;
+        surface.frame = _videoHomeFrame;
+        [home addSubview:surface];
+    } else {
+        [surface removeFromSuperview];
+    }
+}
+
+// While the AI DJ talks: the bar empty and the times dashed, as with nothing playing (tick), since the talk has no
+// length, and the bar not to be dragged. The cover is Spotify's DJ picture. Spotify's DJ animation is drawn live from
+// the voice's loudness inside its own DJ screens (Endless_AIDJVisualizationKit), so there is none to show here (its
+// owner, 2026-11-09).
+- (void)showNarration:(BOOL)on {
+    if (on == _narrating) return;
+    _narrating = on;
+    _scrubber.userInteractionEnabled = !on;
+    [self tick];
+}
+
 - (void)show:(SPTPlayerState *)state {
     SPTPlayerTrack *track = isTrack(state.track) ? state.track : nil;
     // A moment with no track between two (a new playlist loading) is not Not Playing: the page waits kEmptyWait and
@@ -2398,6 +2776,10 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     _title.text = track ? track.trackTitle : @"Not Playing";
     _artist.text = artistLine(track);
     _context.text = contextTitle(state, track);
+    [self showNarration:track && isNarration(track)];
+    [self showVideo:track && isVideoTrack(track)];
+    _fullScreen.paused = state.isPaused;
+    if (_pip) [_pip invalidatePlaybackState];
     for (SGRSystemControlButton *skip in @[_previous, _next]) {
         skip.glyph.alpha = track ? 1 : 0.35;
         skip.userInteractionEnabled = track != nil;
@@ -2488,8 +2870,10 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
     [self syncLyrics];
     if (_scrubber.held) return;
     SPTPlayerState *state = SGPlayerState();
-    if (!isTrack(state.track)) {
-        if (_hadTrack) return;
+    // Nothing playing, or the AI DJ talking, which has no length: the bar empty and the times dashed, as Not Playing
+    // (its owner, 2026-11-09).
+    if (!isTrack(state.track) || _narrating) {
+        if (!_narrating && _hadTrack) return;
         _scrubber.value = 0;
         _elapsed.text = _remaining.text = @"--:--";
         _shownTotal = -1;
@@ -2749,7 +3133,10 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
         if (![next isKindOfClass:NSArray.class]) return;
         me->_spotifyQueueKey = queueKey(next);
         [me->_queueView showState:SGPlayerState() upcoming:next from:from];
-        if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queueView showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
+        // History: the mod's own, the songs listened to (SystemHistory.h), or with its switch off Spotify's prevTracks.
+        NSArray *own = SGRSystemHistoryTracks();
+        if (own) [me->_queueView showPast:own];
+        else if ([queue respondsToSelector:@selector(prevTracks)]) [me->_queueView showPast:[(id<SPTPlayerQueue>)queue prevTracks]];
     } on:dispatch_get_main_queue()];
 }
 
@@ -3303,6 +3690,31 @@ void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps) {
         NSArray *past = [queue respondsToSelector:@selector(prevTracks)] ? [(id<SPTPlayerQueue>)queue prevTracks] : nil;
         if (![past isKindOfClass:NSArray.class] || past.count < (NSUInteger)steps) return;
         stepBackOne(past.count, steps);
+    } on:dispatch_get_main_queue()];
+}
+
+// A song of the mod's History tapped: back to it in Spotify's queue when it is still behind the playing one (the nearest
+// time it is there), or else Spotify's own link for it.
+void SGRSystemPlayPast(SPTPlayerTrack *track) {
+    NSString *uri = SGURIString(track.URI);
+    id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();
+    if (!uri || !player) return;
+    void (^open)(void) = ^{ SGOpenSpotifyURI([NSURL URLWithString:uri]); };
+    if (![player respondsToSelector:@selector(fetchQueue:on:)]) {
+        open();
+        return;
+    }
+    [player fetchQueue:^(id queue) {
+        NSArray *past = [queue respondsToSelector:@selector(prevTracks)] ? [(id<SPTPlayerQueue>)queue prevTracks] : nil;
+        if ([past isKindOfClass:NSArray.class]) {
+            for (NSInteger i = (NSInteger)past.count - 1; i >= 0; i--) {
+                SPTPlayerTrack *behind = past[i];
+                if (![behind respondsToSelector:@selector(URI)] || ![SGURIString(behind.URI) isEqualToString:uri]) continue;
+                SGRSystemStepBack(behind, (NSInteger)past.count - i);
+                return;
+            }
+        }
+        open();
     } on:dispatch_get_main_queue()];
 }
 

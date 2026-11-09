@@ -14,7 +14,7 @@ BOOL SGRFullBleedCovers(void) {
 }
 
 // The text kSide in from the edges; Play at least kPlayWidth wide, the Music app's; the gaps between.
-static const CGFloat kSide = 20, kPlayWidth = 148, kRowSpacing = 16, kRowAbove = 16, kAboutAbove = 14;
+static const CGFloat kSide = 20, kPlayWidth = 160, kRowSpacing = 16, kRowAbove = 16, kAboutAbove = 14;
 
 static UILabel *infoLabel(UIView *parent, UIFont *font, UIColor *color, NSInteger lines, NSTextAlignment alignment) {
     UILabel *label = [UILabel new];

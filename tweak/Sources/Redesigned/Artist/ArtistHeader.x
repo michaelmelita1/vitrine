@@ -263,10 +263,9 @@ static void shapeArtistTopEdge(UIView *header, UIView *container) {
     }
 }
 
-// Sideways, the album's top section (Album/AlbumHeader.x, the Music app's landscape): the photo a kWideSide square
-// kWideTop under the screen's top and in from the safe area, the name, the listeners and the row beside it set from
-// the left, and the page's list kWideBelow under the square -- the container held to that height, sideways only.
-static const CGFloat kWideSide = 200, kWideTop = 42, kWideInset = 34, kWideGap = 32, kWideBelow = 36;
+// Sideways, the album's top section (Album/AlbumHeader.x, the Music app's landscape): the photo where the Kit puts the
+// cover (SGRWideCover), in line with the album's and the playlist's, the name, the listeners and the row beside it set from
+// the left, and the page's list SGRWideBelow under the square -- the container held to that height, sideways only.
 static char kWideHeightKey;
 
 static UIScrollView *scrollAbove(UIView *view) {
@@ -283,13 +282,7 @@ static CGFloat restTop(UIView *container) {
 }
 
 static CGRect wideSquare(UIView *container) {
-    UIWindow *window = container.window;
-    if (!window || window.bounds.size.width <= window.bounds.size.height) return CGRectZero;
-    UIEdgeInsets safe = window.safeAreaInsets;
-    CGFloat side = MIN(kWideSide, window.bounds.size.height - kWideTop - kWideBelow - 100);
-    if (side < kMinCover) return CGRectZero;
-    CGFloat x = round([window convertPoint:CGPointMake(MAX(safe.left, 16) + kWideInset, 0) toView:container].x);
-    return CGRectMake(x, MAX(0, round(kWideTop - restTop(container))), side, side);
+    return SGRWideCover(container, restTop(container));
 }
 
 static void holdContainer(UIView *container, CGFloat height) {
@@ -318,6 +311,8 @@ static void applyHeader(UIView *header, BOOL full) {
     UIView *artwork = SGRFindByIdentifier(header, @"Components.Header.UI.ArtworkImage", &kArtworkKey);
     if (!container || !artwork || !SGRArtistPageOf(container)) return;
     objc_setAssociatedObject(header, &kSizeKey, [NSValue valueWithCGSize:size], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // The list kept where it was through a turn, as the album's is (the artist page came back 50pt off, 2026-11-10).
+    SGRKeepListThroughTurn(container, scrollAbove(container));
 
     UIView *bar = keepBar(header);
     // The bar goes too, as the album's did (its owner, 2026-11-08: no header with a title, the buttons apart): the
@@ -344,13 +339,13 @@ static void applyHeader(UIView *header, BOOL full) {
     }
     if (info.superview != container) [container addSubview:info];
     CGRect wide = wideSquare(container);
-    holdContainer(container, CGRectIsEmpty(wide) ? 0 : CGRectGetMaxY(wide) + kWideBelow);
+    holdContainer(container, CGRectIsEmpty(wide) ? 0 : CGRectGetMaxY(wide) + SGRWideBelow);
     info.leading = !CGRectIsEmpty(wide);
     if (info.leading) {
         UIWindow *window = container.window;
-        CGFloat right = [window convertPoint:CGPointMake(window.bounds.size.width - MAX(window.safeAreaInsets.right, 16) - kWideInset, 0)
-                                       toView:container].x;
-        CGFloat x = CGRectGetMaxX(wide) + kWideGap;
+        // To the column's right edge, as far in as the cover is on the left (the album's).
+        CGFloat right = [window convertPoint:CGPointMake(window.bounds.size.width - SGRWideCoverLeft(window), 0) toView:container].x;
+        CGFloat x = CGRectGetMaxX(wide) + SGRWideGap;
         setFrame(info, CGRectMake(x, CGRectGetMinY(wide), MAX(0, right - x), wide.size.height + SGRHeaderInfoBottom));
         if (info.pinnedTop != 0) {
             info.pinnedTop = 0;

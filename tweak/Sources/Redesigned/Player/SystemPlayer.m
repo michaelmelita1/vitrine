@@ -313,6 +313,9 @@ static BOOL isTrack(id track) {
     return [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
 }
 
+BOOL SGRSystemIsTrack(id track) { return isTrack(track); }
+BOOL SGRSystemIsNarration(id track) { return isTrack(track) && isNarration(track); }
+
 UIImage *SGRSystemNotPlayingArt(void) {
     static UIImage *art;
     if (art) return art;
@@ -1340,6 +1343,8 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     CGRect _videoHomeFrame;
     UIViewAutoresizing _videoHomeMask;
     BOOL _wantsVideo;
+    NSString *_videoURI;     // the video the borrowed surface was taken for
+    CGFloat _videoAspect;    // the shape the video area was last laid out for
     SGRFrameKeeper *_videoKeeper;
     UIColor *_videoHomeColor;
     SGRVideoFullScreen *_fullScreen;
@@ -2067,10 +2072,13 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
     // 2026-11-09: "shrink to the size of the video and make it as big as possible").
     BOOL video = _videoSurface != nil;
     if (video) {
-        CGFloat w = width, h = round(w * 9 / 16);
+        // The video's own shape (SGRSystemVideoAspect), as wide as the page and no taller than the room.
+        CGFloat aspect = SGRSystemVideoAspect(_videoSurface);
+        _videoAspect = aspect;
+        CGFloat w = width, h = round(w / aspect);
         if (h > room) {
             h = floor(room);
-            w = round(h * 16 / 9);
+            w = round(h * aspect);
         }
         art = CGSizeMake(w, h);
     }
@@ -2268,6 +2276,19 @@ static UIMenu *inlineGroup(NSArray<UIMenuElement *> *children) {
         NSString *link = [@"spotify:add-to-playlist?entities=" stringByAppendingString:entities];
         [menu addObject:inlineGroup(@[[UIAction actionWithTitle:@"Add to Playlist" image:[UIImage systemImageNamed:@"text.badge.plus"] identifier:nil
                                           handler:^(UIAction *action) { SGOpenSpotifyURI([NSURL URLWithString:link]); }]])];
+    }
+
+    // Switch to Video / Audio: a song and its music video are two tracks, each naming the other in its metadata
+    // (video_association on the song: the owner's log, 2026-11-10). Spotify's own switch goes through its playback
+    // settings service, out of reach, so the other is played instead, from the same place, and the context goes on after it.
+    NSString *videoURI = [track.metadata[@"video_association"] isKindOfClass:NSString.class] ? track.metadata[@"video_association"] : nil;
+    NSString *audioURI = [track.metadata[@"audio_association"] isKindOfClass:NSString.class] ? track.metadata[@"audio_association"] : nil;
+    NSString *otherURI = isVideoTrack(track) ? audioURI : videoURI;
+    if (otherURI.length) {
+        BOOL toVideo = !isVideoTrack(track);
+        [menu addObject:inlineGroup(@[[UIAction actionWithTitle:toVideo ? @"Switch to Video" : @"Switch to Audio"
+                                                          image:[UIImage systemImageNamed:toVideo ? @"play.rectangle" : @"music.note"] identifier:nil
+                                                        handler:^(UIAction *action) { SGRSystemSwitchTo(otherURI); }]])];
     }
 
     // The AI DJ: Spotify's own DJ sheet, what the DJ button on its player opens ("What can I play for you?", a request
@@ -2624,6 +2645,19 @@ static UIView *barVideoSurface(void) {
     }];
 }
 
+// The landscape player holds the video while it is up (SystemLandscape.m); the keeper keeps it filling that holder.
+- (UIView *)landscapeVideoSurface {
+    return _fullScreen ? nil : _videoSurface;
+}
+
+- (void)landscapeVideoReturned {
+    UIView *surface = _videoSurface;
+    if (!surface || _fullScreen || surface.superview == _cover) return;
+    [_cover addSubview:surface];
+    surface.frame = _cover.bounds;
+    if (self.isViewLoaded) [self.view setNeedsLayout];
+}
+
 #pragma mark - the video full screen and in Picture in Picture
 
 - (void)openVideoFullScreen {
@@ -2681,6 +2715,15 @@ static UIView *barVideoSurface(void) {
     _pip = [[AVPictureInPictureController alloc] initWithContentSource:source];
     _pip.delegate = self;
     _pip.canStartPictureInPictureAutomaticallyFromInline = YES;
+    SGRSystemVideoSetPiP(YES, NO);
+}
+
+- (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)controller {
+    SGRSystemVideoSetPiP(YES, YES);
+}
+
+- (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)controller {
+    SGRSystemVideoSetPiP(_videoSurface != nil, NO);
 }
 
 - (void)startPictureInPicture {
@@ -2724,7 +2767,10 @@ static UIView *barVideoSurface(void) {
     }
     surface.backgroundColor = _videoHomeColor;
     _videoTap.enabled = NO;
-    if (!_pip.isPictureInPictureActive) _pip = nil;
+    if (!_pip.isPictureInPictureActive) {
+        _pip = nil;
+        SGRSystemVideoSetPiP(NO, NO);
+    }
     if (self.isViewLoaded) [UIView animateWithDuration:0.35 animations:^{
         [self.view setNeedsLayout];
         [self.view layoutIfNeeded];
@@ -2777,7 +2823,13 @@ static UIView *barVideoSurface(void) {
     _artist.text = artistLine(track);
     _context.text = contextTitle(state, track);
     [self showNarration:track && isNarration(track)];
-    [self showVideo:track && isVideoTrack(track)];
+    // A new video: the surface taken for the last one goes back and the bar's is taken again once Spotify has the new one
+    // on it -- kept, the next video played on a surface no longer on screen (its owner, 2026-11-10).
+    BOOL video = track && isVideoTrack(track);
+    NSString *uri = video ? SGURIString(track.URI) : nil;
+    if (video && _videoSurface && _videoURI && ![uri isEqualToString:_videoURI]) [self returnVideo];
+    if (video) _videoURI = uri;
+    [self showVideo:video];
     _fullScreen.paused = state.isPaused;
     if (_pip) [_pip invalidatePlaybackState];
     for (SGRSystemControlButton *skip in @[_previous, _next]) {
@@ -2867,6 +2919,13 @@ static UIView *barVideoSurface(void) {
 }
 
 - (void)tick {
+    // The video's shape known once its first frames are in: laid out again on a change.
+    if (_videoSurface && fabs(SGRSystemVideoAspect(_videoSurface) - _videoAspect) > 0.01) {
+        [UIView animateWithDuration:0.3 animations:^{
+            [self.view setNeedsLayout];
+            [self.view layoutIfNeeded];
+        }];
+    }
     [self syncLyrics];
     if (_scrubber.held) return;
     SPTPlayerState *state = SGPlayerState();
@@ -3695,6 +3754,62 @@ void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps) {
 
 // A song of the mod's History tapped: back to it in Spotify's queue when it is still behind the playing one (the nearest
 // time it is there), or else Spotify's own link for it.
+// The track `uri` played in place of the one playing, from where it is: put next in the queue, skipped to, and sought to
+// the same second once it is playing. Opened as a link where the player cannot queue.
+void SGRSystemSwitchTo(NSString *uri) {
+    id player = SGPlayer();
+    NSURL *url = [NSURL URLWithString:uri];
+    if (!url) return;
+    double position = positionOf(SGPlayerState());
+    Class trackClass = NSClassFromString(@"SPTPlayerTrack");
+    SEL init = NSSelectorFromString(@"initWithURI:albumURI:artistURI:andUID:");
+    SEL queue = NSSelectorFromString(@"playAsNextInQueue:options:loggingParams:");
+    if (!trackClass || ![trackClass instancesRespondToSelector:init] || ![player respondsToSelector:queue]
+        || ![player respondsToSelector:@selector(skipToNextTrack)]) {
+        SGOpenSpotifyURI(url);
+        return;
+    }
+    // alloc and init on void *: init may hand back another object (AGENTS.md).
+    void *raw = ((void *(*)(id, SEL))objc_msgSend)(trackClass, @selector(alloc));
+    raw = ((void *(*)(void *, SEL, id, id, id, id))objc_msgSend)(raw, init, url, nil, nil, nil);
+    id next = raw ? CFBridgingRelease(raw) : nil;
+    if (!next) {
+        SGOpenSpotifyURI(url);
+        return;
+    }
+    ((id (*)(id, SEL, id, id, id))objc_msgSend)(player, queue, next, nil, nil);
+    [(id<SPTPlayer>)player skipToNextTrack];
+    // The seek once the new track is the one playing, looked for over the next few seconds.
+    __block NSInteger tries = 0;
+    __block void (^seek)(void);
+    __weak __block void (^weakSeek)(void);
+    seek = ^{
+        if ([SGURIString(SGPlayerState().track.URI) isEqualToString:uri]) {
+            if (position > 2) [(id<SPTPlayer>)SGPlayer() seekTo:position];
+            return;
+        }
+        if (++tries > 20) return;
+        void (^again)(void) = weakSeek;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), again);
+    };
+    weakSeek = seek;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), seek);
+}
+
+// The music video's own shape, width over height: the picture's rectangle in Spotify's display view inside the surface
+// (SPTVideoDisplayView's or BMVideoDisplayView's videoRect), 16:9 until it has one (its owner, 2026-11-10: the video
+// area to follow the video's aspect ratio).
+CGFloat SGRSystemVideoAspect(UIView *surface) {
+    __block CGFloat aspect = 0;
+    SEL rect = NSSelectorFromString(@"videoRect");
+    SGForEachView(surface, ^(UIView *v) {
+        if (aspect > 0 || ![v respondsToSelector:rect]) return;
+        CGRect r = ((CGRect (*)(id, SEL))objc_msgSend)(v, rect);
+        if (r.size.width > 1 && r.size.height > 1) aspect = r.size.width / r.size.height;
+    });
+    return aspect > 0.2 && aspect < 5 ? aspect : 16.0 / 9.0;
+}
+
 void SGRSystemPlayPast(SPTPlayerTrack *track) {
     NSString *uri = SGURIString(track.URI);
     id<SPTPlayer> player = (id<SPTPlayer>)SGPlayer();

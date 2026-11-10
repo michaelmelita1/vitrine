@@ -19,6 +19,10 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place);
 // The cover while nothing plays, the Music app's (its owner's screenshots, 2026-11-02): a gray square with a lighter gray
 // note in it. The page and the mini player both show it, under "Not Playing".
 UIImage *SGRSystemNotPlayingArt(void);
+// Whether the item is a track (not nil, not an empty state), and whether it is the AI DJ talking (no length): the
+// page's tests, for the sideways page to say Not Playing and dash its times by the same rules.
+BOOL SGRSystemIsTrack(id track);
+BOOL SGRSystemIsNarration(id track);
 
 // Posted on the main queue when the page's close is over, gone or let go back by a swipe: a tap on the mini player during
 // the close, which UIKit would refuse while the page is still presented, opens it then if it has gone (Navbar/SystemTabs.x).
@@ -122,6 +126,10 @@ NSString *SGRSystemOptionBadgeSymbol(SPTPlayerState *state, BOOL shuffleHidden, 
 void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps);
 // A song of the mod's own History (SystemHistory.h): back to it in Spotify's queue if it is still there, or its link.
 void SGRSystemPlayPast(SPTPlayerTrack *track);
+// The track `uri` (a song's music video or a video's song) played in place of the one playing, from the same second.
+void SGRSystemSwitchTo(NSString *uri);
+// The music video's width over its height, from Spotify's display view in `surface`; 16:9 until it has frames.
+CGFloat SGRSystemVideoAspect(UIView *surface);
 void SGRSystemCycleRepeat(void);
 
 // A light disc with `symbol` cut out of it, hidden until shown: the page's lyrics and queue buttons' lit state, and the
@@ -135,7 +143,18 @@ UIImageView *SGRSystemCutDisc(NSString *symbol);
 // The page's ⋯ items for the landscape player's ⋯: their sheets and popovers from `anchor` and `presenter`, and
 // `changed` run after the ⋯ switches the background.
 - (NSArray<UIMenuElement *> *)landscapeMenuItemsFrom:(UIView *)anchor presenter:(UIViewController *)presenter changed:(void (^)(void))changed;
+@optional
+// The music video's surface the page has borrowed (SystemPlayer.m's attachVideoIfShown), for the landscape player to
+// hold while it is up; nil with no video. The page keeps it filling whatever holds it, and takes it back with
+// landscapeVideoReturned.
+- (UIView *)landscapeVideoSurface;
+- (void)landscapeVideoReturned;
 @end
+UIView *SGRSystemTurnVideoSurface(void);
+// SystemVideoKeep.x: the page's Picture in Picture ready to start (armed) or up (active), so Spotify keeps the video on
+// behind it rather than playing the sound alone.
+void SGRSystemVideoSetPiP(BOOL armed, BOOL active);
+void SGRSystemTurnVideoReturned(void);
 // The page's ⋯ items for the landscape player, empty with no page up.
 NSArray<UIMenuElement *> *SGRSystemTurnMenuItems(UIView *anchor, UIViewController *presenter, void (^changed)(void));
 void SGRSystemTurnSetPage(UIViewController<SGRSystemTurnPage> *page);

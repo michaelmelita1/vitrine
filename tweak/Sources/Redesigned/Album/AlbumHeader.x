@@ -547,14 +547,12 @@ static void applyHeader(UIView *header, UIView *page);
 
 #pragma mark - sideways
 
-// The Music app's album page in landscape (its owner's recording, 2026-11-08): a cover kWideCover square at the top
-// left, kWideInset in from the safe area, the text and the row kWideGap to its right, the songs kWideBelow under it.
-static const CGFloat kWideCover = 200, kWideTop = 42, kWideInset = 32, kWideGap = 32, kWideBelow = 36;
+// The Music app's album page in landscape (its owner's recording, 2026-11-08): the Kit's sideways header (SGRWideCover),
+// shared with the artist and the playlist -- the cover at the top left in line with the songs, the text and the row
+// SGRWideGap to its right, the songs SGRWideBelow under it.
 // Upright, the title's top under the cover's bottom: the gap Spotify's own layout leaves (the dump of 2026-11-08: the
 // square ending at 324, the title at 340).
 static const CGFloat kTitleUnderCover = 16;
-// Spotify's songs column sideways on the 16 Pro Max: 672pt, centred (the dump of 2026-11-08).
-static const CGFloat kWideColumn = 672;
 
 // The scroll view the page's header and list scroll in: the nearest above the header.
 static UIScrollView *listAbove(UIView *header) {
@@ -576,27 +574,12 @@ static CGFloat headerRestTop(UIView *header) {
     return listTop + inContent - list.contentInset.top;
 }
 
-// Where the cover goes sideways, in the header's coordinates: kWideTop below the top of the screen with the page at
-// rest, wherever Spotify rests the header (device, 2026-11-08: 86pt below the screen's top sideways). Read from where
-// the header is now and how far the page is scrolled, so a scroll does not move it; nothing here moves the header, so
-// nothing reads back what it set. Empty upright.
+// Where the cover goes sideways, in the header's coordinates: the Kit's place for it (SGRWideCover), SGRWideTop below the
+// top of the screen with the page at rest, wherever Spotify rests the header (device, 2026-11-08: 86pt below the screen's
+// top sideways). Read from where the header is now and how far the page is scrolled, so a scroll does not move it.
 static CGRect wideCover(UIView *header, UIView *page) {
-    UIWindow *window = header.window;
-    if (!window || window.bounds.size.width <= window.bounds.size.height) return CGRectZero;
-    UIEdgeInsets safe = window.safeAreaInsets;
-    // In line with the songs, whose text starts SGRSideMargin into Spotify's column (its owner, 2026-11-08); before a
-    // row has been laid out, kWideInset in from the safe area.
-    CGFloat x = round(MAX(MAX(safe.left, safe.right), SGRSideMargin) + kWideInset), left, right;
-    // The width the header will have sideways, between the safe areas. Until it has it (mid-turn, the first pass
-    // sideways), the songs' column is still the upright one and put the cover at 16 before it jumped to 96 (the dump of
-    // 2026-11-08), so the cover goes where the column will be: Spotify's 672pt reading width centred in that width.
-    CGFloat wideWidth = window.bounds.size.width - safe.left - safe.right;
-    if (fabs(header.bounds.size.width - wideWidth) > 1) x = round(MAX(0, (wideWidth - kWideColumn) / 2) + SGRSideMargin);
-    else if (SGRAlbumListColumn(page, &left, &right)) x = round([page convertPoint:CGPointMake(left, 0) toView:header].x + SGRSideMargin);
-    CGFloat side = MIN(kWideCover, window.bounds.size.height - kWideTop - kWideBelow - 100);
-    if (side < kMinCover) return CGRectZero;
-    CGFloat y = MAX(0, round(kWideTop - headerRestTop(header)));
-    return CGRectMake(x, y, side, side);
+    (void)page;
+    return SGRWideCover(header, headerRestTop(header));
 }
 
 // Upright, the cover's own place, measured from the screen as the sideways one is: kUprightGap under the status bar
@@ -629,7 +612,7 @@ static CGRect uprightCover(UIView *header) {
 
 // Spotify's header is as tall sideways as upright, far taller than the cover and the text beside it. It is the first
 // arranged view of the stack the page scrolls (CreativeWorkPlatform.Header, the songs' tab view under it: the dump of
-// 2026-11-08), so its element view is held to end kWideBelow under the cover with a height constraint, sideways only;
+// 2026-11-08), so its element view is held to end SGRWideBelow under the cover with a height constraint, sideways only;
 // Spotify's own column inside it is blanked, so what no longer fits draws nothing. Upright the constraint is off.
 static char kWideHeightKey;
 static void sizeHeader(UIView *header, CGFloat height) {
@@ -693,7 +676,7 @@ static SGRHeaderInfo *applyInfo(UIView *header, UIView *page, CGRect wide, NSStr
     info.leading = !CGRectIsEmpty(wide);
     if (info.leading) {
         // To the right edge of the songs' column, as far in as the cover is on the left.
-        CGFloat x = CGRectGetMaxX(wide) + kWideGap, left, right = header.bounds.size.width - CGRectGetMinX(wide) + SGRSideMargin;
+        CGFloat x = CGRectGetMaxX(wide) + SGRWideGap, left, right = header.bounds.size.width - CGRectGetMinX(wide) + SGRSideMargin;
         if (SGRAlbumListColumn(page, &left, &right)) right = [page convertPoint:CGPointMake(right, 0) toView:header].x;
         setFrame(info, CGRectMake(x, CGRectGetMinY(wide), MAX(0, right - SGRSideMargin - x), wide.size.height + SGRHeaderInfoBottom));
         if (info.pinnedTop != 0) {
@@ -951,40 +934,8 @@ static void applyWash(UIView *page) {
 }
 
 static void applyHeader(UIView *header, UIView *page) {
-    // A turn: when the window's width changes. Its first passes leave Spotify's list scrolled 238 to 280pt down, the
-    // header with it, for 0.4s before the list goes back to its rest at 0, which was the jump (the owner's turn log,
-    // 2026-11-09: offset -280 and -238 with the header on screen at 280 and 238, then 0 at 0.39s). So for a second after
-    // a turn, a list that was at rest before it and is not being touched is put back at rest at once.
-    static char kTurnAtKey, kRestedKey, kWidthKey;
-    UIScrollView *turnList = listAbove(header);
-    CGFloat windowWidth = header.window.bounds.size.width;
-    NSNumber *lastWidth = objc_getAssociatedObject(header, &kWidthKey);
-    if (windowWidth > 0 && lastWidth && fabs(windowWidth - lastWidth.doubleValue) > 1) {
-        objc_setAssociatedObject(header, &kTurnAtKey, @(CACurrentMediaTime()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    if (windowWidth > 0) objc_setAssociatedObject(header, &kWidthKey, @(windowWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSNumber *turnAt = objc_getAssociatedObject(header, &kTurnAtKey);
-    // The wrong places all come in the first 0.03s of the turn (-274, -308, 293.7 in the owner's turn logs); after that the list
-    // is left alone, so a scroll that starts right after a turn is not pulled back frame by frame (the same logs: 23 to 112
-    // pulled back to 0 at 0.5 to 0.6s).
-    BOOL turning = turnAt && CACurrentMediaTime() - turnAt.doubleValue < 0.15;
-    // Wherever the list was before the turn, at rest or scrolled (the same jump scrolled: 80, then -274, then 80 again at
-    // 0.41s: the owner's turn log, 2026-11-09), it is put back there at once.
-    if (turnList && !turning && !turnList.isTracking && !turnList.isDecelerating)
-        objc_setAssociatedObject(header, &kRestedKey, @(turnList.contentOffset.y), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    // Only turning sideways, where the jump was, and only where Spotify itself lands 0.4s later: the place before the turn,
-    // no further than the sideways page scrolls (489 upright came back as 270 sideways: the owner's turn log), so nothing
-    // moves when Spotify gets there. Never while the list is moving: that fought a scroll under way.
-    NSNumber *before = objc_getAssociatedObject(header, &kRestedKey);
-    BOOL sideways = header.window.bounds.size.width > header.window.bounds.size.height;
-    if (turning && sideways && before && turnList && !turnList.isTracking && !turnList.isDecelerating && fabs(header.bounds.size.width - turnList.bounds.size.width) < 1) {
-        UIEdgeInsets inset = turnList.adjustedContentInset;
-        CGFloat furthest = MAX(-inset.top, turnList.contentSize.height - turnList.bounds.size.height + inset.bottom);
-        CGFloat target = MAX(-inset.top, MIN(before.doubleValue, furthest));
-        if (fabs(turnList.contentOffset.y - target) > 0.5) {
-            turnList.contentOffset = CGPointMake(turnList.contentOffset.x, target);
-        }
-    }
+    // The list kept where it was through a turn (the Kit's, shared with the artist page).
+    SGRKeepListThroughTurn(header, listAbove(header));
     if (!SGRFindByIdentifier(header, @"CreativeWorkPlatform.Components.UI.TitleRow", &kTitleKey)) return;
     SGRAlbumHoldPage(page);
     applyWash(page);
@@ -1021,7 +972,7 @@ static void applyHeader(UIView *header, UIView *page) {
     // Exactly that once the cover has its own place: the tallest the header had been at the width also counted a pass
     // mid-turn, and left 190pt of empty field between the row and the songs (recording of 2026-11-08).
     CGFloat upright = need > 0 ? need : drop > 0.5 ? rest : 0;
-    sizeHeader(header, !CGRectIsEmpty(wide) ? CGRectGetMaxY(wide) + kWideBelow : upright);
+    sizeHeader(header, !CGRectIsEmpty(wide) ? CGRectGetMaxY(wide) + SGRWideBelow : upright);
     shapeTopEdge(header, !CGRectIsEmpty(wide));
 
     NSString *artist, *album;

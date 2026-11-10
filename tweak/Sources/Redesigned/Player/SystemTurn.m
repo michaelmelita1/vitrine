@@ -22,6 +22,14 @@ static __weak UIViewController *sg_embedded;
 // Shut from the landscape player (Exit Full Screen): portrait until the phone has stood upright.
 static BOOL sg_shut;
 
+UIView *SGRSystemTurnVideoSurface(void) {
+    return [sg_page respondsToSelector:@selector(landscapeVideoSurface)] ? [sg_page landscapeVideoSurface] : nil;
+}
+
+void SGRSystemTurnVideoReturned(void) {
+    if ([sg_page respondsToSelector:@selector(landscapeVideoReturned)]) [sg_page landscapeVideoReturned];
+}
+
 static BOOL turnsSideways(void) {
     return !sg_shut && SGEnabled(SGRKeyLyricsLandscape);
 }

@@ -70,3 +70,20 @@ BOOL SGRFullBleedCovers(void);
 // square image view nearest the leading edge, so a badge after the name is not taken for it. nil when there is
 // none yet.
 UIImageView *SGRCreatorPicture(UIView *root);
+
+// Sideways, where the album, the artist and the playlist start their cover, in the window's coordinates: in line with
+// the songs, SGRSideMargin into Spotify's 672pt reading column centred between the safe areas (the album's dump,
+// 2026-11-08). One place, so the three pages put it in the same spot (its owner, 2026-11-10).
+CGFloat SGRWideCoverLeft(UIWindow *window);
+// The sideways header the three pages share (the Music app's landscape album, its owner's recording of 2026-11-08): the
+// cover SGRWideCoverSide square, SGRWideTop under the screen's top with the page at rest, the text SGRWideGap to its right,
+// the songs SGRWideBelow under it.
+extern const CGFloat SGRWideCoverSide, SGRWideTop, SGRWideGap, SGRWideBelow;
+// Where the cover goes sideways, in `view`'s coordinates, for a view whose top is `restTop` below the screen's top with the
+// page at rest; empty upright, out of a window, or on a screen too short for it.
+CGRect SGRWideCover(UIView *view, CGFloat restTop);
+// Through a turn to sideways, `list` put back where it was before it (clamped to how far it scrolls sideways), for the
+// first 0.15s, from the pass of a header `view` as wide as the list. Spotify's first passes after a turn throw the list a
+// few hundred points off and settle 0.4s later, which was the jump (the album's turn logs, 2026-11-09). Call on every pass.
+void SGRKeepListThroughTurn(UIView *view, UIScrollView *list);
+

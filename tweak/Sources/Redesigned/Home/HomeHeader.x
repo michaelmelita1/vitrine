@@ -262,6 +262,23 @@ static CGFloat layoutPill(UIView *header, UIStackView *stack, UIView *face) {
 static UIColor *sg_pageTint;
 static __weak SGRHomeTintView *sg_tintView;
 
+// The last color, kept across launches and painted at once on the next, so the top of Home is not black until the first
+// card's cover has loaded and its color been worked out (its owner, 2026-11-09: "takes a moment to load in"). The real
+// one fades in over it only if it differs.
+static NSString *const kLastTintKey = @"spotifyglass.redesign.home.lastTint";
+
+static UIColor *lastTint(void) {
+    NSArray *rgba = [NSUserDefaults.standardUserDefaults arrayForKey:kLastTintKey];
+    if (rgba.count != 4) return nil;
+    return [UIColor colorWithRed:[rgba[0] doubleValue] green:[rgba[1] doubleValue] blue:[rgba[2] doubleValue] alpha:[rgba[3] doubleValue]];
+}
+
+static void keepTint(UIColor *color) {
+    CGFloat r, g, b, a;
+    if (color && [color getRed:&r green:&g blue:&b alpha:&a]) [NSUserDefaults.standardUserDefaults setObject:@[@(r), @(g), @(b), @(a)] forKey:kLastTintKey];
+    else [NSUserDefaults.standardUserDefaults removeObjectForKey:kLastTintKey];
+}
+
 static void paintTint(SGRHomeTintView *tint, BOOL animated) {
     CAGradientLayer *layer = (CAGradientLayer *)tint.layer;
     UIColor *top = sg_pageTint ?: UIColor.blackColor;
@@ -279,6 +296,7 @@ static void paintTint(SGRHomeTintView *tint, BOOL animated) {
 void SGRHomeSetPageTint(UIColor *color) {
     if (color == sg_pageTint || [color isEqual:sg_pageTint]) return;
     sg_pageTint = color;
+    keepTint(color);
     if (sg_tintView) paintTint(sg_tintView, YES);
 }
 
@@ -296,6 +314,7 @@ static void layoutTint(UIView *view) {
         tint.userInteractionEnabled = NO;
         objc_setAssociatedObject(page, &kTintKey, tint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         sg_tintView = tint;
+        if (!sg_pageTint && SGEnabled(SGRKeyHomeTopPicksColour)) sg_pageTint = lastTint();
         paintTint(tint, NO);
     }
     if (tint.superview != page) [page insertSubview:tint atIndex:0];

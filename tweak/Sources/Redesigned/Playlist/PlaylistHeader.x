@@ -94,6 +94,145 @@ static void conceal(UIView *view) {
     view.accessibilityElementsHidden = YES;
 }
 
+// conceal undone: Spotify's own cover square, shown again upright when full bleed covers are off.
+static void reveal(UIView *view) {
+    if (!view) return;
+    if (view.layer.hidden) view.layer.hidden = NO;
+    if (view.layer.mask) view.layer.mask = nil;
+    if (!view.userInteractionEnabled) view.userInteractionEnabled = YES;
+    view.accessibilityElementsHidden = NO;
+}
+
+#pragma mark - sideways
+
+static UIImageView *coverImageIn(UIView *cover);
+
+// Whether an image's middle pixel is clear.
+static BOOL blankMiddle(UIImage *image) {
+    CGImageRef cg = image.CGImage;
+    if (!cg) return YES;
+    uint8_t pixel[4] = {0};
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(pixel, 1, 1, 8, 4, space, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    if (!context) return YES;
+    size_t w = CGImageGetWidth(cg), h = CGImageGetHeight(cg);
+    CGContextDrawImage(context, CGRectMake(-(CGFloat)(w / 2), -(CGFloat)(h / 2), w, h), cg);
+    CGContextRelease(context);
+    return pixel[3] < 8;
+}
+
+// The album's top section sideways (Album/AlbumHeader.x), the Music app's playlist in landscape: the cover where the Kit puts it (SGRWideCover), a
+// square at the top left in line with the songs (SGRWideCoverLeft), the title, the creator and the row SGRWideGap to its right,
+// their bottom on its bottom, and the songs SGRWideBelow under it. Spotify sizes the header from its content measured
+// for the page's width (applyWidthBasedSizing -> the content layout's systemLayoutSizeFittingSize: 448pt upright, 792
+// sideways on a 12 mini, its 609pt square), so sideways the measuring answers the compact height and Spotify sets the
+// header to it itself. Forcing fullHeaderHeight instead fought Spotify's own sizing and hung the app (2026-11-09).
+// Where the chips stop scrolling sideways: Spotify's at 92pt, the back button's and ⋯'s middle at 46, the chips 32 tall.
+static const CGFloat kWideChipsTop = 92, kWideBarMid = 46, kWideChipsHeight = 32;
+static char kWideCoverKey, kWideRetryKey;
+
+// Where the cover goes sideways, in the content layout's coordinates (its top is the screen's top at rest); empty upright.
+static CGRect wideCoverIn(UIView *layout) {
+    return SGRWideCover(layout, 0);
+}
+
+// Where the cover is now: the header collapses by its content layout getting shorter, Spotify's block held to the
+// layout's bottom (device, 2026-11-09: 275pt at rest, 205 scrolled), so the square and the text are held to it too --
+// at the top they stood still while the songs scrolled under them (its owner, 2026-11-09). Pulled down, they go down.
+static CGRect wideCoverNow(UIView *layout, CGRect wide) {
+    if (CGRectIsEmpty(wide)) return wide;
+    return CGRectOffset(wide, 0, round(layout.bounds.size.height - (CGRectGetMaxY(wide) + SGRWideBelow)));
+}
+
+// The cover sideways, the redesign's own square: Spotify's is sized from the page's width and is concealed.
+static void applyWideCover(UIView *layout, UIView *cover, UIImage *image, CGRect wide) {
+    UIImageView *square = objc_getAssociatedObject(layout, &kWideCoverKey);
+    if (CGRectIsEmpty(wide)) {
+        if (square && !square.hidden) square.hidden = YES;
+        return;
+    }
+    if (!square) {
+        square = [[UIImageView alloc] initWithFrame:wide];
+        square.contentMode = UIViewContentModeScaleAspectFill;
+        square.clipsToBounds = YES;
+        square.layer.cornerRadius = SGRRadiusArtwork;
+        square.layer.cornerCurve = kCACornerCurveContinuous;
+        square.userInteractionEnabled = NO;
+        square.accessibilityElementsHidden = YES;
+        objc_setAssociatedObject(layout, &kWideCoverKey, square, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    // In front of whatever Spotify brings forward in the layout as it turns (the square stood behind it, empty to the
+    // eye, 2026-11-09); nothing of the redesign's overlaps it there.
+    if (square.superview != layout) [layout addSubview:square];
+    else if (layout.subviews.lastObject != square) [layout bringSubviewToFront:square];
+    if (square.hidden) square.hidden = NO;
+    if (!CGRectEqualToRect(square.frame, wide)) square.frame = wide;
+    // The square as Spotify draws it, not its picture alone: a mix's name is a label over its picture (2000s Rock Mix,
+    // device 2026-11-09). Drawn again only when the picture changes, the mask lifted for the drawing alone.
+    static char kDrawnFromKey;
+    // The picture's address, not the picture: held unretained it was read back after it was freed and crashed (2026-11-09).
+    NSNumber *drawnFrom = image ? @((uintptr_t)(__bridge void *)image) : nil;
+    // Only a settled square: mid-way through its own animation (0 by 0 on screen, a transform on it) it drew a quarter small.
+    BOOL settled = CGAffineTransformIsIdentity(cover.transform) && cover.frame.size.width >= kMinCover
+                   && fabs(cover.frame.size.width - cover.bounds.size.width) < 1;
+    // Drawn only where the square has words on it (a mix's name); a plain cover is its picture, which drawing can
+    // only lose (a playlist turned sideways drew empty, 2026-11-09).
+    __block BOOL words = NO;
+    SGForEachView(cover, ^(UIView *v) {
+        if (!words && [v isKindOfClass:UILabel.class] && ((UILabel *)v).text.length && !v.hidden && v.alpha > 0.01) words = YES;
+    });
+    if (!words) settled = NO;
+    if (image && settled && ![objc_getAssociatedObject(square, &kDrawnFromKey) isEqual:drawnFrom]) {
+        CALayer *mask = cover.layer.mask;
+        cover.layer.mask = nil;
+        // Cropped to the picture's own frame in the square: Spotify's view is larger than the art in it as it settles
+        // (drawn whole, the art came out a quarter smaller in the corner, 2026-11-09).
+        UIImageView *art = coverImageIn(cover);
+        CGRect crop = art ? [art convertRect:art.bounds toView:cover] : cover.bounds;
+        if (CGRectIsEmpty(crop) || crop.size.width < kMinCover) crop = cover.bounds;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:crop.size];
+        UIImage *drawn = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+            CGContextTranslateCTM(context.CGContext, -crop.origin.x, -crop.origin.y);
+            [cover.layer renderInContext:context.CGContext];
+        }];
+        cover.layer.mask = mask;
+        // A drawing with nothing in its middle (drawn before Spotify painted it) is not kept.
+        if (drawn && blankMiddle(drawn)) drawn = nil;
+        square.image = drawn ?: image;
+        objc_setAssociatedObject(square, &kDrawnFromKey, drawnFrom, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    } else if (image && ![objc_getAssociatedObject(square, &kDrawnFromKey) isEqual:drawnFrom] && square.image != image) {
+        square.image = image;
+    }
+    // Drawn by nothing, but not hidden: Spotify loads the artwork only into a square that is shown, and one concealed
+    // from the first pass (a playlist opened sideways) stayed empty, its loading shine in the redesign's square.
+    if (!cover) return;
+    // No picture yet, or none any more (Spotify lets go of it while the square is concealed, as upright before a turn
+    // made away from the page): shown, nearly clear, so Spotify loads it; masked once it is there.
+    if (!image) {
+        if (cover.layer.hidden) cover.layer.hidden = NO;
+        if (cover.layer.mask) cover.layer.mask = nil;
+        if (cover.alpha > 0.03) cover.alpha = 0.02;
+        // The picture comes with no pass of the header's, so the square looks again shortly (2026-11-09: after a turn
+        // the square stayed empty), for up to five seconds.
+        NSInteger tries = [objc_getAssociatedObject(layout, &kWideRetryKey) integerValue];
+        if (tries < 20) {
+            objc_setAssociatedObject(layout, &kWideRetryKey, @(tries + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            __weak UIView *weakLayout = layout;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [weakLayout setNeedsLayout];
+            });
+        }
+        return;
+    }
+    objc_setAssociatedObject(layout, &kWideRetryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (cover.alpha < 1) cover.alpha = 1;
+    if (cover.layer.hidden) cover.layer.hidden = NO;
+    if (!cover.layer.mask) cover.layer.mask = [CALayer layer];
+    if (cover.userInteractionEnabled) cover.userInteractionEnabled = NO;
+    cover.accessibilityElementsHidden = YES;
+}
+
 static UIView *firstOfClass(UIView *root, Class wanted) {
     __block UIView *found = nil;
     SGForEachView(root, ^(UIView *v) {
@@ -110,6 +249,7 @@ static UIView *firstOfClass(UIView *root, Class wanted) {
 @interface SGRPlaylistHero : UIView
 @property (nonatomic, readonly) UIImageView *picture;
 @property (nonatomic) CGFloat coverPixels;   // the widest copy of the artwork it has been shown
+@property (nonatomic, weak) UIView *refresh;  // sideways, the layout to lay out again when a new picture lands
 // The cover in Spotify's artwork view, and every cover it puts there afterward: the hero keeps itself
 // right, rather than being handed a picture on each of the header's passes and staying empty between them.
 - (void)followCover:(UIImageView *)source;
@@ -163,7 +303,10 @@ static UIView *firstOfClass(UIView *root, Class wanted) {
     if (_cover == source) return;
     _cover = source;
     __weak SGRPlaylistHero *weakSelf = self;
-    SGRObserveImage(source, ^(UIImageView *view) { [weakSelf takeCover:view late:YES]; });
+    SGRObserveImage(source, ^(UIImageView *view) {
+        [weakSelf takeCover:view late:YES];
+        [weakSelf.refresh setNeedsLayout];
+    });
 }
 
 // Spotify loads the artwork at the size the cover square is asking for, and the square shrinks as the
@@ -198,6 +341,8 @@ static UIImageView *coverImageIn(UIView *cover) {
     SGForEachView(cover, ^(UIView *v) {
         if (found || ![v isKindOfClass:UIImageView.class]) return;
         UIImageView *image = (UIImageView *)v;
+        // Spotify's loading shine over the square (170 by 70, device 2026-11-09), not the cover.
+        if ([image.accessibilityIdentifier isEqualToString:@"flare"]) return;
         if (image.bounds.size.width < kMinCover) return;
         if (image.image) found = image;
         else if (!empty) empty = image;
@@ -208,8 +353,10 @@ static UIImageView *coverImageIn(UIView *cover) {
 // The hero sits in the plane Spotify's color wash is drawn on, which slides away as the header collapses, so
 // Core Animation carries it and its frame is only measured at rest: reading the header per frame flickers.
 // Pulled down past the top the plane grows and the hero stretches with it, bottom kept in place.
-static void applyHero(UIView *layout, UIView *cover, UIView *plane, UIView *block, CGFloat reach, CGFloat stretch) {
-    if (!plane || !block) return;
+// The plane's hero, made and put at the back of the plane: it reads the cover the page's field takes its color from,
+// so it is made sideways too, where it draws nothing (a playlist opened sideways stayed black, 2026-11-09).
+static SGRPlaylistHero *heroIn(UIView *plane) {
+    if (!plane) return nil;
     SGRPlaylistHero *hero = objc_getAssociatedObject(plane, &kHeroKey);
     if (!hero) {
         hero = [[SGRPlaylistHero alloc] initWithFrame:CGRectZero];
@@ -217,6 +364,12 @@ static void applyHero(UIView *layout, UIView *cover, UIView *plane, UIView *bloc
     }
     if (hero.superview != plane) [plane insertSubview:hero atIndex:0];
     else if (plane.subviews.firstObject != hero) [plane sendSubviewToBack:hero];
+    return hero;
+}
+
+static void applyHero(UIView *layout, UIView *cover, UIView *plane, UIView *block, CGFloat reach, CGFloat stretch) {
+    if (!plane || !block) return;
+    SGRPlaylistHero *hero = heroIn(plane);
 
     // Grow-only: a header still loading puts the block higher than it ends up.
     CGFloat height = [objc_getAssociatedObject(hero, &kHeroHeightKey) doubleValue];
@@ -427,17 +580,32 @@ static SGRHeaderInfo *applyInfo(UIView *block, UIView *headerRoot, UIViewControl
         info = [[SGRHeaderInfo alloc] initWithFrame:CGRectZero];
         objc_setAssociatedObject(headerRoot, &kInfoKey, info, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (info.superview != block) {
-        if (info.superview) SGLog(@"redesign playlist: the block moved, %@ -> %@", NSStringFromCGRect(info.superview.frame), NSStringFromCGRect(block.frame));
-        [block addSubview:info];
+    // Sideways the text goes beside the cover, in the content layout itself: Spotify lays its block out under its own
+    // (concealed) cover on every pass, and a view outside the block's bounds would not be touched.
+    UIView *layout = block.superview;
+    CGRect wideCover = objc_getAssociatedObject(block, &kWideCoverKey) ? wideCoverNow(layout, wideCoverIn(layout)) : CGRectZero;
+    BOOL wide = !CGRectIsEmpty(wideCover);
+    UIView *home = wide ? layout : block;
+    if (info.superview != home) {
+        if (info.superview && !wide && info.superview != layout)
+            SGLog(@"redesign playlist: the block moved, %@ -> %@", NSStringFromCGRect(info.superview.frame), NSStringFromCGRect(block.frame));
+        [home addSubview:info];
     }
-    else if (block.subviews.lastObject != info) [block bringSubviewToFront:info];
+    else if (home.subviews.lastObject != info) [home bringSubviewToFront:info];
     for (UIView *sub in block.subviews) {
         if (sub != info) conceal(sub);
     }
-    // The page's width, centered on the screen: Spotify's block is 16pt narrower than the page (386 of 402).
-    CGFloat x = -[block convertPoint:CGPointZero toView:headerRoot].x;
-    CGRect frame = CGRectMake(round(x), 0, headerRoot.bounds.size.width, block.bounds.size.height);
+    // Sideways the block is moved beside the cover (applyHeader) and the text set from its leading edge, as the album's;
+    // upright the page's width, centered on the screen: Spotify's block is 16pt narrower than the page (386 of 402).
+    CGRect frame;
+    if (wide) {
+        CGFloat x = CGRectGetMaxX(wideCover) + SGRWideGap, right = layout.bounds.size.width - CGRectGetMinX(wideCover);
+        frame = CGRectMake(x, CGRectGetMinY(wideCover), MAX(0, right - x), wideCover.size.height + SGRHeaderInfoBottom);
+    } else {
+        CGFloat x = -[block convertPoint:CGPointZero toView:headerRoot].x;
+        frame = CGRectMake(round(x), 0, headerRoot.bounds.size.width, block.bounds.size.height);
+    }
+    if (info.leading != wide) info.leading = wide;
     if (!CGRectEqualToRect(info.frame, frame)) info.frame = frame;
     showPlaylist(info, block, headerRoot, viewModelOf(headerVC));
 
@@ -557,6 +725,26 @@ static UIView *blockIn(UIView *layout, UIView *cover, UIView *fullbleed) {
     return block;
 }
 
+// Scrolled, Spotify puts the playlist's name in the navigation bar; the album and the artist show none there (its owner,
+// 2026-11-09), so the page's item gets an empty title view, kept in place of the text whatever Spotify sets the title to.
+static void hideBarTitle(UIView *layout) {
+    UIResponder *responder = layout;
+    while (responder && !([responder isKindOfClass:UIViewController.class]
+                          && [((UIViewController *)responder).parentViewController isKindOfClass:UINavigationController.class]))
+        responder = responder.nextResponder;
+    UINavigationItem *item = ((UIViewController *)responder).navigationItem;
+    static char kEmptyTitleKey;
+    UIView *empty = objc_getAssociatedObject(item, &kEmptyTitleKey);
+    if (item && (!empty || item.titleView != empty)) {
+        if (!empty) {
+            empty = [[UIView alloc] initWithFrame:CGRectZero];
+            empty.userInteractionEnabled = NO;
+            objc_setAssociatedObject(item, &kEmptyTitleKey, empty, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        item.titleView = empty;
+    }
+}
+
 static void applyHeader(UIView *layout) {
     UIViewController *headerVC = SGRPlaylistHeaderOf(layout);
     UIView *headerRoot = headerVC.viewIfLoaded;
@@ -570,15 +758,77 @@ static void applyHeader(UIView *layout) {
     if (!block) return;
 
     UIView *plane = applyBackground(layout);
+    hideBarTitle(layout);
     applyToolbar(headerRoot);
     applyScrims(headerRoot);
+
+    // Sideways: the block beside the redesign's square, each pass after Spotify's own layout put it under its cover.
+    CGRect wide = cover ? wideCoverIn(layout) : CGRectZero;
+    // A page left open in another tab and turned while away comes back with the width it had (0 at first, then the
+    // screen's) and a header Spotify sized and rested for the other way: pulled down 62pt, no square (device,
+    // 2026-11-09). Once its width is the screen's, Spotify's own sizing and its own repositioning for a new width are
+    // asked again, after this pass and once per width.
+    static char kSizedWidthKey;
+    CGFloat width = layout.bounds.size.width;
+    if (!CGRectIsEmpty(wide) && width > 0 && fabs([objc_getAssociatedObject(layout, &kSizedWidthKey) doubleValue] - width) > 0.5) {
+        objc_setAssociatedObject(layout, &kSizedWidthKey, @(width), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        __weak UIViewController *weakVC = headerVC;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIViewController *vc = weakVC;
+            if (!vc.viewIfLoaded.window) return;
+            for (NSString *name in @[@"applyWidthBasedSizing", @"repositionHeaderForNewWidth"]) {
+                SEL selector = NSSelectorFromString(name);
+                if ([vc respondsToSelector:selector]) ((void (*)(id, SEL))objc_msgSend)(vc, selector);
+            }
+        });
+    }
+    objc_setAssociatedObject(block, &kWideCoverKey, CGRectIsEmpty(wide) ? nil : @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     SGRHeaderInfo *info = applyInfo(block, headerRoot, headerVC);
+    if (!CGRectIsEmpty(wide)) {
+        SGRPlaylistHero *hero = heroIn(plane);
+        [hero followCover:coverImageIn(cover)];
+        if (hero && !hero.hidden) hero.hidden = YES;
+        // The page's color from the picture: the hero takes a copy only from a square 120pt or more, and Spotify's is
+        // 92 sideways (a playlist opened sideways stayed black, 2026-11-09).
+        // The square's own picture first: the hero may hold the loading placeholder Spotify showed before the artwork
+        // (the 16 Pro Max opened a playlist sideways to a flare on black, 2026-11-10).
+        UIImage *picture = coverImageIn(cover).image ?: hero.picture.image;
+        hero.refresh = layout;
+        if (picture && hero && hero.picture.image != picture) {
+            hero.picture.image = picture;
+            SGRPlaylistSetArtwork(hero, picture);
+        }
+        applyWideCover(layout, cover, picture, wideCoverNow(layout, wide));
+        // Spotify fades its block as the header collapses; upright the text inherits that inside the block, sideways
+        // it is beside it, so the text and the square take the block's fade, and are gone once the square is covered.
+        CGRect now = wideCoverNow(layout, wide);
+        CGFloat shown = MAX(0, MIN(1, CGRectGetMaxY(now) / now.size.height));
+        CGFloat alpha = MIN(block.alpha, shown);
+        UIView *square = objc_getAssociatedObject(layout, &kWideCoverKey);
+        if (fabs(info.alpha - alpha) > 0.01) info.alpha = alpha;
+        if (fabs(square.alpha - alpha) > 0.01) square.alpha = alpha;
+        if (info.window && modelString(viewModelOf(headerVC), @"playlistName")) SGRPlaylistShowPage(layout);
+        return;
+    }
+    applyWideCover(layout, cover, nil, CGRectZero);
+    if (info.alpha < 1) info.alpha = 1;
+    {
+        SGRPlaylistHero *hero = objc_getAssociatedObject(plane, &kHeroKey);
+        if (hero.hidden && (SGRFullBleedCovers() || ![cover.accessibilityIdentifier isEqualToString:@"Components.Header.UI.ArtworkImage"])) hero.hidden = NO;
+        // Back upright with full bleed covers off: Spotify's own square shows again.
+        if (!SGRFullBleedCovers() && [cover.accessibilityIdentifier isEqualToString:@"Components.Header.UI.ArtworkImage"]) reveal(cover);
+    }
 
     // How far the page is pulled down past the top: the plane grows by that much and the block moves with it,
     // so nothing is measured then. Rest is the smallest the plane has been.
     CGFloat planeHeight = plane.bounds.size.height;
     CGFloat restPlane = [objc_getAssociatedObject(plane, &kRestPlaneKey) doubleValue];
-    if (planeHeight > 0 && (restPlane <= 0 || planeHeight < restPlane - 0.5)) {
+    // A turn changes the page's width and with it the plane's rest height: measured again, or upright after sideways
+    // the taller plane read as the page pulled down.
+    static char kRestWidthKey;
+    BOOL turned = fabs([objc_getAssociatedObject(plane, &kRestWidthKey) doubleValue] - plane.bounds.size.width) > 0.5;
+    if (turned) objc_setAssociatedObject(plane, &kRestWidthKey, @(plane.bounds.size.width), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (planeHeight > 0 && (turned || restPlane <= 0 || planeHeight < restPlane - 0.5)) {
         restPlane = planeHeight;
         objc_setAssociatedObject(plane, &kRestPlaneKey, @(restPlane), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(objc_getAssociatedObject(plane, &kHeroKey), &kHeroHeightKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -619,6 +869,18 @@ static UIView *layoutIn(UIView *root) {
 }
 
 %hook _TtC28EncoreConsumerMobile_BaseKit19HeaderContentLayout
+// Spotify's measuring of the header's content (applyWidthBasedSizing), which also places the find bar above it:
+// sideways, the compact height the cover beside the text takes. Measured at 792pt, the find bar sat 130pt above the
+// screen when the page was pulled down, and the room it leaves stayed empty (its owner, 2026-11-09).
+- (CGSize)systemLayoutSizeFittingSize:(CGSize)size withHorizontalFittingPriority:(UILayoutPriority)h verticalFittingPriority:(UILayoutPriority)v {
+    CGSize fitting = %orig;
+    UIView *layout = (UIView *)self;
+    if (!SGRPlaylistHeaderOf(layout)) return fitting;
+    UIView *cover = SGRFindByIdentifier(layout, @"Components.Header.UI.ArtworkImage", &kCoverKey) ?: fullbleedIn(layout);
+    CGRect wide = cover ? wideCoverIn(layout) : CGRectZero;
+    if (!CGRectIsEmpty(wide)) fitting.height = CGRectGetMaxY(wide) + SGRWideBelow;
+    return fitting;
+}
 - (void)layoutSubviews {
     %orig;
     if (SGRPlaylistHeaderOf((UIView *)self)) applyHeader((UIView *)self);
@@ -640,7 +902,47 @@ static UIView *layoutIn(UIView *root) {
 }
 %end
 
+// Sideways, the header's height the cover beside the text takes, plus the accessory above (Find on this page): set on
+// the layout guide and the stored height Spotify's scrolling reads. Spotify's own sizing (applyWidthBasedSizing) makes it
+// 922pt on a 12 mini from the page's width; set at the end of that call, nothing answers it back. A page Spotify sized
+// while it was off screen in another tab, when nothing here could tell it was sideways (device, 2026-11-09: a mix left
+// open in Search came back tall), is sized again as it appears.
+static void sizeWide(UIViewController *vc) {
+    UIView *layout = layoutIn(vc.viewIfLoaded);
+    if (!layout) return;
+    UIView *cover = SGRFindByIdentifier(layout, @"Components.Header.UI.ArtworkImage", &kCoverKey) ?: fullbleedIn(layout);
+    CGRect wide = cover ? wideCoverIn(layout) : CGRectZero;
+    if (CGRectIsEmpty(wide)) return;
+    NSLayoutConstraint *guide = nil;
+    @try { guide = [vc valueForKey:@"layoutGuideHeightConstraint"]; } @catch (id e) {}
+    if (![guide isKindOfClass:NSLayoutConstraint.class]) return;
+    CGFloat top = 0, full = 0;
+    @try { top = [[vc valueForKey:@"topAccessoryViewHeight"] doubleValue]; } @catch (id e) {}
+    @try { full = [[vc valueForKey:@"fullHeaderHeight"] doubleValue]; } @catch (id e) {}
+    CGFloat want = CGRectGetMaxY(wide) + SGRWideBelow + top;
+    // The stored height too: only the guide set, the header stood still over the songs as they scrolled (2026-11-09).
+    if (fabs(full - want) > 0.5) @try { [vc setValue:@(want) forKey:@"fullHeaderHeight"]; } @catch (id e) {}
+    if (fabs(guide.constant - want) > 0.5) guide.constant = want;
+}
+
 %hook SPTFreeTierPlaylistEncoreHeaderViewController
+- (void)applyWidthBasedSizing {
+    %orig;
+    sizeWide((UIViewController *)self);
+}
+
+// How short the header collapses, the chips under it stopping there as the songs scroll: sideways, so the chips stop
+// in line with the back button and ⋯ (centred kWideBarMid down the screen) rather than under them (its owner,
+// 2026-11-09); the chips run between the two, clear of both.
+- (CGFloat)entityHeaderViewControllerMinimumHeight:(id)controller {
+    CGFloat minimum = %orig;
+    UIView *layout = layoutIn(((UIViewController *)self).viewIfLoaded);
+    if (!layout || CGRectIsEmpty(wideCoverIn(layout))) return minimum;
+    // Spotify's 64pt sideways put the chips' top at 92 (device, 2026-11-09); the buttons' middle is kWideBarMid.
+    // Spotify's chips sit 1.26 times the change lower (62pt less put them 78 higher, device 2026-11-09), so the change is
+    // scaled to land their middle on the buttons'.
+    return MAX(0, minimum - round((kWideChipsTop - (kWideBarMid - kWideChipsHeight / 2)) / 1.26));
+}
 - (void)viewDidLayoutSubviews {
     %orig;
     UIView *layout = layoutIn(((UIViewController *)self).viewIfLoaded);

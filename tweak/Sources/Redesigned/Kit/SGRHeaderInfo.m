@@ -1,3 +1,4 @@
+#import <objc/runtime.h>
 // The header's text and controls, the redesign's own. Laid out top down from where the content has to start
 // for its bottom to sit SGRHeaderInfoBottom above the view's.
 #import "Core/SGCore.h"
@@ -362,3 +363,57 @@ UIImageView *SGRCreatorPicture(UIView *root) {
 }
 
 @end
+
+CGFloat SGRWideCoverLeft(UIWindow *window) {
+    UIEdgeInsets safe = window.safeAreaInsets;
+    CGFloat between = window.bounds.size.width - safe.left - safe.right;
+    return round(safe.left + MAX(0, (between - 672) / 2) + SGRSideMargin);
+}
+
+const CGFloat SGRWideCoverSide = 200, SGRWideTop = 42, SGRWideGap = 32, SGRWideBelow = 36;
+
+CGRect SGRWideCover(UIView *view, CGFloat restTop) {
+    UIWindow *window = view.window;
+    if (!window || window.bounds.size.width <= window.bounds.size.height) return CGRectZero;
+    // Smaller on a short screen, so the songs still show under it; not at all below 80pt.
+    CGFloat side = MIN(SGRWideCoverSide, window.bounds.size.height - SGRWideTop - SGRWideBelow - 100);
+    if (side < 80) return CGRectZero;
+    CGFloat x = round([window convertPoint:CGPointMake(SGRWideCoverLeft(window), 0) toView:view].x);
+    return CGRectMake(x, MAX(0, round(SGRWideTop - restTop)), side, side);
+}
+
+void SGRKeepListThroughTurn(UIView *view, UIScrollView *turnList) {
+    // A turn: when the window's width changes. Its first passes leave Spotify's list scrolled 238 to 280pt down, the
+    // header with it, for 0.4s before the list goes back to its rest at 0, which was the jump (the owner's turn log,
+    // 2026-11-09: offset -280 and -238 with the header on screen at 280 and 238, then 0 at 0.39s). So for a second after
+    // a turn, a list that was at rest before it and is not being touched is put back at rest at once.
+    static char kTurnAtKey, kRestedKey, kWidthKey;
+    CGFloat windowWidth = view.window.bounds.size.width;
+    NSNumber *lastWidth = objc_getAssociatedObject(view, &kWidthKey);
+    if (windowWidth > 0 && lastWidth && fabs(windowWidth - lastWidth.doubleValue) > 1) {
+        objc_setAssociatedObject(view, &kTurnAtKey, @(CACurrentMediaTime()), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (windowWidth > 0) objc_setAssociatedObject(view, &kWidthKey, @(windowWidth), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSNumber *turnAt = objc_getAssociatedObject(view, &kTurnAtKey);
+    // The wrong places all come in the first 0.03s of the turn (-274, -308, 293.7 in the owner's turn logs); after that the list
+    // is left alone, so a scroll that starts right after a turn is not pulled back frame by frame (the same logs: 23 to 112
+    // pulled back to 0 at 0.5 to 0.6s).
+    BOOL turning = turnAt && CACurrentMediaTime() - turnAt.doubleValue < 0.15;
+    // Wherever the list was before the turn, at rest or scrolled (the same jump scrolled: 80, then -274, then 80 again at
+    // 0.41s: the owner's turn log, 2026-11-09), it is put back there at once.
+    if (turnList && !turning && !turnList.isTracking && !turnList.isDecelerating)
+        objc_setAssociatedObject(view, &kRestedKey, @(turnList.contentOffset.y), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // Only turning sideways, where the jump was, and only where Spotify itself lands 0.4s later: the place before the turn,
+    // no further than the sideways page scrolls (489 upright came back as 270 sideways: the owner's turn log), so nothing
+    // moves when Spotify gets there. Never while the list is moving: that fought a scroll under way.
+    NSNumber *before = objc_getAssociatedObject(view, &kRestedKey);
+    BOOL sideways = view.window.bounds.size.width > view.window.bounds.size.height;
+    if (turning && sideways && before && turnList && !turnList.isTracking && !turnList.isDecelerating && fabs(view.bounds.size.width - turnList.bounds.size.width) < 1) {
+        UIEdgeInsets inset = turnList.adjustedContentInset;
+        CGFloat furthest = MAX(-inset.top, turnList.contentSize.height - turnList.bounds.size.height + inset.bottom);
+        CGFloat target = MAX(-inset.top, MIN(before.doubleValue, furthest));
+        if (fabs(turnList.contentOffset.y - target) > 0.5) {
+            turnList.contentOffset = CGPointMake(turnList.contentOffset.x, target);
+        }
+    }
+}

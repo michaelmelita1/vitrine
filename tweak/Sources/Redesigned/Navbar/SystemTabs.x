@@ -1062,9 +1062,69 @@ API_AVAILABLE(ios(26.0)) static SGRSystemMiniPlayer *miniPlayerIn(UIView *root) 
 }
 %end
 
+// Sideways, Spotify sets the whole app in a card 8pt in from every edge with 16pt corners: MainUI_TabBarUIImpl's
+// InnerContainer, pinned by Auto Layout inside its PrimaryContentContainer, which a 16 Pro Max's sideways width (regular,
+// as an iPad's) brings out. iOS's tab bar floats over the page instead, so the card only left black bars round every
+// screen. Its edge constraints are set to nothing sideways, so Auto Layout lays it and everything in it out full screen,
+// and its corners go; upright Spotify does not inset it. Setting its frame instead was undone by the next layout pass
+// (the Max's layout record, 2026-11-10: the card {8, 8, 940, 412} in 956x440, every view under it Auto Layout).
+static BOOL sgr_isEdge(NSLayoutAttribute a) {
+    switch (a) {
+        case NSLayoutAttributeLeading: case NSLayoutAttributeTrailing: case NSLayoutAttributeLeft: case NSLayoutAttributeRight:
+        case NSLayoutAttributeTop: case NSLayoutAttributeBottom:
+            return YES;
+        default:
+            return NO;
+    }
+}
+
+static void sgr_fillCard(UIView *host, UIView *card) {
+    BOOL wide = host.bounds.size.width > host.bounds.size.height;
+    if (!wide || !card) return;
+    // Not more than a few changes a second: Spotify answering each with its own would keep the main thread busy.
+    static CFTimeInterval windowStart;
+    static NSInteger changes;
+    CFTimeInterval now = CACurrentMediaTime();
+    if (now - windowStart > 1) {
+        windowStart = now;
+        changes = 0;
+    }
+    BOOL changed = NO;
+    for (UIView *holder in @[host, card]) {
+        for (NSLayoutConstraint *c in holder.constraints) {
+            BOOL mine = (c.firstItem == card && sgr_isEdge(c.firstAttribute)) || (c.secondItem == card && sgr_isEdge(c.secondAttribute));
+            if (!mine || (c.firstItem == card && c.secondItem == card)) continue;
+            // Only to the host or its guides: a constraint between the card and a view inside it is the card's own layout.
+            id other = c.firstItem == card ? c.secondItem : c.firstItem;
+            UIView *otherView = [other isKindOfClass:UIView.class] ? other : [other isKindOfClass:UILayoutGuide.class] ? ((UILayoutGuide *)other).owningView : nil;
+            if (otherView != host) continue;
+            if (fabs(c.constant) > 0.1 && fabs(c.constant) <= 32 && changes < 10) {
+                c.constant = 0;
+                changed = YES;
+            }
+        }
+    }
+    if (card.layer.cornerRadius > 0) card.layer.cornerRadius = 0;
+    if (changed) changes++;
+}
+
+%group SGRCardFill
+%hook _TtC19MainUI_TabBarUIImpl23PrimaryContentContainer
+- (void)viewDidLayoutSubviews {
+    %orig;
+    UIView *host = ((UIViewController *)self).view;
+    for (UIViewController *child in ((UIViewController *)self).childViewControllers) {
+        if (![NSStringFromClass(child.class) hasSuffix:@"InnerContainer"]) continue;
+        if (child.viewIfLoaded.superview == host) sgr_fillCard(host, child.viewIfLoaded);
+    }
+}
+%end
+%end
+
 %ctor {
     if (!SGRedesignedUI()) return;
     %init;
+    if (NSClassFromString(@"_TtC19MainUI_TabBarUIImpl23PrimaryContentContainer")) %init(SGRCardFill);
 }
 
 void SGRRefreshMiniPlayer(void) {

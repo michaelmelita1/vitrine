@@ -250,6 +250,18 @@ static NSString *otherVersionURI(SPTPlayerTrack *track) {
     return isVideoTrack(track) ? audioURI : videoURI;
 }
 
+// How wide a glyph draws, in points: its image's width, or the ⋯'s (17 points, makeMoreButton) for nil.
+static CGFloat glyphWidth(UIImageView *glyph) {
+    if (glyph.image) return glyph.image.size.width;
+    if (glyph) return kAddGlyph;
+    static CGFloat more;
+    if (more <= 0) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17 weight:UIImageSymbolWeightRegular];
+        more = [UIImage systemImageNamed:@"ellipsis" withConfiguration:config].size.width ?: 17;
+    }
+    return more;
+}
+
 static BOOL isTrack(id track) {
     return [track isKindOfClass:NSClassFromString(@"SPTPlayerTrack")];
 }
@@ -2092,12 +2104,28 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
     // The ⋯ at the trailing margin, the star before it, as the Music app's row has them (its owner, 2026-11-06).
     CGFloat addInset = (kAddSide - kAddGlyph) / 2, moreRight = width - kMargin + (kAddSide - 20) / 2;
     CGFloat addRight = moreRight - kAddSide + 4;
-    // Switch to Video and the DJ's button leftwards of the star, a star's step apart.
-    CGFloat nextRight = _add.hidden ? addRight : addRight - kAddSide + 4;
-    CGFloat switchRight = nextRight;
-    if (!_switchVideo.hidden) nextRight -= kAddSide - 4;
-    CGFloat djRight = nextRight;
-    if (!_djButton.hidden) nextRight -= kAddSide - 4;
+    // Switch to Video and the DJ's button leftwards of the star, the space between the glyphs themselves the same as
+    // between the star and the ⋯, not their centres: the TV glyph is wide and the ⋯ narrow, and equal steps left the TV
+    // crowding the star (its owner, 2026-11-10: "are these buttons spaced out properly?").
+    CGFloat moreInk = glyphWidth(nil), starInk = glyphWidth(_add.glyph);
+    CGFloat gap = (kAddSide - 4) - (starInk + moreInk) / 2;
+    CGFloat prevCentre = _add.hidden ? moreRight - kAddSide / 2 : addRight - kAddSide / 2;
+    CGFloat prevInk = _add.hidden ? moreInk : starInk;
+    CGFloat switchCentre = prevCentre, djCentre = prevCentre;
+    if (!_switchVideo.hidden) {
+        CGFloat ink = glyphWidth(_switchVideo.glyph);
+        switchCentre = round(prevCentre - gap - (prevInk + ink) / 2);
+        prevCentre = switchCentre;
+        prevInk = ink;
+    }
+    if (!_djButton.hidden) {
+        CGFloat ink = glyphWidth(_djButton.glyph);
+        djCentre = round(prevCentre - gap - (prevInk + ink) / 2);
+        prevCentre = djCentre;
+        prevInk = ink;
+    }
+    CGFloat switchRight = switchCentre + kAddSide / 2, djRight = djCentre + kAddSide / 2;
+    CGFloat nextRight = (_switchVideo.hidden && _djButton.hidden) ? (_add.hidden ? addRight : addRight - kAddSide + 4) : prevCentre - kAddSide / 2 + 4;
     CGFloat textRight = nextRight + addInset - 8;
     BOOL topRow = _lyricsOpen || _queueOpen;
     CGFloat textX = topRow ? CGRectGetMaxX(thumb) + kThumbGap : kMargin;

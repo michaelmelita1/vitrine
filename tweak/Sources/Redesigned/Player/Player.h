@@ -146,6 +146,13 @@ UIColor *SGRPlayerLitColor(void);
 // previous and next move out a quarter of the row either side of play, as the Music app spaces them (issue #162).
 #define SGRKeyPlayerHideShuffle @"spotifyglass.redesign.player.hideShuffle"
 #define SGRKeyPlayerHideRepeat @"spotifyglass.redesign.player.hideRepeat"
+// Native redesign's player page: the star beside the title left out, Add to Playlist taking its place in the ⋯ beside Go
+// to Artist (shown as Like button under Controls; its owner, 2026-11-10: the star and Add to Playlist do the same thing,
+// so one or the other).
+#define SGRKeyPlayerHideAdd @"spotifyglass.redesign.player.hideAdd"
+// Native redesign's player page: a tap on the title and the artist opens the album, and Go to Album leaves the ⋯ (its
+// owner, 2026-11-10). On until switched off.
+#define SGRKeyPlayerTitleAlbum @"spotifyglass.redesign.player.titleAlbum"
 
 // Spotify's icons in the footer row (PlayerFooter.x, DJPlayer.x): Connect and the queue keep Spotify's own glyphs
 // instead of the Music app's, Lyrics and the AI DJ's Queue draw Spotify's Encore glyphs, and the AI DJ's button keeps
@@ -263,3 +270,7 @@ NSArray<UIMenuElement *> *SGRPlayerMenuPageItems(UIView *anchor, void (^changed)
 // The backgrounds the ⋯ switches between at once (Fluid, Animated, Visualizer) as one submenu, the one shown checked and
 // named under it; nil while the background is not one of them. `changed` runs after a switch.
 UIMenu *SGRPlayerMenuArtwork(void (^changed)(void));
+
+// The output's spectrum read while `need` is on (SGRSpectrum.h), counted, so the Visualizer and Native redesign's DJ ring
+// share it. Defined by Redesigned/Player/PlayerVisualiser.m.
+void SGRSpectrumNeedReader(BOOL need);

@@ -129,7 +129,14 @@ void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps);
 // A song of the mod's own History (SystemHistory.h): back to it in Spotify's queue if it is still there, or its link.
 void SGRSystemPlayPast(SPTPlayerTrack *track);
 // The track `uri` (a song's music video or a video's song) played in place of the one playing, from the same second.
-void SGRSystemSwitchTo(NSString *uri);
+void SGRSystemSwitchTo(NSString *uri, BOOL toVideo);
+// The buttons beside the star: Switch to Video / Audio (under the Switch to video setting, for a song with the other) and
+// the DJ's sheet (while the DJ plays), never both. Sync shows or hides each and lays `layout` out again on a change.
+void SGRSystemRowButtons(BOOL *switchShown, BOOL *djShown, BOOL *video);
+@class SGRGlyphButton;
+void SGRSystemSyncRowButtons(SGRGlyphButton *switchVideo, SGRGlyphButton *dj, UIView *layout);
+void SGRSystemSwitchVideo(void);
+void SGRSystemOpenDJ(void);
 // The music video's width over its height, from Spotify's display view in `surface`; 16:9 until it has frames.
 CGFloat SGRSystemVideoAspect(UIView *surface);
 void SGRSystemCycleRepeat(void);

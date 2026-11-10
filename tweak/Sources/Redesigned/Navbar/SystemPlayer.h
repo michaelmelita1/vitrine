@@ -122,6 +122,8 @@ NSString *SGRSystemOptionBadgeSymbol(SPTPlayerState *state, BOOL shuffleHidden, 
 // skip back to a track, else one back at a time from the playing track's start, each once the last has landed.
 @class SPTPlayerTrack;
 void SGRSystemStepBack(SPTPlayerTrack *track, NSInteger steps);
+// A song of the mod's own History (SystemHistory.h): back to it in Spotify's queue if it is still there, or its link.
+void SGRSystemPlayPast(SPTPlayerTrack *track);
 void SGRSystemCycleRepeat(void);
 
 // A light disc with `symbol` cut out of it, hidden until shown: the page's lyrics and queue buttons' lit state, and the

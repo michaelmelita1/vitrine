@@ -1005,8 +1005,36 @@ static UIViewController *presenterOverPage(UIViewController *from, UIViewControl
 
 static char kRedirectedKey;
 
+// Spotify's own player, which Spotify presents itself when the AI DJ starts or its DJ card on Home is tapped (its owner's
+// recordings, 2026-11-09): the mod's page opens in its place, as from the mini player.
+// Spotify presents it in its overlay container (NowPlaying_ViewPageImpl.NowPlayingOverlayContainer, from Spotify's chrome
+// or from under the page: the owner's log, 2026-11-09), never the player's own controller. Spotify presents the same
+// overlay to play a music video, which plays in the mod's page too, on a video surface of Spotify's own (SystemPlayer.m).
+static BOOL isSpotifyPlayer(UIViewController *controller) {
+    NSString *name = NSStringFromClass(controller.class);
+    return [name containsString:@"NowPlayingOverlayContainer"] || [name hasPrefix:@"NowPlaying_ViewImpl."];
+}
+
+API_AVAILABLE(ios(26.0)) static SGRSystemMiniPlayer *miniPlayerIn(UIView *root) {
+    if ([root isKindOfClass:SGRSystemMiniPlayer.class]) return (SGRSystemMiniPlayer *)root;
+    for (UIView *sub in root.subviews) {
+        SGRSystemMiniPlayer *found = miniPlayerIn(sub);
+        if (found) return found;
+    }
+    return nil;
+}
+
 %hook UIViewController
 - (void)presentViewController:(UIViewController *)presented animated:(BOOL)animated completion:(void (^)(void))completion {
+    if (@available(iOS 26.0, *)) if (presented && isSpotifyPlayer(presented)) {
+        UIViewController *tabs = systemTabsController();
+        SGRSystemMiniPlayer *mini = miniPlayerIn(tabs.view.window ?: tabs.view);
+        if (mini) {
+            if (![tabs.presentedViewController isKindOfClass:SGRSystemPlayerPage.class]) [mini opened];
+            if (completion) completion();
+            return;
+        }
+    }
     UIViewController *top = presented ? presenterOverPage((UIViewController *)self, presented) : nil;
     if (!top) {
         %orig;

@@ -158,6 +158,10 @@ static const CGFloat kTitleSwipeDistance = 0.28, kTitleSwipeSpeed = 600, kTitleP
     BOOL _queueDragging;          // a track lifted in the queue: the foot is away and the list runs to the screen's foot
     NSUInteger _dragReturn;       // the latest let go, so an earlier one's delayed return does not bring the foot back
     BOOL _pausedShown;
+    UIView *_videoHolder;           // the music video, borrowed from the page while it plays (SGRSystemTurnVideoSurface)
+    __weak UIView *_videoShown;     // the surface in it
+    UIView *_videoDim;              // over the full screen video while the controls are up
+    BOOL _hadTrack, _emptyPending;  // a track shown, and a look again pending before Not Playing (as the page's show:)
     UIView *_route;
     NSTimer *_tick;
     BOOL _lyricsMode;
@@ -274,7 +278,7 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _cover.clipsToBounds = YES;
     _cover.layer.cornerRadius = SGRRadiusArtwork;
     _cover.layer.cornerCurve = kCACornerCurveContinuous;
-    _cover.image = art;
+    _cover.image = art ?: (SGRSystemIsTrack(SGPlayerState().track) ? nil : SGRSystemNotPlayingArt());
     [self.view addSubview:_cover];
 
     // A title or artist too long for the column scrolls, as the player's own do.
@@ -547,6 +551,10 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
 
 - (void)viewDidDisappear:(BOOL)animated {
     [super viewDidDisappear:animated];
+    // The video back to the page upright.
+    for (UIView *sub in _videoHolder.subviews.copy) [sub removeFromSuperview];
+    [_videoHolder removeFromSuperview];
+    SGRSystemTurnVideoReturned();
     [_clipPlayer pause];
     [_tick invalidate];
     _tick = nil;
@@ -658,8 +666,22 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     CGRect coverRect = CGRectMake(round(W * kCoverLeft), round(H * kCoverTop), side, side);
     _cover.bounds = CGRectMake(0, 0, side, side);
     _cover.center = CGPointMake(CGRectGetMidX(coverRect), CGRectGetMidY(coverRect));
-    _cover.alpha = _clipped ? 0 : 1;
+    // A music video in the cover's place, 16:9 across the cover's width and on its middle; the cover and the clip
+    // give way to it (its owner, 2026-11-09: the sideways player showed the clip, not the video).
+    // Without the lyrics or the queue up, the video fills the screen and the column fades over it, then away (its
+    // owner, 2026-11-09: as the Music app and YouTube show a video sideways).
+    BOOL video = _videoShown.superview == _videoHolder && _videoHolder.superview;
+    BOOL full = video && [self videoFull];
+    if (video) {
+        CGFloat aspect = SGRSystemVideoAspect(_videoShown), videoHeight = MIN(side, round(side / aspect));
+        _videoHolder.frame = full ? bounds : CGRectMake(CGRectGetMinX(coverRect), round(CGRectGetMidY(coverRect) - videoHeight / 2), side, videoHeight);
+        _videoHolder.layer.cornerRadius = full ? 0 : SGRRadiusArtwork;
+    }
+    _videoDim.frame = bounds;
+    _videoDim.hidden = !full;
+    _cover.alpha = _clipped || video ? 0 : 1;
     _fieldDim.alpha = _clipped ? 0 : 1;
+    _clip.hidden = video;
     (void)coverRect;
 
     // The column's head: the title and the artist, ★ and ⋯, higher in the lines' view.
@@ -727,6 +749,59 @@ static CGRect centred(CGFloat x, CGFloat y, CGFloat width, CGFloat height) {
     _routeName.frame = centred(W * kRouteCentre, H * kRouteNameMid, width * 0.5, ceil(_routeName.font.lineHeight));
     _queueButton.frame = centred(W * kQueueCentre, footMid, kControlSide, kControlSide);
     [self applyMode];
+    if ([self videoFull]) [self layoutVideoPlayer];
+}
+
+// The controls a full screen video keeps, laid out as a video player's (its owner, 2026-11-10): the title and the artist
+// top left, previous, play and next in the middle, the bar across the foot with the times under its ends and AirPlay
+// beside it. The rest (★, ⋯, volume, shuffle, repeat, lyrics, the queue, the device's name) is out.
+- (NSArray<UIView *> *)videoKept {
+    return @[_title, _artist, _controls, _scrubber, _elapsed, _remaining, _route];
+}
+
+- (NSArray<UIView *> *)videoDropped {
+    NSMutableArray<UIView *> *dropped = [NSMutableArray arrayWithObjects:_volume, _shuffle, _repeat, _lyricsButton, _queueButton, _routeName,
+                                                                         _star, _close, nil];
+    if (_optionBadge) [dropped addObject:_optionBadge];
+    return dropped;
+}
+
+- (void)layoutVideoPlayer {
+    CGRect bounds = self.view.bounds;
+    CGFloat W = bounds.size.width, H = bounds.size.height;
+    UIEdgeInsets safe = self.view.safeAreaInsets;
+    CGFloat left = MAX(safe.left, 24) + 8, right = W - MAX(safe.right, 24) - 8;
+    // The head, top left, across to the right edge.
+    CGFloat titleHeight = ceil(_title.font.lineHeight), artistHeight = ceil(_artist.font.lineHeight);
+    CGFloat top = MAX(safe.top, 20);
+    CGFloat textWidth = MAX(0, right - left);
+    _titleBlock.frame = CGRectMake(left - kTitleFade, top, textWidth + 2 * kTitleFade, titleHeight + artistHeight);
+    _title.frame = _besideTitle.frame = CGRectMake(0, 0, textWidth + kTitleFade, titleHeight);
+    _artist.frame = _besideArtist.frame = CGRectMake(0, titleHeight, textWidth + kTitleFade, artistHeight);
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    _titleFade.frame = _titleBlock.bounds;
+    CGFloat titleEdge = _titleBlock.bounds.size.width > 0 ? MIN(0.25, kTitleFade / _titleBlock.bounds.size.width) : 0;
+    _titleFade.locations = @[@0, @(titleEdge), @(1 - titleEdge), @1];
+    [CATransaction commit];
+    // Previous, play and next in the middle of the screen.
+    CGFloat spread = 120;
+    _controls.frame = centred(W / 2, H / 2, spread * 2 + 72, 72);
+    _previous.frame = centred(36, 36, 56, 56);
+    _play.frame = centred(spread + 36, 36, 72, 72);
+    _next.frame = centred(spread * 2 + 36, 36, 56, 56);
+    // The bar across the foot, AirPlay at its end, the times under the bar's ends.
+    CGFloat barMid = H - MAX(safe.bottom, 12) - 40;
+    _route.frame = centred(right - kControlSide / 2, barMid, kControlSide, kControlSide);
+    CGFloat barRight = CGRectGetMinX(_route.frame) - 12;
+    _scrubber.frame = CGRectMake(left, round(barMid - 14), MAX(0, barRight - left), 28);
+    CGFloat timesHeight = ceil(_elapsed.font.lineHeight), timesTop = round(barMid + 12);
+    _elapsed.frame = CGRectMake(left, timesTop, (barRight - left) / 2, timesHeight);
+    _remaining.frame = CGRectMake(left + (barRight - left) / 2, timesTop, (barRight - left) / 2, timesHeight);
+    for (UIView *view in [self videoDropped]) {
+        view.alpha = 0;
+        view.userInteractionEnabled = NO;
+    }
 }
 
 // The player's view or the lines', as the lyrics button says: what each does not show is out, and the button is lit in
@@ -1014,9 +1089,54 @@ static NSString *landscapeTime(double seconds) {
     return [NSString stringWithFormat:@"%ld:%02ld", (long)minutes, (long)rest];
 }
 
+// The page's video, taken into the holder while it plays and let go when it ends (the page then has none to lend).
+- (void)adoptVideo {
+    UIView *surface = SGRSystemTurnVideoSurface();
+    if (surface && surface.superview != _videoHolder) {
+        if (!_videoHolder) {
+            _videoHolder = [UIView new];
+            _videoHolder.backgroundColor = UIColor.blackColor;
+            _videoHolder.clipsToBounds = YES;
+            _videoHolder.layer.cornerRadius = SGRRadiusArtwork;
+            _videoHolder.layer.cornerCurve = kCACornerCurveContinuous;
+        }
+        if (_videoHolder.superview != self.view) [self.view insertSubview:_videoHolder aboveSubview:_cover];
+        if (!_videoDim) {
+            _videoDim = [UIView new];
+            _videoDim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+            _videoDim.userInteractionEnabled = NO;
+        }
+        if (_videoDim.superview != self.view) [self.view insertSubview:_videoDim aboveSubview:_videoHolder];
+        [_videoHolder addSubview:surface];
+        surface.frame = _videoHolder.bounds;
+        _videoShown = surface;
+        [self.view setNeedsLayout];
+        [self restartRest];
+    } else if (!surface && _videoHolder.superview) {
+        [_videoHolder removeFromSuperview];
+        [_videoDim removeFromSuperview];
+        _videoShown = nil;
+        if (_resting) [self setControlsShown:YES];
+        [self.view setNeedsLayout];
+    }
+}
+
+- (BOOL)videoFull {
+    return _videoShown.superview == _videoHolder && _videoHolder.superview && !_lyricsMode && !_queueMode;
+}
+
 - (void)tick {
+    [self adoptVideo];
     if (_scrubber.held) return;
     SPTPlayerState *state = SGPlayerState();
+    // Nothing playing, or the AI DJ talking, which has no length: the bar empty and the times dashed, as the page's.
+    if (!SGRSystemIsTrack(state.track) || SGRSystemIsNarration(state.track)) {
+        if (!SGRSystemIsNarration(state.track) && _hadTrack) return;
+        _scrubber.value = 0;
+        _elapsed.text = _remaining.text = @"--:--";
+        _scrubber.accessibilityValue = nil;
+        return;
+    }
     double duration = state.duration, position = landscapePosition(state);
     _scrubber.value = duration > 0 ? position / duration : 0;
     [self showTimesAt:position];
@@ -1148,7 +1268,48 @@ static NSString *landscapeTime(double seconds) {
 }
 
 - (void)playerStateDidChange:(SPTPlayerState *)state {
-    if (!state) return;
+    SPTPlayerTrack *track = SGRSystemIsTrack(state.track) ? state.track : nil;
+    // A moment with no track between two (a new playlist loading) is not Not Playing: waited out and looked at again,
+    // as the page does (SystemPlayer.m's show:).
+    if (track) {
+        _hadTrack = YES;
+    } else if (_hadTrack) {
+        if (!_emptyPending) {
+            _emptyPending = YES;
+            __weak typeof(self) weakSelf = self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                typeof(self) me = weakSelf;
+                if (!me) return;
+                me->_emptyPending = NO;
+                if (SGRSystemIsTrack(SGPlayerState().track)) return;
+                me->_hadTrack = NO;
+                [me playerStateDidChange:SGPlayerState()];
+            });
+        }
+        return;
+    }
+    // Nothing playing (no state at all at launch too): "Not Playing", the note for a cover, play rather than pause and
+    // previous and next dimmed, as the page (its owner, 2026-11-09: the sideways player showed pause and 0:00).
+    if (!track) {
+        _cover.image = SGRSystemNotPlayingArt();
+        _title.text = @"Not Playing";
+        _artist.text = nil;
+    }
+    for (SGRSystemControlButton *skip in @[_previous, _next]) {
+        skip.glyph.alpha = track ? 1 : 0.35;
+        skip.userInteractionEnabled = track != nil;
+    }
+    if (!track) {
+        [self tick];
+        [_play turnToSymbol:@"play.fill" animated:self.view.window != nil];
+        _play.accessibilityLabel = @"Play";
+        [self showPaused:YES animated:self.view.window != nil];
+        _field.motionHeld = YES;
+        [self setControlsShown:YES];
+        return;
+    }
+    // Back from Not Playing: the note gives way to the track's cover, which may not change, and so not be announced.
+    if (_cover.image == SGRSystemNotPlayingArt()) [self artworkChanged];
     [self showOptions:state];
     [self updateBare:NO];
     [self syncClipPlaying];
@@ -1248,7 +1409,7 @@ static NSString *landscapeTime(double seconds) {
 
 // The lines on their own, unless VoiceOver needs the controls to be there.
 - (void)rest {
-    if (!_bare && _lyricsMode && !_queueMode && !UIAccessibilityIsVoiceOverRunning()) [self setControlsShown:NO];
+    if (((!_bare && _lyricsMode && !_queueMode) || [self videoFull]) && !UIAccessibilityIsVoiceOverRunning()) [self setControlsShown:NO];
 }
 
 - (void)wake {
@@ -1268,6 +1429,8 @@ static NSString *landscapeTime(double seconds) {
     [_rest invalidate];
     _rest = nil;
     _hide.enabled = shown;
+    // Over a full screen video a tap anywhere brings the controls back; over the lines, a tap on them goes to them.
+    _shield.passing = [self videoFull] ? nil : _stage;
     if (shown) [_shield removeFromSuperview];
     else if (!_shield.superview) {
         _shield.frame = self.view.bounds;
@@ -1284,6 +1447,12 @@ static NSString *landscapeTime(double seconds) {
         NSArray<UIView *> *foot = @[self->_star, self->_close, self->_lyricsButton, self->_route, self->_routeName, self->_queueButton];
         NSArray<UIView *> *fading = SGRLyricsHideMode() == SGRLyricsHideControls ? foot
                                                                                  : [foot arrayByAddingObjectsFromArray:@[self->_title, self->_artist]];
+        // A full screen video: the whole column goes, and the wash over the video with it.
+        if ([self videoFull]) {
+            fading = [self videoKept];
+            for (UIView *view in [self videoDropped]) view.alpha = 0;
+            self->_videoDim.alpha = shown ? 1 : 0;
+        }
         // Back at the glyph button's own dim when it is off (the lyrics button of a track without lines).
         for (UIView *view in fading) {
             BOOL off = [view isKindOfClass:SGRGlyphButton.class] && !((SGRGlyphButton *)view).enabled;
@@ -1297,7 +1466,8 @@ static NSString *landscapeTime(double seconds) {
 - (void)restartRest {
     [_rest invalidate];
     _rest = nil;
-    if (_bare || !_lyricsMode || _queueMode || SGRLyricsHideMode() == SGRLyricsHideOff || SGPlayerState().isPaused || UIAccessibilityIsVoiceOverRunning()) return;
+    BOOL lines = !_bare && _lyricsMode && !_queueMode && SGRLyricsHideMode() != SGRLyricsHideOff;
+    if (!(lines || [self videoFull]) || SGPlayerState().isPaused || UIAccessibilityIsVoiceOverRunning()) return;
     __weak SGRSystemLandscapeController *weakSelf = self;
     _rest = [NSTimer scheduledTimerWithTimeInterval:kLandscapeRest repeats:NO block:^(NSTimer *timer) {
         // A sheet over the lines (a line's meanings) keeps them up, and the clock runs again behind it.

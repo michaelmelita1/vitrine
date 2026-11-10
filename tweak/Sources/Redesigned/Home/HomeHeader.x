@@ -276,8 +276,16 @@ static UIColor *lastTint(void) {
 static void keepTint(UIColor *color) {
     CGFloat r, g, b, a;
     if (color && [color getRed:&r green:&g blue:&b alpha:&a]) [NSUserDefaults.standardUserDefaults setObject:@[@(r), @(g), @(b), @(a)] forKey:kLastTintKey];
-    else [NSUserDefaults.standardUserDefaults removeObjectForKey:kLastTintKey];
+    // Let go of only with the color turned off: Home clears the color while it measures its shelves at launch.
+    else if (!SGEnabled(SGRKeyHomeTopPicksColour)) [NSUserDefaults.standardUserDefaults removeObjectForKey:kLastTintKey];
 }
+
+// When the page's tint view was made: Home clears the color a few times as its shelves are measured at launch (topLost,
+// dropLarge in HomeTopPicks.x), before the first card's cover is in. Those clears in the first seconds keep the color
+// kept from last time on screen rather than going to black, which was the wait (its owner, 2026-11-10: the fix did not
+// work).
+static CFTimeInterval sg_tintMadeAt;
+static const CFTimeInterval kLaunchClears = 6;
 
 static void paintTint(SGRHomeTintView *tint, BOOL animated) {
     CAGradientLayer *layer = (CAGradientLayer *)tint.layer;
@@ -294,6 +302,7 @@ static void paintTint(SGRHomeTintView *tint, BOOL animated) {
 }
 
 void SGRHomeSetPageTint(UIColor *color) {
+    if (!color && SGEnabled(SGRKeyHomeTopPicksColour) && sg_tintMadeAt > 0 && CACurrentMediaTime() - sg_tintMadeAt < kLaunchClears) return;
     if (color == sg_pageTint || [color isEqual:sg_pageTint]) return;
     sg_pageTint = color;
     keepTint(color);
@@ -303,17 +312,23 @@ void SGRHomeSetPageTint(UIColor *color) {
 // The gradient at the back of the page's view (HomePageView, which holds the feed), the feed's own black cleared so
 // it shows through behind the title and the first shelf; the shelves clear theirs (HomeSections.x).
 static void layoutTint(UIView *view) {
-    __block UIView *page = sg_tintView.superview;
+    // In the page's view (HomePageView) once there is one; before it, behind the controller's own view, so Home's skeleton at
+    // launch already has the color (its owner, 2026-11-10: the top came in black for the first moment).
+    __block UIView *page = [sg_tintView.superview.accessibilityIdentifier hasPrefix:@"HomePageView"] ? sg_tintView.superview : nil;
     if (!page) SGForEachView(view, ^(UIView *v) {
         if (!page && [v.accessibilityIdentifier hasPrefix:@"HomePageView"]) page = v;
     });
-    if (!page) return;
-    SGRHomeTintView *tint = objc_getAssociatedObject(page, &kTintKey);
+    if (!page && sg_tintView.superview == view) return;
+    if (!page) page = view;
+    // The one made behind the controller's view moves into the page's view when that comes.
+    SGRHomeTintView *tint = objc_getAssociatedObject(page, &kTintKey) ?: sg_tintView;
+    if (tint && !objc_getAssociatedObject(page, &kTintKey)) objc_setAssociatedObject(page, &kTintKey, tint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (!tint) {
         tint = [SGRHomeTintView new];
         tint.userInteractionEnabled = NO;
         objc_setAssociatedObject(page, &kTintKey, tint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         sg_tintView = tint;
+        if (sg_tintMadeAt <= 0) sg_tintMadeAt = CACurrentMediaTime();
         if (!sg_pageTint && SGEnabled(SGRKeyHomeTopPicksColour)) sg_pageTint = lastTint();
         paintTint(tint, NO);
     }
@@ -557,6 +572,42 @@ static void layoutHeader(UIViewController *page) {
 - (void)viewDidLayoutSubviews {
     %orig;
     CFTimeInterval began = SGRHomeProbeBegin();
+    // The tint from the page's first pass, the color kept from last time in it, before the header has arrived: made with
+    // the header, it waited for Home's skeleton to give way and the top stayed black that long (its owner, 2026-11-10).
+    BOOL inPage = [sg_tintView.superview.accessibilityIdentifier hasPrefix:@"HomePageView"];
+    if (SGRHomeLook() && (!sg_tintView.window || !inPage)) {
+        UIView *view = ((UIViewController *)self).viewIfLoaded;
+        layoutTint(view);
+        // The page's view comes a moment after this pass and the next pass can be three seconds later (the launch log,
+        // 2026-11-10: passes at 0 and 2.96s, the tint made at the second), so until it is made it is looked for again,
+        // every tenth of a second for four seconds.
+        if (![sg_tintView.superview.accessibilityIdentifier hasPrefix:@"HomePageView"]) {
+            // One look at a time, started again by a later Home (a new one after signing in again: the code review,
+            // 2026-11-10), each running at most 40 times.
+            static BOOL looking;
+            static NSInteger looks;
+            __weak UIView *weakView = view;
+            __block void (^look)(void);
+            __weak __block void (^weakLook)(void);
+            look = ^{
+                UIView *strongView = weakView;
+                BOOL placed = [sg_tintView.superview.accessibilityIdentifier hasPrefix:@"HomePageView"];
+                if (!strongView || placed || ++looks > 40) {
+                    looking = NO;
+                    return;
+                }
+                layoutTint(strongView);
+                if ([sg_tintView.superview.accessibilityIdentifier hasPrefix:@"HomePageView"]) looking = NO;
+                else dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), weakLook);
+            };
+            weakLook = look;
+            if (!looking) {
+                looking = YES;
+                looks = 0;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), look);
+            }
+        }
+    }
     layoutHeader((UIViewController *)self);
     SGRHomeProbeEnd(SGRHomeProbeHeader, began);
 }

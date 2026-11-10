@@ -368,9 +368,12 @@ UIViewController *SGRPlayerSettingsPage(NSArray *more) {
     [sections addObject:SGNotedSection(@"Controls", @[SGSwitchRow(@"Volume", nil, SGRKeyPlayerVolume),
                                                       SGShownRow(@"Shuffle", nil, SGRKeyPlayerHideShuffle),
                                                       SGShownRow(@"Repeat", nil, SGRKeyPlayerHideRepeat),
-                                                      SGShownRow(@"Switch to video", @"The chip over the title of a song with a music video", SGKeyHideVideoSwitch)],
+                                                      SGShownRow(@"Like button", @"The star beside the title", SGRKeyPlayerHideAdd),
+                                                      SGShownRow(@"Switch to video", @"A button beside the star for a song with a music video", SGKeyHideVideoSwitch),
+                                                      SGSwitchRow(@"Title Opens Album", @"Tap the song's title to go to its album", SGRKeyPlayerTitleAlbum)],
         @"Volume puts a slider under the controls for this iPhone, or the speaker's while Spotify plays on another device. "
-        @"Shuffle and Repeat switched off move into the queue's row.")];
+        @"Shuffle and Repeat switched off move into the queue's row. With Like button off, Add to Playlist joins the ⋯ menu. "
+        @"With Title Opens Album on, Go to Album leaves the ⋯ menu.")];
     // History in the queue: the songs actually listened to, kept by the mod (SystemHistory.h), or Spotify's own list.
     [sections addObject:SGNotedSection(@"History", @[SGSwitchRow(@"Listening History", @"The last 50 songs you listened to", SGRKeyOwnHistory),
                                                      SGChoiceRow(@"Count After", nil, SGRKeyHistoryAfter, SGRSystemHistoryAfterChoices(), 4),

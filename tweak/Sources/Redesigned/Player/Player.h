@@ -65,6 +65,12 @@ SGModRow *SGRLyricsHideRow(void);
 // Shuffle and repeat left out of the controls, each on its own switch (shown as Shuffle and Repeat under Controls).
 #define SGRKeyPlayerHideShuffle @"spotifyglass.redesign.player.hideShuffle"
 #define SGRKeyPlayerHideRepeat @"spotifyglass.redesign.player.hideRepeat"
+// The star beside the title left out, Add to Playlist taking its place in the ⋯ beside Go to Artist (shown as Like button
+// under Controls; its owner, 2026-11-10: the star and Add to Playlist do the same thing, so one or the other).
+#define SGRKeyPlayerHideAdd @"spotifyglass.redesign.player.hideAdd"
+// A tap on the title and the artist opens the album, and Go to Album leaves the ⋯ (its owner, 2026-11-10). On until
+// switched off.
+#define SGRKeyPlayerTitleAlbum @"spotifyglass.redesign.player.titleAlbum"
 // The app and the player page turn with the phone (SystemTurn.m). On until switched off. The key is
 // the redesigned player's landscape lyrics', which it took over.
 #define SGRKeyLyricsLandscape @"spotifyglass.redesign.lyrics.landscape"
@@ -113,3 +119,7 @@ UIMenu *SGRPlayerMenuArtwork(void (^changed)(void));
 // (off is Fluid, and from the Visualizer changes nothing). Defined by Redesigned/Player/PlayerMotion.x.
 BOOL SGPlayerMenuOffersAnimatedArtwork(void);
 void SGPlayerMenuSetAnimatedArtwork(BOOL on);
+
+// The output's spectrum read while `need` is on (SGRSpectrum.h), counted, so the Visualizer and the DJ's ring share it.
+void SGRSpectrumNeedReader(BOOL need);
+

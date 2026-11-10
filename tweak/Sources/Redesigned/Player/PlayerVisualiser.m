@@ -83,6 +83,11 @@ static void needReader(BOOL need) {
     }
 }
 
+// For other readers of the spectrum (the DJ's ring, SystemDJRing.m): the same count, so neither takes the other's off.
+void SGRSpectrumNeedReader(BOOL need) {
+    needReader(need);
+}
+
 static NSDictionary *noActions(void) {
     static NSDictionary *none;
     static dispatch_once_t once;

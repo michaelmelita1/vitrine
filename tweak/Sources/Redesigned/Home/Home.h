@@ -22,12 +22,16 @@
 // Threading: main thread only.
 #import <UIKit/UIKit.h>
 
-// The Home look (the first row of the Home page): Top picks and the color behind it, the tinted glass shortcut
-// pills with their bold names, the title's glass pill with the filter menu and the page's color. Off, none of
+// The Home look (the first row of the Home page): Top picks and the color behind it, the title's glass pill with the
+// filter menu and the page's color. The shortcut pills' glass is its own switch (SGRKeyHomeShortcutGlass). Off, none of
 // those hooks install and Home has the plain shortcuts and title. On until switched off; read at launch
 // (SGRHomeLook).
 #define SGRKeyHomeLook @"spotifyglass.redesign.home.look"
 BOOL SGRHomeLook(void);
+// The shortcut tiles as tinted glass pills (HomeTiles.m): the rim, the stronger tint, the rounder pill and cover and the
+// bold names. Its own switch, apart from the Home look (its owner, 2026-11-11). On until switched off; read at launch.
+#define SGRKeyHomeShortcutGlass @"spotifyglass.redesign.home.shortcutGlass"
+BOOL SGRHomeShortcutGlass(void);
 // Top picks (HomeTopPicks.x): the shelf nearest the top drawn large above the shortcuts. On until switched off.
 #define SGRKeyHomeTopPicks @"spotifyglass.redesign.home.topPicks"
 // The shelf Top picks draws, by its identity (SGRHomeShelfIdentity); unset, the first shelf.

@@ -77,7 +77,7 @@ static UIView *surfaceIn(UIView *tile, UIView *fill) {
         else [tile insertSubview:surface atIndex:0];
     }
     if (!CGRectEqualToRect(surface.frame, tile.bounds)) surface.frame = tile.bounds;
-    if (SGRHomeLook()) rim(surface);
+    if (SGRHomeShortcutGlass()) rim(surface);
     return surface;
 }
 
@@ -116,7 +116,7 @@ static void inset(UIView *square) {
     if (!CGAffineTransformEqualToTransform(square.transform, shrink)) square.transform = shrink;
     CALayer *layer = square.layer;
     // The radius is drawn scaled with the square.
-    CGFloat radius = (SGRHomeLook() ? kCoverRadius : kCoverRadiusBefore) / scale;
+    CGFloat radius = (SGRHomeShortcutGlass() ? kCoverRadius : kCoverRadiusBefore) / scale;
     if (layer.cornerRadius != radius) layer.cornerRadius = radius;
     if (layer.cornerCurve != kCACornerCurveContinuous) layer.cornerCurve = kCACornerCurveContinuous;
     if (!layer.masksToBounds) layer.masksToBounds = YES;
@@ -212,7 +212,7 @@ static void refresh(UIView *tile) {
     if (!cover || !square || square.bounds.size.width < 20 || tile.bounds.size.width <= square.bounds.size.width) return;
     UIView *surface = surfaceIn(tile, parts.fill);
     inset(square);
-    if (SGRHomeLook()) retitle(tile);
+    if (SGRHomeShortcutGlass()) retitle(tile);
 
     UIImage *image = cover.image;
     if (!image) {
@@ -239,7 +239,7 @@ void SGRHomeTintForCover(UIImage *image, void (^completion)(UIColor *color)) {
         completion(known);
         return;
     }
-    [SGRPalette tintForImage:image surface:untinted() strong:SGRHomeLook() completion:^(UIColor *color) {
+    [SGRPalette tintForImage:image surface:untinted() strong:SGRHomeShortcutGlass() completion:^(UIColor *color) {
         if (color) [tints() setObject:color forKey:image];
         completion(color);
     }];

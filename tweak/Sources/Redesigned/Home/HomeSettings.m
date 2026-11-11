@@ -15,7 +15,7 @@ UIViewController *SGRHomeSettingsPage(void) {
         else [NSUserDefaults.standardUserDefaults setObject:sources[(NSUInteger)index] forKey:SGRKeyHomeTopPicksFrom];
         SGPrefsChanged();
     });
-    SGModRow *look = SGSwitchRow(@"Home look", @"Top picks, the tinted shortcut pills and the title's glass pill; off, Home as the redesign had it", SGRKeyHomeLook);
+    SGModRow *look = SGSwitchRow(@"Home look", @"Top picks and its color, and the title's glass pill; off, Home as the redesign had it", SGRKeyHomeLook);
     SGModRow *topPicks = SGRHomeTopPicksRow();
     topPicks.waitsOn = SGRKeyHomeLook;
     from.waitsOn = SGRKeyHomeTopPicks;
@@ -33,6 +33,7 @@ UIViewController *SGRHomeSettingsPage(void) {
                        @"A shelf Home does not show today leaves Top picks off until it is back."),
         SGSection(@"On Home", @[
             SGShownRow(@"Shortcuts", nil, SGRKeyHomeHideShortcuts),
+            SGSwitchRow(@"Glass shortcuts", @"The shortcuts as tinted glass pills with bold names", SGRKeyHomeShortcutGlass),
             SGShownRow(@"DJ", nil, SGRKeyHomeHideDJ),
             SGOptionRow(@"Title stays on scroll", @"The title, the avatar and the pill stay at the top as Home scrolls under them", SGRKeyHomeKeepTitle),
             SGOptionRow(@"Song suggestions", @"Spotify's carousel of songs to try, when Home offers one", SGRKeyHomeSongSuggestions),

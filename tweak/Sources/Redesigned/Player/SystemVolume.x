@@ -31,7 +31,8 @@ static const CGFloat kMaxStretch = 10, kPushStretch = 0.2, kPullStretch = 0.5, k
 static const NSTimeInterval kHeldSpring = 0.3;
 static const CGFloat kHeldBounce = 0.3;
 // White's opacity: the fill at rest and held, the empty part, the glyphs at rest (held they are full white).
-static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24, kGlyphRest = 0.68;
+// Added onto the background (plusL, the player's secondary parts: SystemPlayer.m), so lower than laid over it.
+static const CGFloat kFillRest = 0.55, kFillHeld = 0.85, kEmpty = 0.18, kGlyphRest = 0.46;
 
 static char kSessionContext;
 

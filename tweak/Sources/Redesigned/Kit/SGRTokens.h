@@ -26,6 +26,11 @@ extern const NSTimeInterval SGRCrossfade;   // 0.35, a new image or field color 
 
 UIColor *SGRPrimary(void);      // white
 UIColor *SGRSecondary(void);    // white 65%, 80% with Increase Contrast
+// White to add onto a colored background (compositingFilter plusL): the player's secondary parts, which take the
+// background's color as the Podcasts and Music apps' do. 46%, 62% with Increase Contrast (measured off the Podcasts
+// app's player over red and over black, 2026-11-13).
+UIColor *SGRAddedSecondary(void);
+UIColor *SGRAddedTertiary(void);  // 18%, 30% with Increase Contrast: a control that can't be used
 UIColor *SGRTertiary(void);     // white 40%, 60% with Increase Contrast
 // The accent of Appearance colors the tab bar alone (its owner, 2026-11-08: "the accent colour to really only impact
 // the tab bar"). Everything else that was the accent, or Spotify's green, is white.

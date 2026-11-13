@@ -34,6 +34,14 @@ UIColor *SGRSecondary(void) {
     return [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.80 : 0.65];
 }
 
+UIColor *SGRAddedSecondary(void) {
+    return [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.62 : 0.46];
+}
+
+UIColor *SGRAddedTertiary(void) {
+    return [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.30 : 0.18];
+}
+
 UIColor *SGRTertiary(void) {
     return [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.60 : 0.40];
 }

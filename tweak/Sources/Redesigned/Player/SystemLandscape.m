@@ -289,7 +289,7 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _title = [SGMarqueeLabel new];
     _title.textColor = UIColor.whiteColor;
     _artist = [SGMarqueeLabel new];
-    _artist.textColor = [UIColor colorWithWhite:1 alpha:0.6];
+    _artist.textColor = SGRAddedSecondary();
     [self applyFonts];
     _head = [SGRSystemPassView new];
     [self.view addSubview:_head];
@@ -324,18 +324,18 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     [_head addSubview:_close];
     __weak SGRSystemLandscapeController *buttonSelf = self;
     _star = [SGRSystemControlButton buttonWithSymbol:@"star" pointSize:22 title:@"Add to Liked Songs"];
-    _star.glyph.tintColor = UIColor.whiteColor;
+    _star.glyph.tintColor = SGRAddedSecondary();
     _star.onTap = ^{ [buttonSelf toggleSaved]; };
     [_head addSubview:_star];
     // Switch to Video and the DJ's sheet beside the star, leftwards, as on the portrait page (its owner, 2026-11-10: none
     // of the new buttons in landscape).
     _switchVideo = [SGRSystemControlButton buttonWithSymbol:@"music.note.tv" pointSize:22 title:@"Music Video"];
-    _switchVideo.glyph.tintColor = UIColor.whiteColor;
+    _switchVideo.glyph.tintColor = SGRAddedSecondary();
     _switchVideo.hidden = YES;
     _switchVideo.onTap = ^{ SGRSystemSwitchVideo(); };
     _djButton = [SGRSystemControlButton buttonWithSymbol:@"waveform" pointSize:22 title:@"DJ X"];
     _djButton.glyph.image = SGRDJGlyphImage(22);
-    _djButton.glyph.tintColor = UIColor.whiteColor;
+    _djButton.glyph.tintColor = SGRAddedSecondary();
     _djButton.hidden = YES;
     _djButton.onTap = ^{ SGRSystemOpenDJ(); };
     [_head addSubview:_switchVideo];
@@ -352,7 +352,7 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _remaining.textAlignment = NSTextAlignmentRight;
     for (UILabel *label in @[_elapsed, _remaining]) {
         label.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightSemibold];
-        label.textColor = [UIColor colorWithWhite:1 alpha:0.6];
+        label.textColor = SGRAddedSecondary();
         [self.view addSubview:label];
     }
     _scrubber.leadingLabel = _elapsed;
@@ -379,9 +379,11 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     _route = SGRSystemMakeRouteButton(20, @"the landscape player");
     _routeName = [UILabel new];
     _routeName.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-    _routeName.textColor = [UIColor colorWithWhite:1 alpha:0.7];
+    _routeName.textColor = SGRAddedSecondary();
     _routeName.textAlignment = NSTextAlignmentCenter;
     for (UIView *view in @[_lyricsButton, _route, _routeName, _queueButton]) [self.view addSubview:view];
+    // Added onto the background, as on the page (SystemPlayer.m): the secondary parts take its color.
+    for (UIView *view in @[_route, _routeName, _volume, _scrubber, _elapsed, _remaining]) view.layer.compositingFilter = @"plusL";
     [self syncRouteName];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(syncRouteName) name:SGRPlayerOutputDidChangeNotification object:nil];
 
@@ -413,8 +415,13 @@ static UIButton *controlButton(NSString *symbol, CGFloat size, NSString *label, 
     for (SGRSystemControlButton *button in @[_shuffle, _repeat]) {
         button.glyph.tintColor = UIColor.whiteColor;
         button.accessibilityElementsHidden = button == _shuffle ? _shuffleOff : _repeatOff;
+        button.layer.compositingFilter = @"plusL";
         [self.view addSubview:button];
     }
+    _titleBlock.layer.compositingFilter = @"plusL";
+    // The head row's buttons too, as on the page: the ⋯, the star, Music Video and the DJ.
+    _close.tintColor = SGRAddedSecondary();
+    for (UIView *view in @[_close, _star, _switchVideo, _djButton]) view.layer.compositingFilter = @"plusL";
 
     _stage = [UIView new];
     [self.view addSubview:_stage];
@@ -1314,8 +1321,8 @@ static NSString *landscapeTime(double seconds) {
     BOOL track = repeatAllowed && options.repeatingTrack, context = repeatAllowed && options.repeatingContext;
     BOOL animated = self.view.window != nil;
     [_repeat.glyph setSymbol:track ? @"repeat.1" : @"repeat" animated:animated];
-    [_shuffle setLit:shuffling plain:shuffleAllowed ? UIColor.whiteColor : [UIColor colorWithWhite:1 alpha:0.35] animated:animated];
-    [_repeat setLit:track || context plain:repeatAllowed ? UIColor.whiteColor : [UIColor colorWithWhite:1 alpha:0.35] animated:animated];
+    [_shuffle setLit:shuffling plain:shuffleAllowed ? SGRAddedSecondary() : SGRAddedTertiary() animated:animated];
+    [_repeat setLit:track || context plain:repeatAllowed ? SGRAddedSecondary() : SGRAddedTertiary() animated:animated];
     _shuffle.accessibilityValue = shuffling ? @"On" : @"Off";
     _repeat.accessibilityValue = track ? @"Track" : context ? @"On" : @"Off";
     [self syncOptionBadge];

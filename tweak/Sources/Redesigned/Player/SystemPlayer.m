@@ -97,7 +97,9 @@ static const CGFloat kTrackRest = 7, kTrackHeld = 17, kScrubGrowth = 9, kScrubbe
 static const NSTimeInterval kScrubSpring = 0.3;
 static const CGFloat kScrubBounce = 0.3;
 // White's opacity: the progress fill at rest and held, and the part still to play.
-static const CGFloat kFillRest = 0.65, kFillHeld = 1, kEmpty = 0.24;
+// Added onto the background (plusL), so lower than laid over it: the fill a light shade of the background's color, held
+// near white, the empty part a faint one (the Podcasts app's, 2026-11-13).
+static const CGFloat kFillRest = 0.46, kFillHeld = 0.8, kEmpty = 0.18;
 // After a seek the state still reports the old place for a moment: the bar holds the new one meanwhile, so it does not
 // jump back and forth.
 static const CFTimeInterval kSeekHold = 1.5;
@@ -1135,8 +1137,9 @@ static BOOL openSpotifyConnect(NSString **how) {
     _glyph = [[SGRGlyphView alloc] initWithSymbol:@"airplayaudio" pointSize:20 weight:UIImageSymbolWeightRegular];
     _glyph.userInteractionEnabled = NO;
     _glyph.isAccessibilityElement = NO;
-    // The page's row: the lyrics and queue glyphs' see-through white (its owner, 2026-11-04). The mini player's is white.
-    _glyph.tintColor = SGRSecondary();
+    // The page's row: the lyrics and queue glyphs' white, added onto the background (its owner, 2026-11-04 and
+    // 2026-11-13). The mini player's is white.
+    _glyph.tintColor = SGRAddedSecondary();
     [self addSubview:_glyph];
     UILongPressGestureRecognizer *hold = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(held:)];
     hold.minimumPressDuration = 0.4;
@@ -1452,7 +1455,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     }
     for (SGMarqueeLabel *label in @[_artist, _besideArtist]) {
         label.font = SGRFont(UIFontTextStyleBody, UIFontWeightRegular, UIContentSizeCategoryExtraLarge);
-        label.textColor = SGRSecondary();
+        label.textColor = SGRAddedSecondary();
     }
     _besideTitle.hidden = _besideArtist.hidden = YES;
     // Each reaches kTitleFade before the text column with a faded zone there, so a long line scrolls out through a soft
@@ -1479,16 +1482,16 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // Components.UI.AddToButton, kept by the redesigned player): the Music app's star, as the landscape player has it,
     // filled once the track is in Liked Songs (its owner, 2026-11-06: the star in place of the tick).
     _add = [SGRGlyphButton buttonWithSymbol:@"star" pointSize:kAddGlyph title:@"Add to Liked Songs"];
-    _add.glyph.tintColor = SGRPrimary();
+    _add.glyph.tintColor = SGRAddedSecondary();
     _add.onTap = ^{ [weakSelf toggleSaved]; };
     // Beside the star, leftwards (its owner, 2026-11-10: next to the star and the ⋯, the top tried and put back): Switch to
     // Video for a song with a music video, under the Switch to video setting, and the DJ's sheet while the DJ plays.
     _switchVideo = [SGRGlyphButton buttonWithSymbol:@"music.note.tv" pointSize:kAddGlyph title:@"Music Video"];
-    _switchVideo.glyph.tintColor = SGRPrimary();
+    _switchVideo.glyph.tintColor = SGRAddedSecondary();
     _switchVideo.hidden = YES;
     _switchVideo.onTap = ^{ [weakSelf switchVideoTapped]; };
     _djButton = [SGRGlyphButton buttonWithSymbol:@"waveform" pointSize:kAddGlyph title:@"DJ X"];
-    _djButton.glyph.tintColor = SGRPrimary();
+    _djButton.glyph.tintColor = SGRAddedSecondary();
     _djButton.glyph.image = SGRDJGlyphImage(kAddGlyph);
     _djButton.hidden = YES;
     _djButton.onTap = ^{ SGRSystemOpenDJ(); };
@@ -1504,7 +1507,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _scrubber.trailingLabel = _remaining;
     for (UILabel *label in @[_elapsed, _remaining]) {
         label.font = times;
-        label.textColor = SGRSecondary();
+        label.textColor = SGRAddedSecondary();
         label.isAccessibilityElement = NO;
     }
 
@@ -1550,7 +1553,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
 
     // Dimmed until the track's lines are in, as the redesigned player's footer glyph was: syncLyrics.
     _lyrics = [SGRGlyphButton buttonWithSymbol:kLyricsSymbol pointSize:20 title:@"Lyrics"];
-    _lyrics.glyph.tintColor = SGRSecondary();
+    _lyrics.glyph.tintColor = SGRAddedSecondary();
     _lyrics.enabled = NO;
     _lyrics.onTap = ^{ [weakSelf toggleLyrics]; };
     _route = [[SGRSystemRouteButton alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
@@ -1565,7 +1568,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     // nothing on the phone's own speaker (its owner, 2026-11-01: "missing the text under the AirPlay icon").
     _routeLine = [UILabel new];
     _routeLine.font = SGRFont(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryLarge);
-    _routeLine.textColor = [UIColor colorWithWhite:1 alpha:SGRIncreaseContrast() ? 0.8 : 0.68];
+    _routeLine.textColor = SGRAddedSecondary();
     _routeLine.textAlignment = NSTextAlignmentCenter;
     _routeLine.userInteractionEnabled = NO;
     _routeLine.isAccessibilityElement = NO;   // read as the picker's value
@@ -1575,7 +1578,7 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     _queue.onTap = ^{ [weakSelf toggleQueue]; };
     // Dim while the queue is closed; open, the Music app's way (its owner's screenshot, 2026-11-02): a light disc behind
     // it and the glyph dark on it.
-    _queue.glyph.tintColor = SGRSecondary();
+    _queue.glyph.tintColor = SGRAddedSecondary();
     _queueBubble = cutDisc(@"list.bullet");
     [_queue insertSubview:_queueBubble atIndex:0];
     _optionBadge = SGRSystemMakeOptionBadge(_queue);
@@ -1637,6 +1640,16 @@ UIView *SGRSystemMakeRouteButton(CGFloat pointSize, NSString *place) {
     for (UIView *sub in @[_close, _more, _context, _coverHolder, _titleBlock, _add, _switchVideo, _djButton, _scrubber, _elapsed, _remaining, _shuffle, _previous, _play,
                           _next, _repeat, _volume, _lyrics, _route, _routeLine, _queue]) {
         [view addSubview:sub];
+    }
+    // The secondary parts (the artist, the times, the progress bar, shuffle and repeat, the volume row and the footer)
+    // added onto the background rather than laid over it, as the Podcasts and Music apps' players draw them: their
+    // translucent white takes the background's color, a light red over red, where laid over it it greyed it (its owner's
+    // Podcasts screenshot, 2026-11-13). Over black it is the same grey as before. The title block takes it too: its title
+    // is opaque white, which adding leaves white.
+    // The row beside the title too: the ⋯, the star, Music Video and the DJ (its owner, 2026-11-13).
+    for (UIView *sub in @[_titleBlock, _more, _add, _switchVideo, _djButton, _scrubber, _elapsed, _remaining, _shuffle, _repeat, _volume, _lyrics,
+                          _route, _routeLine, _queue]) {
+        sub.layer.compositingFilter = @"plusL";
     }
 
     // The touch watcher and the wake tap, the redesigned player's (PlayerLyrics.x): neither pans.
@@ -2192,7 +2205,7 @@ static const CGFloat kJamFace = 28, kJamFaceStep = 18, kJamInset = 8;
     more.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     more.accessibilityLabel = @"More";
     SGRGlyphView *glyph = [[SGRGlyphView alloc] initWithSymbol:@"ellipsis" pointSize:17 weight:UIImageSymbolWeightRegular];
-    glyph.tintColor = SGRPrimary();
+    glyph.tintColor = SGRAddedSecondary();
     glyph.userInteractionEnabled = NO;
     glyph.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin
                            | UIViewAutoresizingFlexibleBottomMargin;
@@ -2475,7 +2488,7 @@ void SGRSystemSyncRowButtons(SGRGlyphButton *switchVideo, SGRGlyphButton *dj, UI
 - (void)showSaved:(BOOL)saved animated:(BOOL)animated {
     _savedShown = saved;
     [_add.glyph setSymbol:saved ? @"star.fill" : @"star" animated:animated && self.view.window];
-    UIColor *tint = SGRPrimary();
+    UIColor *tint = SGRAddedSecondary();
     if (![_add.glyph.tintColor isEqual:tint]) _add.glyph.tintColor = tint;
     _add.accessibilityLabel = saved ? @"Remove from Liked Songs" : @"Add to Liked Songs";
 }
@@ -3008,8 +3021,8 @@ static UIView *barVideoSurface(void) {
     // every other control on the page (its owner, 2026-11-01). The symbol first, so repeat's disc cuts the one shown.
     BOOL animated = _shownOnce && self.view.window;
     [_repeat.glyph setSymbol:track ? @"repeat.1" : @"repeat" animated:_shownOnce];
-    [_shuffle setLit:shuffling plain:shuffleAllowed ? SGRPrimary() : SGRTertiary() animated:animated];
-    [_repeat setLit:track || context plain:repeatAllowed ? SGRPrimary() : SGRTertiary() animated:animated];
+    [_shuffle setLit:shuffling plain:shuffleAllowed ? SGRAddedSecondary() : SGRAddedTertiary() animated:animated];
+    [_repeat setLit:track || context plain:repeatAllowed ? SGRAddedSecondary() : SGRAddedTertiary() animated:animated];
     // Not by enabled: the Kit's button sets its alpha with it, which brought them back mid-drag and showed a Shuffle hidden
     // by its setting (its owner's recording, 2026-11-02). Their taps ask SGRSystemOptionAllowed instead.
     for (UIView *button in @[_shuffle, _repeat]) {
@@ -3143,7 +3156,7 @@ static UIView *barVideoSurface(void) {
     void (^mark)(void) = ^{
         glyph.enabled = enabled;
         // Clear while up: the button sets its glyph's alpha itself, and a glyph drawn would fill the disc's cut.
-        glyph.glyph.tintColor = open ? UIColor.clearColor : SGRSecondary();
+        glyph.glyph.tintColor = open ? UIColor.clearColor : SGRAddedSecondary();
         bubble.alpha = open ? 1 : 0;
         bubble.transform = open ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.8, 0.8);
     };
@@ -3343,7 +3356,7 @@ void SGRSystemHandQueueBack(NSArray<NSString *> *shown, NSArray *upcoming, void 
     SGRGlyphButton *button = _queue;
     UIView *bubble = _queueBubble;
     void (^mark)(void) = ^{
-        button.glyph.tintColor = open ? UIColor.clearColor : SGRSecondary();
+        button.glyph.tintColor = open ? UIColor.clearColor : SGRAddedSecondary();
         bubble.alpha = open ? 1 : 0;
         bubble.transform = open ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.8, 0.8);
     };
